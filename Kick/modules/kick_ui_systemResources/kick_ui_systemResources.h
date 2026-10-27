@@ -35,7 +35,7 @@
    website:            http://www.musictribe.com/
    license:            AGPLv3
 
-   dependencies:       kick_ui_controls
+   dependencies:       kick_ui_controls, interface
 
   END_JUCE_MODULE_DECLARATION
 
@@ -44,6 +44,7 @@
 #pragma once
 
 #include <kick_ui_controls/kick_ui_controls.h>
+#include <interface/interface.h>
 
 namespace kick_ui
 {
@@ -67,6 +68,7 @@ namespace kick_ui
         ui::KickLabel storage{ "STORAGE" };
 
         ui::KickSlider cpu{ "CPU" };
+        ui::KickSlider dsp{ "AUDIO DSP" };
         ui::KickSlider ram{ "RAM" };
         ui::KickSlider flash{ "INTERNAL MEMORY" };
         ui::KickSlider sdcard{ "SDCARD" };

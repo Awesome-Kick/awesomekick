@@ -22,7 +22,7 @@ namespace kick_ui
     {
         setTitle( "SYSTEM RESOURCES" );
 
-        mt::utils::addChildComponents( this, cpu, ram, flash, sdcard, usb );
+        mt::utils::addChildComponents( this, cpu, dsp, ram, flash, sdcard, usb );
         mt::utils::addAndMakeVisible( this, storage, purgeAll, purgeUnused, ok );
 
         cpu.setEnabled( false );
@@ -32,6 +32,15 @@ namespace kick_ui
         cpu.setValueProportion( .35f );
         cpu.showTitle( true, juce::Justification::centredTop );
         cpu.showValue( true, juce::Justification::centredBottom, juce::Slider::TextBoxRight );
+
+        // Share of each audio block the engine spends processing: near 100 % means dropouts.
+        dsp.setEnabled( false );
+        dsp.setRange( 0.0, 100.0 );
+        dsp.setTextValueSuffix( " %" );
+        dsp.setTitleProportion( .35f );
+        dsp.setValueProportion( .35f );
+        dsp.showTitle( true, juce::Justification::centredTop );
+        dsp.showValue( true, juce::Justification::centredBottom, juce::Slider::TextBoxRight );
 
         ram.setEnabled( false );
         ram.setRange( 0.0, 100.0 );
@@ -70,6 +79,11 @@ namespace kick_ui
         storage.setValueJustification( juce::Justification::centredTop );
         storage.setValueFontHeight( 16 );
 
+#if !( JUCE_LINUX || __linux__ )
+        // Desktop builds: the drive the app runs from stands in for the internal storage.
+        internalPath = juce::File::getSpecialLocation( juce::File::currentApplicationFile ).getParentDirectory().getFullPathName().toStdString();
+#endif
+
         purgeAll.setPlacementFlag( juce::Justification::centred );
         purgeUnused.setPlacementFlag( juce::Justification::centred );
         ok.setPlacementFlag( juce::Justification::centred );
@@ -100,13 +114,33 @@ namespace kick_ui
     {
         double          cpuusage;
         mt::sysRamInfo  rInfo;
+        mt::sysAppInfo  aInfo;
         mt::sysSizeInfo sInfo;
-        mt::SystemResource::getResourceInterface().cpuInfo( cpuusage );
-        mt::SystemResource::getResourceInterface().ramInfo( rInfo );
+        auto&           res = mt::SystemResource::getResourceInterface();
+        res.cpuInfo( cpuusage );
+        res.ramInfo( rInfo );
+        res.appInfo( aInfo );
 
-        mt::SystemResource::getResourceInterface().sizeInfo( internalPath, sInfo );
+        // Bars show the whole system; titles add this app's own share.
+        auto setTitleText = []( ui::KickSlider& s, const juce::String& text ) {
+            s.setName( text );
+            s.setTitle( text );
+            s.repaint();
+        };
+        setTitleText( cpu, "CPU  (KICK app " + juce::String( aInfo.cpu, 1 ) + " %)" );
+        setTitleText( ram, "RAM  (KICK app " + juce::String( juce::roundToInt( aInfo.ramMB ) ) + " MB of " + juce::String( rInfo.totalRam / 1024.0, 1 ) + " GB)" );
         cpu.setValue( cpuusage, juce::dontSendNotification );
         ram.setValue( rInfo.perRam, juce::dontSendNotification );
+
+        auto& dm = mt::getAudioInterface().getAudioDeviceManager();
+        if( auto* dev = dm.getCurrentAudioDevice() )
+            setTitleText( dsp, "AUDIO DSP  (" + juce::String( dev->getCurrentBufferSizeSamples() ) + " samples @ " + juce::String( juce::roundToInt( dev->getCurrentSampleRate() ) ) + " Hz)" );
+        else
+            setTitleText( dsp, "AUDIO DSP  (no audio device)" );
+        dsp.setValue( juce::jlimit( 0.0, 100.0, dm.getCpuUsage() * 100.0 ), juce::dontSendNotification );
+
+        res.sizeInfo( internalPath, sInfo );
+        flash.setVisible( sInfo.status );
         flash.setValue( sInfo.perSize, juce::dontSendNotification );
         mt::SystemResource::getResourceInterface().sizeInfo( sdCardPath, sInfo );
         if( sInfo.status )
@@ -133,21 +167,21 @@ namespace kick_ui
     void KSystemResources::paint( juce::Graphics& g )
     {
         g.setColour( ui::Theme::backgroundColour( 14 ) );
-        g.drawLine( 20.f, 182.f, 237.f, 182.f );
-        g.drawLine( 367.f, 180.f, 584.f, 182.f );
+        g.drawLine( 20.f, 196.f, 237.f, 196.f );
+        g.drawLine( 367.f, 196.f, 584.f, 196.f );
     }
 
     void KSystemResources::resized()
     {
-        cpu.setBounds( 90, 10, 425, 76 );
+        cpu.setBounds( 90, 4, 425, 60 );
+        dsp.setBounds( 90, 66, 425, 60 );
+        ram.setBounds( 90, 128, 425, 60 );
+        storage.setBounds( 267, 185, 71, 22 );
 
-        ram.setBounds( 90, 96, 425, 76 );
-        storage.setBounds( 267, 176, 71, 22 );
+        flash.setBounds( 90, 208, 425, 70 );
+        sdcard.setBounds( 90, 282, 425, 70 );
 
-        flash.setBounds( 90, 199, 425, 76 );
-        sdcard.setBounds( 90, 275, 425, 76 );
-
-        usb.setBounds( 90, 357, 425, 76 );
+        usb.setBounds( 90, 357, 425, 70 );
 
         purgeAll.setBounds( 20, 433, 140, 40 );
         purgeUnused.setBounds( 240, 433, 140, 40 );
@@ -158,6 +192,7 @@ namespace kick_ui
     {
         auto visible = isVisible();
         cpu.setVisible( visible );
+        dsp.setVisible( visible );
         ram.setVisible( visible );
         storage.setVisible( visible );
         flash.setVisible( visible );

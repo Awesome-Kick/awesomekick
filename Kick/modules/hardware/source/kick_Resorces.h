@@ -45,10 +45,16 @@ namespace mt
     };
     struct sysRamInfo
     {
-        double totalRam;
-        double usedRam;
-        double freeRam;
+        double totalRam; // MB, whole system
+        double usedRam;  // MB, excluding reclaimable cache
+        double freeRam;  // MB available
         int    perRam;
+    };
+    /// This process (the KICK app) only.
+    struct sysAppInfo
+    {
+        double cpu{ 0 };    // % of the whole machine (all cores = 100) since the previous call
+        double ramMB{ 0 };  // resident memory
     };
     class SystemResource
     {
@@ -57,7 +63,8 @@ namespace mt
 
         void                   ramInfo( sysRamInfo& info );
         void                   sizeInfo( std::string& path, sysSizeInfo& info );
-        void                   cpuInfo( double& cpuUsage );
+        void                   cpuInfo( double& cpuUsage ); // whole system, % busy since the previous call
+        void                   appInfo( sysAppInfo& info );
         void                   folderSize( std::string folderPath );
         static SystemResource& getResourceInterface()
         {
