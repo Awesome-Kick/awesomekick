@@ -3,10 +3,13 @@
  *  - top row: engine, preset (patch engines only), pad layout (4ths/3rds/sequential),
  *    key mode, root, scale
  *  - bottom: the engine's parameters, four per page, mapped to Q-link knobs P1..P4
+ *  - EDIT PATCH (patch engines): the Modular patch editor over the whole page
  *
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 #pragma once
+
+#include "kick_ModularEditor.h"
 
 namespace kick_ui
 {
@@ -26,6 +29,7 @@ namespace kick_ui
         juce::ValueTree          layoutTree();
         void                     storeLayout();
         void                     refreshPresets();
+        void                     showPatchEditor( bool Show );
         void                     showPage( int Page );
         int                      numPages() const;
 
@@ -42,6 +46,8 @@ namespace kick_ui
         std::array<std::unique_ptr<ui::KickRotary>, knobsPerPage> knobs;
         ui::KickButton  prevPage{ "prevPage", "<" }, nextPage{ "nextPage", ">" };
         ui::KickLabel   pageLabel;
+        ui::KickButton  editPatch{ "editPatch", "EDIT PATCH" };
+        ModularEditor   patchEditor;
         int             page{ 0 };
     };
 } // namespace kick_ui

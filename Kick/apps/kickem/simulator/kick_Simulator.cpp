@@ -1,4 +1,6 @@
 #include <kick_ui/kick_ui.h>
+#include <program_edit_ui/program_edit_ui.h>
+#include <program_edit_ui/sources/instrument/kick_ModularEditor.h>
 #include "kick_Simulator.h"
 #include "kick_SimulatorInterfaceImpl.h"
 
@@ -133,6 +135,11 @@ namespace sim
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "record" )
         {
             startRecordTest();
+            return;
+        }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "modular" )
+        {
+            startModularTest();
             return;
         }
 
@@ -334,6 +341,182 @@ namespace sim
         } );
         playPads();
         shot( "modular_edit_macro" );
+        s.push_back( [log] { log( "done" ); } );
+        wait( 2 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startModularTest()
+    {
+        auto& s     = selfTestSteps;
+        auto  log   = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait  = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        auto shot = [&s, this, log]( juce::String name ) {
+            s.push_back( [this, log, name] {
+                const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+                if( dir.isEmpty() )
+                    return;
+                auto file = juce::File( dir ).getChildFile( name + ".png" );
+                file.deleteFile();
+                if( auto out = file.createOutputStream() )
+                {
+                    juce::PNGImageFormat().writeImageToStream( screen.createComponentSnapshot( screen.getLocalBounds() ), *out );
+                    log( "snapshot " + file.getFullPathName() );
+                }
+            } );
+        };
+        auto instrument = []() -> mt::MTInstrumentProgram* {
+            auto& ae = mt::getAudioInterface();
+            return dynamic_cast<mt::MTInstrumentProgram*>( ae.getProgramForTrack( ae.getSelectedSequence(), ae.getSelectedTrack() ) );
+        };
+        // Finds a showing component anywhere on screen, popups included.
+        auto findShowing = [this]( std::function<bool( juce::Component& )> Match ) -> juce::Component* {
+            std::function<juce::Component*( juce::Component& )> find = [&find, &Match]( juce::Component& c ) -> juce::Component* {
+                if( c.isShowing() && Match( c ) )
+                    return &c;
+                for( auto* child : c.getChildren() )
+                    if( auto* hit = find( *child ) )
+                        return hit;
+                return nullptr;
+            };
+            return find( *getTopLevelComponent() );
+        };
+        auto editor = [findShowing]() { return dynamic_cast<kick_ui::ModularEditor*>( findShowing( []( juce::Component& c ) { return dynamic_cast<kick_ui::ModularEditor*>( &c ) != nullptr; } ) ); };
+        auto tapButton = [&s, findShowing, log]( juce::String Text ) {
+            s.push_back( [findShowing, log, Text] {
+                auto* b = dynamic_cast<juce::Button*>( findShowing( [Text]( juce::Component& c ) {
+                    auto* btn = dynamic_cast<juce::Button*>( &c );
+                    return btn && btn->getButtonText() == Text;
+                } ) );
+                if( b )
+                    b->triggerClick();
+                log( ( b ? "tapped " : "no button " ) + Text );
+            } );
+        };
+        auto describe = [&s, log, instrument]( juce::String When ) {
+            s.push_back( [log, instrument, When] {
+                auto* i = instrument();
+                if( !i )
+                    return;
+                const auto                     patch = i->getPatch();
+                const mt::modular::PatchEditor read( patch, nullptr );
+                juce::StringArray              parts;
+                for( const auto& m : patch )
+                {
+                    juce::String d = read.moduleLabel( m.getProperty( "id" ) ) + "@" + m.getProperty( "col" ).toString() + "," + m.getProperty( "row" ).toString();
+                    if( m.hasProperty( "cutoff" ) )
+                        d << " cutoff=" << juce::String( (float)m.getProperty( "cutoff" ), 1 );
+                    for( const auto& r : m )
+                        d << " [" << r.getProperty( "param" ).toString() << "<" << read.sourceLabel( r.getProperty( "source" ) ) << " " << juce::String( (float)r.getProperty( "depth" ), 2 ) << "]";
+                    parts.add( d );
+                }
+                log( When + ": " + ( patch.isValid() ? patch.getProperty( "name" ).toString() : juce::String( "(default)" ) ) + " | " + parts.joinIntoString( " | " ) );
+            } );
+        };
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir  = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source  = exeDir.getChildFile( "templates/Template 01/Template 01.kickPrj" );
+            auto scratch = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_selftest/SelfTest" );
+            scratch.getParentDirectory().deleteRecursively();
+            scratch.createDirectory();
+            const bool ok = source.copyFileTo( scratch.getChildFile( "SelfTest.kickPrj" ) ) && mt::getAudioInterface().loadProject( scratch );
+            log( "loaded scratch project " + scratch.getFullPathName() + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
+        s.push_back( [log] {
+            auto& ae = mt::getAudioInterface();
+            if( !ae.getNumSequences() )
+                ae.createSequence();
+            const auto seq  = ae.getSelectedSequence();
+            const auto trk  = ae.createTrack( seq, "Modular" );
+            const auto prog = ae.createProgram( mt::MTProgramType::Plugin, "Modular 1" );
+            ae.setProgramToTrack( prog, seq, trk );
+            ae.setSelectedSequenceAndTrack( seq, trk );
+            ae.setSelectedProgram( prog );
+            if( auto* i = dynamic_cast<mt::MTInstrumentProgram*>( ae.getProgram( prog ) ) )
+                i->setEngine( "Modular" );
+            log( "created Modular program " + juce::String( prog ) );
+        } );
+        wait( 2 );
+        click( DCC::EN_PROG_EDIT );
+        wait( 4 );
+        tapButton( "EDIT PATCH" );
+        wait( 3 );
+        s.push_back( [log, editor] { log( editor() ? "patch editor open" : "patch editor NOT open" ); } );
+        describe( "start" );
+        shot( "modular_editor_init" );
+
+        // Select the filter and turn Q-link P2 (cutoff) down.
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 0, 1 ); } );
+        wait( 1 );
+        s.push_back( [this] { qlinks[1]->turn( -25 ); } );
+        wait( 2 );
+        describe( "after P2 -25 on the filter" );
+        shot( "modular_editor_filter" );
+
+        // Add an LFO in an empty cell through the module list, as a tap would.
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 1, 1 ); } );
+        tapButton( "+ MODULE" );
+        wait( 3 );
+        shot( "modular_editor_picker" );
+        tapButton( "LFO" );
+        wait( 3 );
+        describe( "after adding an LFO" );
+
+        // Modulate the filter cutoff from it: + MOD, pick the knob, then the source.
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 0, 1 ); } );
+        wait( 1 );
+        tapButton( "+ MOD" );
+        wait( 3 );
+        tapButton( "Cutoff" );
+        wait( 4 );
+        tapButton( "LFO 1" );
+        wait( 3 );
+        s.push_back( [this] { qlinks[2]->turn( -20 ); } ); // the new modulation is third: P3, depth 0.5 -> 0.1
+        wait( 2 );
+        describe( "after modulating cutoff from the LFO" );
+        shot( "modular_editor_mods" );
+
+        // Move the LFO with the API a drag uses, play, then undo the move.
+        s.push_back( [editor] {
+            if( auto* e = editor() )
+            {
+                e->selectCell( 1, 1 );
+                e->moveModule( 3, 2 );
+            }
+        } );
+        wait( 2 );
+        describe( "after moving the LFO" );
+        click( DCC::EN_BANK_D );
+        for( int p = 0; p < 4; ++p )
+        {
+            s.push_back( [this, p] { pads.getPad( p ).hit( true, 100 ); } );
+            wait( 1 );
+            s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
+        }
+        s.push_back( [] {
+            mt::getAudioInterface().getUndoManager().beginNewTransaction();
+            mt::getAudioInterface().performUndo();
+        } );
+        wait( 2 );
+        describe( "after undo" );
+        shot( "modular_editor_after_undo" );
+
+        tapButton( "< BACK" );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( "back on the instrument page, preset box shows: " + i->getPatchName() );
+        } );
+        shot( "modular_editor_closed" );
         s.push_back( [log] { log( "done" ); } );
         wait( 2 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );

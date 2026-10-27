@@ -699,7 +699,7 @@ New in this build: an instrument program plays a built-in synth engine instead o
 | Release | 5 ms–6 s | 0.3 s |
 | Level | 0–1 | 0.7 |
 
-#### Built-in engine: Modular ✅ (milestone 1: no patch editor yet)
+#### Built-in engine: Modular ✅
 
 Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or Bitwig's grid devices.
 
@@ -747,10 +747,33 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 - Unknown modules and broken modulations are skipped, not fatal.
 - Cost: eight voices of Basic Poly took about 7% of one desktop core in testing. The RK3588 hasn't been measured.
 
-**Not yet (next milestones):**
+**The patch editor.** On the instrument page, **EDIT PATCH** (shown for Modular) opens the patch over the whole page.
 
-- The grid editor screen (placing modules, editing their knobs, assigning modulation). Until then, patches come from the presets.
-- Patch cables, saving your own presets, macro names, and a mono effects section after the voices.
+![Modular patch editor: the filter's modulations](img/modular_editor.png)
+
+- **Grid (left):** 8 columns × 6 rows. Orange = sources, blue = processors, purple = modulators. Each cell shows the module's name and its main knob.
+  - A line runs down each column that carries audio.
+  - **~N** marks a module whose knobs have N modulations.
+  - When a module is selected, the modules it modulates, or the ones modulating it, get a white outline.
+- **Add a module:** tap an empty cell, then tap it again or press **+ MODULE**, and pick a type.
+- **Move a module:** drag it to another cell. Dropping it on another module swaps the two.
+- **The selected module (right):**
+  - **PARAMS** shows its knobs, four per page, on Q-links **P1–P4**. Stepped knobs move one choice per detent; the rest move 1%.
+  - **MODS (n)** switches to its modulations, one knob per modulation (depth −100% to +100%), titled e.g. *CUTOFF ← LFO 1*.
+  - **+ MOD** asks which knob, then which source: velocity, note, gate, mod wheel, pitch bend, Macro 1–8, or any Envelope, LFO or Random in the patch.
+  - **REMOVE P*n*** removes the modulation you touched last. Its title is marked **>**.
+  - **DELETE** removes the module and the modulations it fed.
+- **VOICES** sets the patch's polyphony (1–16). The **centre knob** walks the selection through the cells.
+- **< BACK** returns to the instrument page.
+- **Undo:** everything goes through undo. Turning one knob undoes as a single step.
+- **Edited presets:** the first change to a factory preset renames it, e.g. **Init \***, and that name shows in the PRESET box.
+- **Pads** keep playing the patch while you edit, so you hear every change.
+
+**Not yet (next milestone):**
+
+- Patch cables (e.g. audio from one column into another, or FM between columns).
+- Saving your own presets and naming the macros.
+- A mono effects section after the voices.
 
 **What else is covered:**
 
@@ -1296,7 +1319,7 @@ All of these run on Windows from the build folders.
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** about 142 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine and its presets, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **What it covers:** about 152 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine, its presets and patch editing, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
@@ -1307,7 +1330,8 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `KICKEM_SELFTEST` | What it does |
 |---|---|
 | `1` | Presses every control type once |
-| `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads |
+| `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads. Then picks Modular and the FM Bell preset and turns Macro 1 |
+| `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads, undoes, goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
 | `record` | Records pad hits into Trap Kit and checks the grid snap, the REC light and undo. Then arms, records and stops the Sampler from the panel. |

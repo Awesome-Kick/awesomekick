@@ -29,6 +29,9 @@ namespace mt
         juce::StringArray getPresetNames() const { return presetNames; }
         /// The stored patch; invalid while the engine plays its default (preset 0).
         juce::ValueTree getPatch() const { return patchType.isValid() ? vTree.getChildWithName( patchType ) : juce::ValueTree{}; }
+        /// The stored patch, storing the default (preset 0) first if there is none, so an
+        /// editor always has a tree to change. Undoable; invalid for non-patch engines.
+        juce::ValueTree getOrCreatePatch();
         /// The patch's name, or preset 0's when none is stored.
         juce::String getPatchName() const;
         /// Replaces the stored patch with a fresh copy of a preset (undoable).

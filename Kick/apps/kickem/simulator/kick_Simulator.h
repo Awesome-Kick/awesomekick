@@ -45,6 +45,9 @@ namespace sim
         void startResourcesTest();
         /// KICKEM_SELFTEST=record: REC, play pads into the sequence, STOP; check the notes, then undo the take.
         void startRecordTest();
+        /// KICKEM_SELFTEST=modular: open the Modular patch editor, add/move/modulate modules
+        /// through its controls and the Q-links, undo, and snapshot each step.
+        void startModularTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };

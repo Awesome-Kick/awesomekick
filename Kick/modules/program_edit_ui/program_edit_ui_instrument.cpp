@@ -5,4 +5,5 @@
 
 #include "sources/instrument/kick_InstrumentProgramEdit.h"
 
+#include "sources/instrument/kick_ModularEditor.cpp"
 #include "sources/instrument/kick_InstrumentProgramEdit.cpp"

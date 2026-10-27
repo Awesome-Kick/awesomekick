@@ -26,7 +26,10 @@ namespace kick_ui
             engineNames.push_back( n );
         engine.setListOptions( engineNames, 0 );
 
-        mt::utils::addAndMakeVisible( this, engine, preset, layout, keyMode, root, scale, prevPage, nextPage, pageLabel );
+        mt::utils::addAndMakeVisible( this, engine, preset, layout, keyMode, root, scale, prevPage, nextPage, pageLabel, editPatch );
+        addChildComponent( patchEditor );
+        editPatch.onClick      = [this]() { showPatchEditor( true ); };
+        patchEditor.onClose    = [this]() { showPatchEditor( false ); };
 
         for( size_t i = 0; i < knobs.size(); ++i )
         {
@@ -101,6 +104,10 @@ namespace kick_ui
 
         engine.setSelected( inst->getEngineName(), juce::dontSendNotification );
         refreshPresets();
+        editPatch.setVisible( inst->hasPatch() );
+        patchEditor.setProgram( inst->hasPatch() ? inst : nullptr );
+        if( !inst->hasPatch() )
+            patchEditor.setVisible( false );
 
         const auto l = mt::PadLayout::fromTree( pIProg->getState().getChildWithName( mt::IDs::PAD_LAYOUT ) );
         layout.setSelected( layoutIndex( l.mode ), juce::dontSendNotification );
@@ -110,6 +117,18 @@ namespace kick_ui
         scale.setEnabled( l.inKey );
 
         showPage( page );
+    }
+
+    void InstrumentProgramEdit::showPatchEditor( bool Show )
+    {
+        auto* inst = instrument();
+        Show       = Show && inst && inst->hasPatch();
+        patchEditor.setProgram( Show ? inst : nullptr );
+        patchEditor.setVisible( Show );
+        if( Show )
+            patchEditor.toFront( false );
+        else
+            refresh(); // the preset name shows edits ("Init *")
     }
 
     void InstrumentProgramEdit::refreshPresets()
@@ -185,8 +204,18 @@ namespace kick_ui
         if( !contracts::DclContractsHelper::isKnobMessage( Msg ) )
             return;
 
-        // Q-link P1..P4 -> the four parameters on the current page, 1% per detent.
         const auto code = contracts::DclContractsHelper::getKnobCode( Msg );
+
+        // The patch editor takes the Q-links and the centre knob while it is open.
+        if( patchEditor.isVisible() )
+        {
+            const auto knob  = code == contracts::DeviceControlContracts::KnobSequence::EN_KNOB_CENTER ? -1 : code - contracts::DeviceControlContracts::KnobSequence::EN_KNOB_1;
+            const auto steps = contracts::DclContractsHelper::getKnobValue( Msg );
+            juce::MessageManager::callAsync( [this, knob, steps]() { patchEditor.turnKnob( knob, steps ); } );
+            return;
+        }
+
+        // Q-link P1..P4 -> the four parameters on the current page, 1% per detent.
         const auto k    = code - contracts::DeviceControlContracts::KnobSequence::EN_KNOB_1;
         if( !juce::isPositiveAndBelow( k, knobsPerPage ) )
             return;
@@ -224,10 +253,14 @@ namespace kick_ui
 
         b.removeFromTop( 10 );
 
+        patchEditor.setBounds( getLocalBounds() );
+
         // Page bar.
         auto bar = b.removeFromTop( 36 );
         prevPage.setBounds( bar.removeFromLeft( 60 ).reduced( 4 ) );
         nextPage.setBounds( bar.removeFromRight( 60 ).reduced( 4 ) );
+        if( editPatch.isVisible() )
+            editPatch.setBounds( bar.removeFromRight( 160 ).reduced( 4 ) );
         pageLabel.setBounds( bar );
 
         // Four knobs = four Q-links.

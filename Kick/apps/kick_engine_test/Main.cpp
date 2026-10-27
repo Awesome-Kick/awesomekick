@@ -726,6 +726,101 @@ namespace
     }
 
     //==============================================================================
+    void testModularPatchEditing( Results& R )
+    {
+        R.section( "Modular patch editing (what the editor screen does)" );
+        namespace mm = mt::modular;
+
+        juce::UndoManager um;
+        auto              patch = mm::createPreset( 0 ); // Init: osc 0,0  filter 0,1  vca 0,2  envelope 1,0
+        mm::PatchEditor   ed( patch, &um );
+        mt::ModularEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+        synth.setPatch( patch );
+
+        R.check( ed.addModule( "lfo", 0, 0 ) == 0 && ed.addModule( "nope", 3, 3 ) == 0, "no module into a taken cell or of an unknown type" );
+
+        um.beginNewTransaction();
+        const auto lfo = ed.addModule( "lfo", 2, 0 );
+        R.check( lfo > 0 && ed.moduleAt( 2, 0 ).isValid() && patch.getProperty( mm::PatchIDs::name ).toString() == "Init *", "adding a module marks the preset edited",
+                 "id " + juce::String( lfo ) + ", name " + patch.getProperty( mm::PatchIDs::name ).toString() );
+
+        const auto filter = (int)ed.moduleAt( 0, 1 ).getProperty( mm::PatchIDs::id );
+        um.beginNewTransaction();
+        auto route = ed.addMod( filter, "cutoff", mm::PatchBuilder::module( lfo ), 0.3f );
+        R.check( route.isValid() && !ed.addMod( filter, "nope", "velocity", 1.f ).isValid(), "modulation added; unknown knobs refused" );
+
+        // Sources: 13 built-ins, then the modulators in grid order, named by type.
+        const auto sources = ed.getSources();
+        juce::StringArray names;
+        for( const auto& src : sources )
+            names.add( src.second );
+        R.check( sources.size() == 15 && names[13] == "Envelope 1" && names[14] == "LFO 1" && ed.sourceLabel( mm::PatchBuilder::module( lfo ) ) == "LFO 1",
+                 "modulation sources listed and named", names.joinIntoString( ", " ) );
+
+        um.beginNewTransaction();
+        const auto osc2 = ed.addModule( "osc", 0, 3 );
+        R.check( ed.moduleLabel( osc2 ) == "Oscillator 2", "modules of one type are numbered in grid order", ed.moduleLabel( osc2 ) );
+
+        // Values clamp, and stepped knobs round.
+        ed.setValue( filter, "cutoff", 99999.f );
+        ed.setValue( filter, "mode", 1.6f );
+        R.check( ed.getValue( filter, "cutoff" ) == 20000.f && ed.getValue( filter, "mode" ) == 2.f, "values clamp to range and steps round",
+                 f3( ed.getValue( filter, "cutoff" ) ) + " / " + f3( ed.getValue( filter, "mode" ) ) );
+
+        // A knob edit reaches the engine without a rebuild; a move rebuilds.
+        auto builds = synth.getBuildCount();
+        synth.setPatch( patch ); // structure changed by the edits above
+        builds = synth.getBuildCount();
+        ed.setValue( filter, "cutoff", 500.f );
+        synth.setPatch( patch );
+        const auto valueOnly = synth.getBuildCount() == builds;
+
+        // Moving onto a taken cell swaps the two.
+        um.beginNewTransaction();
+        ed.moveModule( lfo, 0, 0 );
+        const auto swapped = ed.moduleAt( 0, 0 ).getProperty( mm::PatchIDs::id ) == juce::var( lfo ) && ed.moduleAt( 2, 0 ).getProperty( mm::PatchIDs::type ).toString() == "osc";
+        synth.setPatch( patch );
+        R.check( valueOnly && swapped && synth.getBuildCount() == builds + 1, "knob edits skip the rebuild; moving onto a module swaps them",
+                 "rebuilds " + juce::String( synth.getBuildCount() - builds ) );
+
+        // Removing a modulator takes the modulations it fed with it, and undo brings both back.
+        const auto env = (int)ed.moduleAt( 1, 0 ).getProperty( mm::PatchIDs::id );
+        auto       countMods = [&patch]() {
+            int n = 0;
+            for( const auto& m : patch )
+                n += m.getNumChildren();
+            return n;
+        };
+        const auto before = countMods();
+        um.beginNewTransaction();
+        ed.removeModule( env );
+        const auto after = countMods();
+        um.beginNewTransaction();
+        um.undo();
+        R.check( after == before - 1 && ed.moduleAt( 1, 0 ).isValid() && countMods() == before, "deleting a modulator drops its modulations; undo restores both",
+                 juce::String( before ) + " -> " + juce::String( after ) + " -> " + juce::String( countMods() ) );
+
+        um.beginNewTransaction();
+        ed.setVoices( 99 );
+        R.check( ed.getVoices() == mm::maxVoices, "voices clamp to the maximum", juce::String( ed.getVoices() ) );
+
+        // The edited patch still plays.
+        synth.setPatch( patch );
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        synth.noteOn( 60, 1.f );
+        float peak = 0;
+        for( int b = 0; b < 40; ++b )
+        {
+            synth.process( outs, 2, (int)testBlock );
+            for( auto v : l )
+                peak = juce::jmax( peak, std::abs( v ) );
+        }
+        R.check( peak > 0.01f && std::isfinite( peak ), "the edited patch plays", "peak " + f3( peak ) );
+    }
+
+    //==============================================================================
     void testPadLayout( Results& R )
     {
         R.section( "Pad layouts (Push/Launchpad style)" );
@@ -1356,6 +1451,7 @@ private:
         testADSR( R );
         testBasicSynth( R );
         testModularEngine( R );
+        testModularPatchEditing( R );
         testPadLayout( R );
         testEngine( R, kitDir );
 

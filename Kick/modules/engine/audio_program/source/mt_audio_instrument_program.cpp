@@ -126,6 +126,16 @@ namespace mt
         return presetNames.isEmpty() ? juce::String() : presetNames[0];
     }
 
+    juce::ValueTree MTInstrumentProgram::getOrCreatePatch()
+    {
+        auto* e = object->getEngine();
+        if( !patchType.isValid() || !e )
+            return {};
+        if( !getPatch().isValid() )
+            vTree.appendChild( e->createPreset( 0 ), um ); // what it already plays: values only, no rebuild
+        return getPatch();
+    }
+
     void MTInstrumentProgram::loadPreset( int Index )
     {
         auto* e = object->getEngine();
