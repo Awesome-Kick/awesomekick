@@ -30,12 +30,19 @@ namespace mt
     {
         audioFmtMgr.registerBasicFormats();
         ASliceRenderer::setSlice( &slice );
+
+        // `sound` is a member, not heap-allocated, but the slice holds it through a
+        // ReferenceCountedObjectPtr. Keep our own reference so the count never drops
+        // to zero, otherwise releasing the slice would `delete` a member object.
+        sound.incReferenceCount();
         slice.setSource( &sound );
     }
 
     ASoundPlayer::~ASoundPlayer()
     {
         ASliceRenderer::stop();
+        slice.setSource( nullptr );
+        sound.decReferenceCountWithoutDeleting();
     }
 
     void ASoundPlayer::setSoundToPlay( const juce::String& File, double LengthInSeconds )
@@ -51,8 +58,17 @@ namespace mt
 
     void ASoundPlayer::removeSound()
     {
-        sound.purge();
+        ASliceRenderer::stop();
+
+        // ASound::purge() only frees the data when nothing references it, so
+        // detach the slice and drop our own reference around the purge.
         slice.setSource( nullptr );
+        sound.decReferenceCountWithoutDeleting();
+        sound.purge();
+        sound.incReferenceCount();
+
+        // Stay attached: setSoundToPlay() refreshes the slice but never re-sets its source.
+        slice.setSource( &sound );
     }
 
     bool ASoundPlayer::isValidSource()

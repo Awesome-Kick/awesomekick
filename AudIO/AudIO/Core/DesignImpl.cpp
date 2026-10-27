@@ -25,6 +25,15 @@ namespace AudIO
         _running.store( true );
     }
 
+    void DesignImpl::stop()
+    {
+        // Without this, objects queued for removal after the audio thread has
+        // stopped are only deleted in ~DesignImpl, where their destructors call
+        // back into this half-destroyed design.
+        _running.store( false );
+        processRemoveQueue();
+    }
+
     inline void DesignImpl::process( Buffer<float>& Buffer )
     {
         auto dInGain     = designInputGain.getNext( _blockSize );

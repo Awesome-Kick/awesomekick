@@ -70,6 +70,9 @@ namespace AudIO
 
         void process( Buffer<float>& Buffer );
 
+        // Audio has stopped: removals no longer need deferring to the audio thread.
+        void stop();
+
         bool setDesignInput( uint32_t objid, bool Force );
         bool setDesignOutput( uint32_t objid, bool Force );
 

@@ -13,6 +13,10 @@ if (KICK_TESTS)
     add_subdirectory(kick_device_control_test)
 endif()
 
+if (KICK_ENGINE_TEST)
+    add_subdirectory(kick_engine_test)
+endif()
+
 if (KICK_PLAYBACK)
     add_subdirectory(kick_audio)
 endif()

@@ -19,6 +19,13 @@ juce_add_modules(
 	contracts
 )
 
+# Stand-ins for modules missing from the public release.
+juce_add_modules(
+    compat/AudIO_constants
+    compat/AudIO_juce
+    compat/juce_serialport
+)
+
 add_subdirectory(3rdParty)
 add_subdirectory(engine)
 

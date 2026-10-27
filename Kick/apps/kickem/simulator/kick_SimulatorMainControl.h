@@ -1,99 +1,56 @@
 #pragma once
 
-#include <kick_ui/kick_ui.h>
+#include "kick_SimulatorControls.h"
 
 namespace sim
 {
-class SimulatorIntrefaceImpl;
-class KickSimButton : public ui::KickButton
-{
-public: 
-    KickSimButton(const juce::String& buttonName, const juce::String& buttonText)
-        :KickButton(buttonName, buttonText)
+    ///
+    /// Control section below the screen: mode buttons, BANK A-D, BACK/COPY/-/+, jog wheel (with ENTER).
+    /// Logical size 1024 x 300.
+    ///
+    class SimulatorMainControl : public juce::Component
     {
-        setClickingTogglesState(true);
-        setColour(juce::TextButton::buttonColourId, ui::Theme::backgroundColour(1));
-        setColour(juce::TextButton::buttonOnColourId, ui::Theme::backgroundColour(1));
-        setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-        setColour(juce::TextButton::textColourOnId, juce::Colours::red);
-    }
-    void paint(juce::Graphics& g)
-    {
-        juce::TextButton::paint(g);
-        g.setColour(juce::Colours::white);
-        g.drawRoundedRectangle(getLocalBounds().toFloat(), 3, 5);
-    }
-private:
+    public:
+        SimulatorMainControl();
 
-};
+        void resized() override;
+        void paint( juce::Graphics& g ) override;
 
-class SimulatorMainControl1 : public juce::Component,
-    public juce::Button::Listener
-{
-public:
-    SimulatorMainControl1();
-    void resized();
-    void paint(juce::Graphics& g) override;
+        void collectButtons( std::vector<SimButton*>& out );
+        std::array<SimButton*, 4> getBankButtons() { return { &bankA, &bankB, &bankC, &bankD }; }
+        SimButton&                getShiftButton() { return shiftBtn; }
+        SimKnob&                  getJog() { return jog; }
 
-private:
-    void drawSubFunc(juce::Graphics& g, juce::Component& control, const juce::String& subFunctext);
-    
-private:
-    void buttonClicked(Button* button);
+    private:
+        // Left block
+        SimButton mainBtn { "MAIN", DCC::EN_MAINMODE, "GRID", DCC::EN_GRID };
+        SimButton browseBtn { "BROWSE", DCC::EN_BROWSE, "SAVE", DCC::EN_SAVE };
+        SimButton trackMixBtn { "TRACK MIX", DCC::EN_TRACK_MIX, "PAD MIX", DCC::EN_PAD_MIX };
+        SimButton trackMuteBtn { "TRACK MUTE", DCC::EN_TRACK_MUTE, "PAD MUTE", DCC::EN_PAD_MUTE };
+        SimButton nextSeqBtn { "NEXT SEQ", DCC::EN_NEXT_SEQ, "FX", DCC::EN_FX };
+        SimButton stepSeqBtn { "STEP SEQ", DCC::EN_STEP_SEQ, "AUTOMATION", DCC::EN_AUTOMATION };
+        SimButton tapTempoBtn { "TAP TEMPO", DCC::EN_TAP_TEMPO, "MASTER", DCC::EN_MASTER };
+        SimButton noteRepeatBtn { "NOTE REPEAT", DCC::EN_NOTE_REPEAT, "LATCH", DCC::EN_LATCH };
 
-private:
-    KickSimButton fullLevels{ "", "FULL LEVELS" };
-    KickSimButton levels16{ "", "16 LEVELS" };
-    KickSimButton erase{ "", "ERASE" };
-};
+        // Banks (SHIFT -> E-H)
+        SimButton bankA { "A", DCC::EN_BANK_A, "E", DCC::EN_BANK_E };
+        SimButton bankB { "B", DCC::EN_BANK_B, "F", DCC::EN_BANK_F };
+        SimButton bankC { "C", DCC::EN_BANK_C, "G", DCC::EN_BANK_G };
+        SimButton bankD { "D", DCC::EN_BANK_D, "H", DCC::EN_BANK_H };
 
-class SimulatorMainControl : public juce::Component, 
-    public juce::Button::Listener
-{
-public:
-    SimulatorMainControl();
-    ~SimulatorMainControl();
-    void buttonClicked(Button*);
-    void paint(juce::Graphics& paint);
-    void resized() override;
+        // Navigation around the jog wheel
+        SimButton backBtn { "BACK", DCC::EN_BACK };
+        SimButton copyBtn { "COPY", DCC::EN_COPY };
+        SimButton minusBtn { "-", DCC::EN_MINUS };
+        SimButton plusBtn { "+", DCC::EN_PLUS };
+        SimKnob   jog { {}, SimKnob::Mode::endless, true };
 
-SIGNALS:
-    sig::Signal<int> bankChanged;
-
-private:
-    void drawSubFunc(juce::Graphics& g, juce::Component& control, const juce::String& subFunctext);
-
-private:
-    SimulatorIntrefaceImpl* impl = nullptr;
-    ui::KickImageButton bankA{"", "Sim Button A.png", "Sim Button A Enabled.png"};
-    ui::KickImageButton bankB{"", "Sim Button B.png", "Sim Button B Enabled.png"};
-    ui::KickImageButton bankC{"", "Sim Button C.png", "Sim Button C Enabled.png"};
-    ui::KickImageButton bankD{"", "Sim Button D.png", "Sim Button D Enabled.png"};
-    
-    KickSimButton mainBtn{ "", "MAIN" };
-    KickSimButton browseBtn{"", "BROWSE" };
-    KickSimButton trackMixBtn{"", "TRACK MIX" };
-    KickSimButton trackMuteBtn{"", "TRACK MUTE" };
-    KickSimButton nextSeqBtn{"", "NEXT SEQ" };
-
-    KickSimButton tapTempoBtn{"", "TAP TEMPO" };
-    KickSimButton noteRepeatBtn{"", "NOTE REPEAT" };
-
-    KickSimButton stepSeq{"", "STEP SEQ" };
-    KickSimButton tc{"", "TC" };
-    KickSimButton sampler{"", "SAMPLER" };
-    KickSimButton sampleEdit{"", "SAMPLE EDIT" };
-    KickSimButton programEdit{"", "PROGRAM EDIT" };
-
-    KickSimButton menuBtn{"", "MENU" };
-    KickSimButton shiftBtn{"", "SHIFT" };
-
-    ui::KickImageButton backBtn{ "", "Sim Back.png" , "" };
-    ui::KickImageButton copyBtn{ "", "Sim Copy.png" , "" };
-    ui::KickImageButton plusBtn{ "", "Sim Plus.png" , "" };
-    ui::KickImageButton minusBtn{ "", "Sim Minus.png" , ""};
-    ui::KickRotary centralRotary{"x"};
-    ui::KickButton centralKnobClick{"", "B"};
-    int centralRotaryValue = 0;
-};
+        // Right block
+        SimButton tcBtn { "TC", DCC::EN_TC, "ON/OFF", DCC::EN_ON_OFF };
+        SimButton samplerBtn { "SAMPLER", DCC::EN_SAMPLER, "LOOPER", DCC::EN_LOOPER };
+        SimButton sampleEditBtn { "SAMPLE EDIT", DCC::EN_SAMPLE_EDIT, "LINK EDIT", DCC::EN_LINK_EDIT };
+        SimButton progEditBtn { "PROGRAM EDIT", DCC::EN_PROG_EDIT, "MIDI CONTROL", DCC::EN_MIDI_CONTROL };
+        SimButton menuBtn { "MENU", DCC::EN_MENU, "PREFS", DCC::EN_PREF };
+        SimButton shiftBtn { "SHIFT", DCC::EN_SHIFT };
+    };
 }

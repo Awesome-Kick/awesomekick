@@ -377,6 +377,8 @@ namespace mt
         std::array<std::unique_ptr<MTILayer>, MAX_LAYERS> layers;
 
         MTISample( juce::ValueTree& VT, juce::UndoManager* UM );
+        // Held as std::unique_ptr<MTISample> but created as derived pad/clip types.
+        virtual ~MTISample() = default;
 
         void                                 removeSource( const juce::String& Source );
         juce::String                         getSource( int Layer = 0 );

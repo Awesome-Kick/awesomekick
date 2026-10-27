@@ -1,80 +1,81 @@
 #pragma once
 
-#include <kick_ui/kick_ui.h>
-#include "kick_SimulatorInterfaceImpl.h"
-#include "kick_SimulatorMainControl.h"
+#include <map>
 #include "kick_SimulatorControls.h"
+#include "kick_SimulatorMainControl.h"
+
 namespace sim
 {
-class KickSimulatorButton : public juce::Component
-{
-public:
-    KickSimulatorButton(int pos);
-    ~KickSimulatorButton();
-    int getPos() { return pos; }
-    void paint(juce::Graphics& g);
-    void setState(mt::Kick::PadButtonState newState) { state = newState; }
-    void setPadColour(const juce::Colour& clr) { padColour = clr; }
+    ///
+    /// The simulated KICK front panel at fixed logical size, with the real Kick UI (kick_ui::KickHome, 1024x600)
+    /// embedded where the hardware screen is.
+    ///
+    class SimulatorBoard : public juce::Component
+        , private juce::Timer
+    {
+    public:
+        static constexpr int boardWidth  = 1800;
+        static constexpr int boardHeight = 960;
 
-SIGNALS:
-    sig::Signal<int, bool> padStateChanged;
+        SimulatorBoard();
+        ~SimulatorBoard() override;
 
-private:
-    void mouseDown(const MouseEvent& event) override;
-    void mouseUp(const MouseEvent& event) override;
+        void paint( juce::Graphics& g ) override;
+        void resized() override;
 
-public:
-    int pos = 0;
-    bool mousePressed = false;
-    juce::Colour padColour;
-    mt::Kick::PadButtonState state = mt::Kick::PadButtonState::StateOff;
-};
+    private:
+        /// Packets the app sent to the "hardware" (LEDs, pads, slider).
+        void handleOutput( const CPktMgr::HWMsg_t& m );
+        void setButtonLed( int id, bool on );
+        SimButton* findButton( int code );
 
-class SimulatorButtonGrid : public juce::Component
-{
-public:
-    SimulatorButtonGrid();
-    ~SimulatorButtonGrid();
-    void resized() override;
-    void paint(juce::Graphics& g) override;
-    void setCurrentBank(int cBank);
+        /// KICKEM_SELFTEST=1: drive every control type once through the same code paths as mouse clicks.
+        void startSelfTest();
+        void timerCallback() override;
+        std::vector<std::function<void()>> selfTestSteps;
+        size_t                             selfTestIndex { 0 };
 
-private:
-    SimulatorIntrefaceImpl* impl = nullptr;
-    std::list<std::unique_ptr<KickSimulatorButton>> buttons;
-    std::vector<mt::Kick::PadButtonState> padState;
-    int currentBank = 0;
-    std::vector<mt::Kick::PadColourIds> padColour;
-};
+        juce::Component& screen;
 
-class Simulator  : public juce::Component
-{
-public:
-    Simulator ();
-    ~Simulator();
+        // Left column
+        SimTouchSlider slider;
+        SimKnob        masterKnob { "MASTER", SimKnob::Mode::absolute };
+        SimKnob        recKnob { "REC GAIN", SimKnob::Mode::absolute };
+        SimButton      fullLevelBtn { "FULL LEVEL", DCC::EN_FULL_LEVEL, "HALF LEVEL", DCC::EN_HALF_LEVEL };
+        SimButton      levels16Btn { "16 LEVELS", DCC::EN_16LEVELS, "NOTES", DCC::EN_NOTES };
+        SimButton      eraseBtn { "ERASE", DCC::EN_ERASE };
+        SimPadGrid     pads;
 
-    void paint (juce::Graphics& g) override;
-    void resized() override;
-private:
-    juce::Rectangle<int> getSliderRect();
-    juce::Rectangle<int> getMasterRect();
-    juce::Rectangle<int> getRecRect();
-    juce::Rectangle<int> getSliderLinkRect();
-    juce::Rectangle<int> getSliderControlsRect();
-    juce::Rectangle<int> getQlinkControlsRect();
+        // Below the screen
+        SimulatorMainControl mainControl;
 
-private:
-    SimulatorIntrefaceImpl* sif = nullptr;
-    ui::KickImageButton brand{"", "Sim Brands dt_KlarkTeknik.png", ""};
-    ui::KickImageButton logo{ "", "Sim KICK logo.png", "" };
-    SimulatorButtonGrid pad;
-    SimulatorMainControl mainControl;
-    SimulatorMainControl1 mainControl1;
-    SimTransportControl transport;
-    SimQlinkControls qlinks;
-    ui::KickSlider slider;
-    ui::KickRotary master{"Master"};
-    ui::KickRotary rec{ "Rec" };
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Simulator)
-};
+        // Right column
+        std::array<std::unique_ptr<SimKnob>, 4> qlinks;
+        SimButton                               linkBtn { "LINK", DCC::EN_LINK };
+        SimButton                               recBtn { "REC", DCC::EN_RECORD };
+        SimButton                               overdubBtn { "OVERDUB", DCC::EN_OVERDUB };
+        SimButton                               stopBtn { "STOP", DCC::EN_STOP };
+        SimButton                               playBtn { "PLAY", DCC::EN_PLAY };
+        SimButton                               playStartBtn { "PLAY START", DCC::EN_PLAYSTART };
+
+        std::multimap<int, SimButton*> ledMap; // BtnLedSequence id -> button(s)
+        sigslot::scoped_connection     outputConnection;
+
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( SimulatorBoard )
+    };
+
+    ///
+    /// Window content: scales the board uniformly to fit any window size.
+    ///
+    class Simulator : public juce::Component
+    {
+    public:
+        Simulator();
+        void paint( juce::Graphics& g ) override;
+        void resized() override;
+
+    private:
+        SimulatorBoard board;
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( Simulator )
+    };
 }

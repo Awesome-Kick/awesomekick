@@ -188,6 +188,9 @@ public:
         // Add your application's shutdown code here ...
         w = nullptr;
         adapter = nullptr;
+
+        // Tear the engine down while JUCE is still alive (see MTAudioInterface::shutdown).
+        mt::getAudioInterface().shutdown();
     }
 
     //==============================================================================
@@ -221,7 +224,8 @@ public:
             : juce::DocumentWindow( name, juce::Colours::black, 0 )
         {
             setTitle( name );
-            setContentOwned( &kick_ui::KickHome::Instance(), true );
+            // KickHome::Instance() is a function-local static: the window must not delete it.
+            setContentNonOwned( &kick_ui::KickHome::Instance(), true );
         }
 
         ~HomeWindow() final = default;

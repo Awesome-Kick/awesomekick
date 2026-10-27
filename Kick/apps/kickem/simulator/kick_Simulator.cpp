@@ -1,299 +1,299 @@
+#include <kick_ui/kick_ui.h>
 #include "kick_Simulator.h"
+#include "kick_SimulatorInterfaceImpl.h"
 
 namespace sim
 {
-#define padSpacing  20
-KickSimulatorButton::KickSimulatorButton(int p)
-    :pos(p)
-{
-}
-
-KickSimulatorButton::~KickSimulatorButton()
-{
-}
-
-void KickSimulatorButton::paint(juce::Graphics& g)
-{
-    g.setColour(juce::Colour(34, 34, 34));
-    g.fillAll();
-
-    juce::Colour clr;
-    if (mousePressed)
-        clr = padColour.withAlpha(0.75f);
-    else if (state == mt::Kick::PadButtonState::StateOff || state == mt::Kick::PadButtonState::StateOff)
-        clr = juce::Colours::transparentBlack;
-    else
-        clr = padColour;
-
-    g.setColour(clr);
-    g.drawRect(getLocalBounds(), 3);
-}
-
-void KickSimulatorButton::mouseDown(const MouseEvent&)
-{
-    if (state == mt::Kick::PadButtonState::StateOff)
-        return;
-
-    padStateChanged.emit(pos, true);
-    mousePressed = true;
-    repaint();
-}
-
-void KickSimulatorButton::mouseUp(const MouseEvent&)
-{
-    if (state == mt::Kick::PadButtonState::StateOff)
-        return;
-
-    padStateChanged.emit(pos, false);
-    mousePressed = false;
-    repaint();
-}
-
-SimulatorButtonGrid::SimulatorButtonGrid()
-{
-    padColour.resize(128, mt::Kick::PadColourIds::PadColourTrans);
-    padState.resize(128, mt::Kick::PadButtonState::StateOff);
-    auto triggerHwEvent = [this](int pos, bool pressed)
+    namespace
     {
-        std::vector<char> data(2);
-        int pad = mt::Kick::HwControlCommands::Pad1 + pos;
-        data[1] = 127; //velocity
-        if (pressed)
-            data[0] = PAD_PRESSED;
-        else
-            data[0] = PAD_RELEASED;
+        const juce::Rectangle<int> screenRect { 620, 20, 1024, 600 };
 
-        impl->hwInputReceived.emit((mt::Kick::HwControlCommands)pad, data);
-    };
-    
-    impl = new SimulatorIntrefaceImpl();
-    for (int row = 0; row < 4; row++)
-    {
-        for (int column = 0; column < 4; column++)
+        /// Diagnostics (set KICKEM_TRACE_MOUSE=1): log every mouse-down the app receives.
+        struct MouseTrace : juce::MouseListener
         {
-            auto& padBtn = buttons.emplace_back(std::unique_ptr<KickSimulatorButton>(new KickSimulatorButton( row * 4 + column)));
-            addAndMakeVisible(*padBtn);
-            padBtn->padStateChanged.connect(triggerHwEvent);
-        }
-    }
-    
-    impl->hwMessageReceived.connect([this](int hwId, const std::vector<juce::int8>& data)
-    {
-        if (!(hwId >= mt::Kick::HwControlCommands::Pad1 && hwId <= mt::Kick::HwControlCommands::Pad16))
-            return;
-
-        mt::Kick::PadAction pdAction = (mt::Kick::PadAction)data[0];
-        int pad = hwId - (int)mt::Kick::HwControlCommands::Pad1;
-        if (pdAction == mt::Kick::PadAction::SetPadColour)
-        {
-            int bank = (int)data[1];
-
-            mt::Kick::PadColourIds selPadClr = (mt::Kick::PadColourIds)data[2];
-            padColour[(rsize_t)bank * TOTAL_DRUM_PADS + pad] = (mt::Kick::PadColourIds)data[2];
-
-            if (currentBank == bank)
+            void mouseDown( const juce::MouseEvent& e ) override
             {
-                for (auto& button : buttons)
-                {
-                    if (button->getPos() == pad)
-                    {
-                        button->setPadColour(mt::Kick::getPadColourFromId(selPadClr));
-                        break;
-                    }
-                }
+                SimulatorInterfaceImpl::log( "mouseDown on " + juce::String( typeid( *e.eventComponent ).name() ) + " at " + e.getScreenPosition().toString()
+                                             + " modal=" + juce::String( juce::Component::getNumCurrentlyModalComponents() ) );
             }
-            repaint();
-        }
-        else if (pdAction == mt::Kick::PadAction::SetPadState)
-        {
-            padState[currentBank * TOTAL_DRUM_PADS + pad] = (mt::Kick::PadButtonState)data[1];
-
-            //int startPadAndBank = (int)data[1];
-            //int ensPadAndBank = (int)data[2];
-            //for (int i = startPadAndBank; i <= ensPadAndBank; i++)
-            //    padState[i] = state;
-
-            setCurrentBank(currentBank);
-        }
-        else if (hwId == pdAction == mt::Kick::PadAction::SetPadState)
-        {
-            //int startPadAndBank = (int)data[0];
-            //int ensPadAndBank = (int)data[1];
-            //for (int i = startPadAndBank; i <= ensPadAndBank; i++)
-            //    padsOn[i] = false;
-            //
-            //setCurrentBank(currentBank);
-        }
-    });
-}
-
-SimulatorButtonGrid::~SimulatorButtonGrid()
-{
-}
-
-void SimulatorButtonGrid::resized()
-{
-    int buttonWidth = (int)(std::round(getWidth() - (5 * padSpacing)) / 4);
-    int buttonHeight = (int)(std::round(getHeight() - (5 * padSpacing)) / 4);
-    int yPos = getHeight() - padSpacing - buttonHeight;
-    int xPos = padSpacing;
-    
-    int pos = 0;
-    for (std::unique_ptr<KickSimulatorButton>& padBtn : buttons)
-    {
-        padBtn->setBounds(xPos, yPos, buttonWidth, buttonHeight);
-        xPos += buttonWidth + padSpacing;
-        pos++;
-        if (pos / 4 == 1)
-        {
-            yPos -= buttonHeight + padSpacing;
-            pos = 0;
-            xPos = padSpacing;
-        }
-    }
-}
-
-void SimulatorButtonGrid::setCurrentBank(int cBank)
-{
-    currentBank = cBank;
-    int buttonStartValue = cBank * 16;
-    for (auto& padButton : buttons)
-    {
-        padButton->setPadColour(mt::Kick::getPadColourFromId(padColour[buttonStartValue]));
-        padButton->setState(padState[buttonStartValue]);
-        buttonStartValue++;
+        } mouseTrace;
     }
 
-    repaint();
-}
-
-void SimulatorButtonGrid::paint(juce::Graphics& g)
-{
-    g.setColour(juce::Colour(40, 39, 37));
-    g.fillAll();
-
-    g.setColour(juce::Colours::white);
-    int buttonWidth = (int)(std::round(getWidth() - (5 * padSpacing)) / 4);
-    int buttonHeight = (int)(std::round(getHeight() - (5 * padSpacing)) / 4);
-    int yPos = getHeight() - padSpacing;
-    int xPos = padSpacing;
-
-    int pos = 0;
-    for (std::unique_ptr<KickSimulatorButton>& padBtn : buttons)
+    //==============================================================================
+    // SimulatorBoard
+    //==============================================================================
+    SimulatorBoard::SimulatorBoard()
+        : screen( kick_ui::KickHome::Instance() )
     {
-        juce::Rectangle<int> textRect(xPos, yPos, buttonWidth, 16);
-        juce::String text = juce::String().formatted("Pad %d", padBtn->pos);
-        g.drawText(text, textRect, juce::Justification::centredLeft);
+        addAndMakeVisible( screen );
 
-        xPos += buttonWidth + padSpacing;
-        pos++;
-        if (pos / 4 == 1)
+        addAndMakeVisible( slider );
+        addAndMakeVisible( masterKnob );
+        addAndMakeVisible( recKnob );
+        addAndMakeVisible( fullLevelBtn );
+        addAndMakeVisible( levels16Btn );
+        addAndMakeVisible( eraseBtn );
+        addAndMakeVisible( pads );
+        addAndMakeVisible( mainControl );
+
+        for( int i = 0; i < 4; ++i )
         {
-            yPos -= buttonHeight + padSpacing;
-            pos = 0;
-            xPos = padSpacing;
+            qlinks[i] = std::make_unique<SimKnob>( "P" + juce::String( i + 1 ), SimKnob::Mode::endless );
+            qlinks[i]->onStep = [i]( int steps ) {
+                hw::send( hw::knobMessage( DCC::EN_KNOB_1 + i, steps ) );
+            };
+            addAndMakeVisible( *qlinks[i] );
+        }
+        for( auto* b : { &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
+            addAndMakeVisible( b );
+
+        recBtn.setLedColour( juce::Colour( 0xffff2020 ) );
+        overdubBtn.setLedColour( juce::Colour( 0xffff2020 ) );
+        playBtn.setLedColour( juce::Colour( 0xff20e040 ) );
+        playStartBtn.setLedColour( juce::Colour( 0xff20e040 ) );
+
+        // LED routing table: both functions of a dual-function button share its LED.
+        std::vector<SimButton*> buttons { &fullLevelBtn, &levels16Btn, &eraseBtn, &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn };
+        mainControl.collectButtons( buttons );
+        for( auto* b : buttons )
+        {
+            if( b->getCode() != DCC::EN_INVALID_ID ) ledMap.emplace( b->getCode(), b );
+            if( b->getShiftCode() != DCC::EN_INVALID_ID ) ledMap.emplace( b->getShiftCode(), b );
+        }
+
+        ShiftLatch::onChange = [this]( bool latched ) {
+            mainControl.getShiftButton().setLed( latched );
+            repaint(); // shift legends brighten while latched
+        };
+
+        outputConnection = SimulatorInterfaceImpl::outputReceived.connect( [this]( const CPktMgr::HWMsg_t& m ) { handleOutput( m ); } );
+
+        setSize( boardWidth, boardHeight ); // last: resized() needs every child
+
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_TRACE_MOUSE", {} ).isNotEmpty() )
+            juce::Desktop::getInstance().addGlobalMouseListener( &mouseTrace );
+
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty() )
+            startSelfTest();
+    }
+
+    SimButton* SimulatorBoard::findButton( int code )
+    {
+        auto range = ledMap.equal_range( code );
+        for( auto it = range.first; it != range.second; ++it )
+            if( it->second->getCode() == code )
+                return it->second;
+        return nullptr;
+    }
+
+    void SimulatorBoard::startSelfTest()
+    {
+        auto& s     = selfTestSteps;
+        auto  note  = [&s]( juce::String text ) { s.push_back( [text] { SimulatorInterfaceImpl::log( "SELFTEST " + text ); } ); };
+        auto  wait  = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        auto pad = [&s, this]( int i ) {
+            s.push_back( [this, i] { pads.getPad( i ).hit( true, 100 ); } );
+            s.push_back( [this, i] { pads.getPad( i ).hit( false ); } );
+        };
+
+        wait( 4 );
+        note( "jog ENTER (load selected project)" );
+        s.push_back( [this] { mainControl.getJog().pushCentre( true ); } );
+        s.push_back( [this] { mainControl.getJog().pushCentre( false ); } );
+        wait( 12 );
+        note( "pads 1 and 6" );
+        pad( 0 );
+        pad( 5 );
+        note( "bank B" );
+        click( DCC::EN_BANK_B );
+        wait( 2 );
+        note( "SHIFT + bank C (-> bank G)" );
+        s.push_back( [this] { mainControl.getShiftButton().press( true ); } );
+        s.push_back( [this] { mainControl.getShiftButton().press( false ); } );
+        click( DCC::EN_BANK_C );
+        wait( 2 );
+        note( "bank A" );
+        click( DCC::EN_BANK_A );
+        note( "PLAY" );
+        click( DCC::EN_PLAY );
+        wait( 3 );
+        note( "STOP" );
+        click( DCC::EN_STOP );
+        note( "jog +3 / -2" );
+        s.push_back( [this] { mainControl.getJog().turn( 3 ); } );
+        s.push_back( [this] { mainControl.getJog().turn( -2 ); } );
+        note( "Q-link P1..P4 +2 / -1" );
+        for( int q = 0; q < 4; ++q )
+        {
+            s.push_back( [this, q] { qlinks[(size_t)q]->turn( 2 ); } );
+            s.push_back( [this, q] { qlinks[(size_t)q]->turn( -1 ); } );
+        }
+        note( "slider 30 / 70" );
+        s.push_back( [this] { slider.setTouch( 30 ); } );
+        s.push_back( [this] { slider.setTouch( 70 ); } );
+        note( "LINK, ERASE, MAIN" );
+        click( DCC::EN_LINK );
+        click( DCC::EN_ERASE );
+        click( DCC::EN_MAINMODE );
+        note( "done" );
+
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::timerCallback()
+    {
+        if( selfTestIndex < selfTestSteps.size() )
+            selfTestSteps[selfTestIndex++]();
+        else
+            stopTimer();
+    }
+
+    SimulatorBoard::~SimulatorBoard()
+    {
+        ShiftLatch::onChange = nullptr;
+        juce::Desktop::getInstance().removeGlobalMouseListener( &mouseTrace );
+        // KickHome is a process-wide singleton: detach it, don't let it be destroyed with the board.
+        removeChildComponent( &screen );
+    }
+
+    void SimulatorBoard::handleOutput( const CPktMgr::HWMsg_t& m )
+    {
+        const auto& d = m.data;
+        switch( m.pktType )
+        {
+            case CPktMgr::EN_PKT_TYPE_LED:
+                // EN_LED_SET_SINGLE_LED / EN_LED_BLINK_SINGLE : { id, state, colour }
+                if( ( m.pktCmd == DCC::EN_LED_SET_SINGLE_LED || m.pktCmd == DCC::EN_LED_BLINK_SINGLE ) && d.size() >= 2 )
+                    setButtonLed( d[0], d[1] != DCC::StateOff );
+                break;
+
+            case CPktMgr::EN_PKT_TYPE_PAD:
+                pads.applyPadPacket( m );
+                break;
+
+            case CPktMgr::EN_PKT_TYPE_SLIDER:
+                if( ( m.pktCmd == DCC::EN_SLIDER_BAR_LED || m.pktCmd == DCC::EN_SLIDER_LEVEL_LED ) && !d.empty() )
+                    slider.setLedLevel( d[0] );
+                break;
+
+            default: break;
         }
     }
-}
 
-Simulator::Simulator()
-{
-    sif = new SimulatorIntrefaceImpl;
-    const Displays::Display* primary = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
-    setBounds(primary->userArea);
-
-    slider.setRange(1, 100, 1);
-    addAndMakeVisible(master);
-    master.setDisplayProportions(.6f, .2f, .2f);
-    master.showTitleAndValue(true, Slider::TextBoxBelow, Justification::centred);
-
-    addAndMakeVisible(rec);
-    rec.setDisplayProportions(.6f, .2f, .2f);
-    rec.showTitleAndValue(true, Slider::TextBoxBelow, Justification::centred);
-
-    addAndMakeVisible(slider);
-    addAndMakeVisible(brand);
-    addAndMakeVisible(logo);
-    addAndMakeVisible(AppHome::Instance());
-    addAndMakeVisible(pad);
-    addAndMakeVisible(mainControl);
-    addAndMakeVisible(mainControl1);
-    addAndMakeVisible(transport);
-    addAndMakeVisible(qlinks);
-    mainControl.bankChanged.connect([this](int bankEnum)
+    void SimulatorBoard::setButtonLed( int id, bool on )
+    {
+        if( id >= DCC::EN_BANK_A && id <= DCC::EN_BANK_H )
         {
-            int currentBank = bankEnum >= mt::Kick::HwControlCommands::BankA && bankEnum <= mt::Kick::HwControlCommands::BankD ?
-                bankEnum - mt::Kick::HwControlCommands::BankA : bankEnum  - mt::Kick::HwControlCommands::BankE;
-            pad.setCurrentBank(currentBank);
+            if( !on )
+                return;
+            // Bank LEDs are exclusive; E-H share the A-D buttons.
+            auto banks = mainControl.getBankButtons();
+            for( int i = 0; i < 4; ++i )
+                banks[(size_t)i]->setLed( i == id % 4 );
+            pads.setBankName( juce::String::charToString( (juce::juce_wchar)( 'A' + id ) ) );
+            return;
         }
-    );
-}
 
-Simulator::~Simulator()
-{
-    AppHome::deletInstance();
-    delete sif;
-}
+        if( on && ( id == DCC::EN_PLAY || id == DCC::EN_STOP || id == DCC::EN_PLAYSTART ) )
+        {
+            playBtn.setLed( id == DCC::EN_PLAY );
+            stopBtn.setLed( id == DCC::EN_STOP );
+            playStartBtn.setLed( id == DCC::EN_PLAYSTART );
+            return;
+        }
 
-void Simulator::paint(juce::Graphics &g)
-{
-    g.setColour(juce::Colour(53, 53, 53));
-    g.fillAll();
+        if( on && ( id == DCC::EN_FULL_LEVEL || id == DCC::EN_HALF_LEVEL ) )
+        {
+            fullLevelBtn.setLed( true );
+            return;
+        }
 
-    g.setColour(juce::Colour(27, 27, 27));
-    g.fillRect(getSliderRect());
-    g.fillRect(getMasterRect());
-    g.fillRect(getRecRect());
-    g.fillRect(getSliderLinkRect());
-    g.fillRect(getSliderControlsRect());
-    g.fillRect(getQlinkControlsRect());
-}
+        auto range = ledMap.equal_range( id );
+        for( auto it = range.first; it != range.second; ++it )
+            it->second->setLed( on );
+    }
 
-void Simulator::resized()
-{
-    brand.setBounds(20, 20, 275, 37);
-    logo.setBounds(20, brand.getBottom() + 10, 275, 50);
-    AppHome::Instance()->setTopLeftPosition(683, 20);
-    pad.setBounds(40, getSliderControlsRect().getBottom() + 10, 614, 490);
-    mainControl.setBounds(692, AppHome::Instance()->getBottom() + 2, 1018, 458);
-    transport.setBounds(1767, 578, 84, 437);
-    qlinks.setBounds(1753, 40, 110, 526);
+    void SimulatorBoard::paint( juce::Graphics& g )
+    {
+        g.fillAll( palette::body );
 
-    slider.setBounds(446, 40, 16, 280);
-    master.setBounds(512, 30, 148, 137);
-    rec.setBounds(512, 197, 148, 137);
+        // Brand
+        g.setColour( palette::text );
+        g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
+        g.drawText( "KLARK TEKNIK", juce::Rectangle<int>( 24, 14, 300, 20 ), juce::Justification::centredLeft );
+        g.setFont( juce::Font( 30.0f, juce::Font::bold ) );
+        g.drawText( "KICK", juce::Rectangle<int>( 24, 32, 200, 32 ), juce::Justification::centredLeft );
+        g.setColour( palette::text.withAlpha( 0.5f ) );
+        g.setFont( juce::Font( 12.0f ) );
+        g.drawText( "KickEM simulator - controls send front-panel MCU packets", juce::Rectangle<int>( 230, 38, 370, 24 ), juce::Justification::centredRight );
 
-    mainControl1.setBounds(79, 395, 442 - 68, 63);
-}
+        // Wells
+        g.setColour( palette::well );
+        g.fillRoundedRectangle( juce::Rectangle<int>( 20, 70, 580, 310 ).toFloat(), 8.0f );
+        g.fillRoundedRectangle( juce::Rectangle<int>( 1656, 14, 132, 556 ).toFloat(), 8.0f );
+        g.fillRoundedRectangle( juce::Rectangle<int>( 1656, 580, 132, 360 ).toFloat(), 8.0f );
 
-juce::Rectangle<int> Simulator::getSliderRect()
-{
-    return juce::Rectangle<int>(335, 20, 147, 324);
-}
+        // Screen bezel
+        g.setColour( juce::Colours::black );
+        g.fillRoundedRectangle( screenRect.expanded( 8 ).toFloat(), 6.0f );
 
-juce::Rectangle<int> Simulator::getMasterRect()
-{
-    return juce::Rectangle<int>(502, 20, 168, 157);
-}
+        g.setColour( palette::text );
+        g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
+        g.drawText( "Q-LINK", juce::Rectangle<int>( 1656, 16, 132, 18 ), juce::Justification::centred );
+        g.drawText( "TRANSPORT", juce::Rectangle<int>( 1656, 582, 132, 18 ), juce::Justification::centred );
+    }
 
-juce::Rectangle<int> Simulator::getRecRect()
-{
-    return juce::Rectangle<int>(502, 187, 168, 157);
-}
+    void SimulatorBoard::resized()
+    {
+        screen.setBounds( screenRect );
 
-juce::Rectangle<int> Simulator::getSliderLinkRect()
-{
-    return juce::Rectangle<int>(502, 354, 168, 156);
-}
+        slider.setBounds( 30, 78, 80, 296 );
+        masterKnob.setBounds( 120, 80, 150, 140 );
+        recKnob.setBounds( 120, 230, 150, 140 );
+        fullLevelBtn.setBounds( 300, 90, 280, 80 );
+        levels16Btn.setBounds( 300, 185, 280, 80 );
+        eraseBtn.setBounds( 300, 280, 280, 80 );
+        pads.setBounds( 20, 390, 580, 550 );
 
-juce::Rectangle<int> Simulator::getSliderControlsRect()
-{
-    return juce::Rectangle<int>(40, 354, 442, 156);
-}
+        mainControl.setBounds( 620, 640, 1024, 300 );
 
-juce::Rectangle<int> Simulator::getQlinkControlsRect()
-{
-    return juce::Rectangle<int>(1734, 20, 147, 524);
-}
+        for( int i = 0; i < 4; ++i )
+            qlinks[(size_t)i]->setBounds( 1664, 36 + i * 118, 116, 112 );
+        linkBtn.setBounds( 1666, 512, 112, 50 );
 
+        int y = 604;
+        for( auto* b : { &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
+        {
+            b->setBounds( 1666, y, 112, 58 );
+            y += 66;
+        }
+    }
+
+    //==============================================================================
+    // Simulator (scaling wrapper)
+    //==============================================================================
+    Simulator::Simulator()
+    {
+        addAndMakeVisible( board );
+        setSize( SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
+    }
+
+    void Simulator::paint( juce::Graphics& g )
+    {
+        g.fillAll( juce::Colour( 0xff202020 ) );
+    }
+
+    void Simulator::resized()
+    {
+        const float bw    = (float)SimulatorBoard::boardWidth;
+        const float bh    = (float)SimulatorBoard::boardHeight;
+        const float scale = juce::jmax( 0.1f, juce::jmin( getWidth() / bw, getHeight() / bh ) );
+
+        board.setBounds( 0, 0, SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
+        board.setTransform( juce::AffineTransform::scale( scale ).translated( ( getWidth() - bw * scale ) * 0.5f, ( getHeight() - bh * scale ) * 0.5f ) );
+    }
 }

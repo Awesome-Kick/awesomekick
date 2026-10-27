@@ -121,6 +121,11 @@ namespace mt
         explicit MTAudioInterface( const char* Name, const char* Manufacturer, const char* Version );
         ~MTAudioInterface();
 
+        /// Destroys the engine. Call from JUCEApplication::shutdown(): the interface
+        /// is a function-local static, so otherwise the engine is torn down after
+        /// JUCE and other statics it depends on. No other calls are valid afterwards.
+        void shutdown();
+
         // Listeners
         void addListener( MTAudioInterfaceListener* l );
         void removeListener( MTAudioInterfaceListener* l );

@@ -49,6 +49,9 @@ namespace AudIO
     void Design::teardown()
     {
         PatchQueue<float>::get().stop();
+
+        autolock guard{ lockerMutex };
+        pImpl->stop();
     }
 
     inline void Design::setName( const std::string& name )

@@ -139,6 +139,11 @@ namespace mt
     {
         manager.reset();
     }
+
+    void MTAudioInterface::shutdown()
+    {
+        manager.reset();
+    }
     ///
     /// Listners
     ///

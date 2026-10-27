@@ -1,0 +1,145 @@
+/*
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+namespace mt
+{
+    AudioDevice::AudioDevice( uint32_t NumInputs, uint32_t NumOutputs, const juce::String& DeviceStateXml )
+        : AudIO::IAudioDevice( NumInputs, NumOutputs )
+        , shutdownGuard( new ShutdownGuard( *this ) )
+        , numIns( NumInputs )
+        , numOuts( NumOutputs )
+        , stateXml( DeviceStateXml )
+    {
+    }
+
+    AudioDevice::~AudioDevice()
+    {
+        // Normal teardown (before JUCE shuts down): drop the guard ourselves.
+        if( auto* guard = std::exchange( shutdownGuard, nullptr ) )
+            delete guard;
+        release();
+    }
+
+    void AudioDevice::release()
+    {
+        stop();
+        deviceManager.reset();
+    }
+
+    void AudioDevice::start( uint32_t SampleRate, uint32_t BlockSize )
+    {
+        requestedRate = SampleRate;
+        blockSize     = juce::jmax( 1u, BlockSize );
+
+        inFifo.setSize( (int)numIns, (int)blockSize );
+        outFifo.setSize( (int)numOuts, (int)blockSize );
+        inFifo.clear();
+        outFifo.clear();
+        fifoPos = 0;
+
+        // Prepare at the requested rate now; audioDeviceAboutToStart() re-prepares
+        // if the hardware ends up running at a different one.
+        prepareToPlay( requestedRate, blockSize );
+
+        std::unique_ptr<juce::XmlElement> saved;
+        if( stateXml.isNotEmpty() )
+            saved = juce::parseXML( stateXml );
+
+        juce::AudioDeviceManager::AudioDeviceSetup preferred;
+        preferred.sampleRate = requestedRate;
+        preferred.bufferSize = (int)blockSize;
+
+        const auto error = deviceManager->initialise( (int)numIns, (int)numOuts, saved.get(), true, {}, &preferred );
+        if( error.isNotEmpty() )
+            DBG( "AudioDevice: " << error );
+
+        deviceManager->addAudioCallback( this );
+        setState( AudIO::AudioDeviceState::playing );
+    }
+
+    void AudioDevice::resume() { setState( AudIO::AudioDeviceState::playing ); }
+    void AudioDevice::pause() { setState( AudIO::AudioDeviceState::paused ); }
+
+    void AudioDevice::stop()
+    {
+        if( !isInitialized() || !deviceManager )
+            return;
+
+        deviceManager->removeAudioCallback( this );
+        deviceManager->closeAudioDevice();
+        setState( AudIO::AudioDeviceState::stopped );
+        teardown();
+    }
+
+    void AudioDevice::audioDeviceAboutToStart( juce::AudioIODevice* Device )
+    {
+        const auto rate = (uint32_t)Device->getCurrentSampleRate();
+        if( rate != requestedRate && rate > 0 )
+        {
+            DBG( "AudioDevice: running at " << (int)rate << " Hz instead of " << (int)requestedRate );
+            requestedRate = rate;
+            prepareToPlay( rate, blockSize );
+        }
+        inFifo.clear();
+        outFifo.clear();
+        fifoPos = 0;
+    }
+
+    void AudioDevice::audioDeviceStopped() {}
+
+    void AudioDevice::runBlock() noexcept
+    {
+        for( uint32_t ch = 0; ch < numIns; ++ch )
+            if( auto* dst = _buffer.getInputBuffer( ch ) )
+                juce::FloatVectorOperations::copy( dst, inFifo.getReadPointer( (int)ch ), (int)blockSize );
+
+        _buffer.clearOutputs();
+        if( isPlaying() )
+            process( _buffer );
+
+        for( uint32_t ch = 0; ch < numOuts; ++ch )
+        {
+            if( auto* src = _buffer.getOutputBuffer( ch ) )
+                outFifo.copyFrom( (int)ch, 0, src, (int)blockSize );
+            else
+                outFifo.clear( (int)ch, 0, (int)blockSize );
+        }
+    }
+
+    void AudioDevice::audioDeviceIOCallbackWithContext( const float* const* Inputs, int NumInputs, float* const* Outputs, int NumOutputs, int NumSamples, const juce::AudioIODeviceCallbackContext& )
+    {
+        int done = 0;
+        while( done < NumSamples )
+        {
+            const int n = juce::jmin( NumSamples - done, (int)blockSize - fifoPos );
+
+            for( int ch = 0; ch < (int)numIns; ++ch )
+            {
+                auto* dst = inFifo.getWritePointer( ch, fifoPos );
+                if( ch < NumInputs && Inputs[ch] )
+                    juce::FloatVectorOperations::copy( dst, Inputs[ch] + done, n );
+                else
+                    juce::FloatVectorOperations::clear( dst, n );
+            }
+
+            for( int ch = 0; ch < NumOutputs; ++ch )
+            {
+                if( !Outputs[ch] )
+                    continue;
+                if( ch < (int)numOuts )
+                    juce::FloatVectorOperations::copy( Outputs[ch] + done, outFifo.getReadPointer( ch, fifoPos ), n );
+                else
+                    juce::FloatVectorOperations::clear( Outputs[ch] + done, n );
+            }
+
+            fifoPos += n;
+            done += n;
+            if( fifoPos >= (int)blockSize )
+            {
+                runBlock();
+                fifoPos = 0;
+            }
+        }
+    }
+} // namespace mt

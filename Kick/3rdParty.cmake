@@ -79,6 +79,9 @@ if(AUDIO_DEVELOPMENT)
         message(STATUS "UNIX")
         CPMAddPackage( NAME AudIO DOWNLOAD_ONLY True SOURCE_DIR /mnt/c/azure/AudIO )
     endif (UNIX)
+elseif(EXISTS ${CMAKE_SOURCE_DIR}/../AudIO/AudIO/AudIO.h)
+    message(STATUS "Using in-repo sources for AudIO")
+    CPMAddPackage( NAME AudIO DOWNLOAD_ONLY True SOURCE_DIR ${CMAKE_SOURCE_DIR}/../AudIO )
 else(AUDIO_DEVELOPMENT)
     message(STATUS "Using GIT sources for AudIO")
     CPMAddPackage( 
@@ -91,18 +94,27 @@ endif(AUDIO_DEVELOPMENT)
 
 if(AudIO_ADDED)	 
     message(STATUS "Added AudIO package into \"${AudIO_SOURCE_DIR}\"")
-    include(${AudIO_SOURCE_DIR}/juce_modules.cmake)
+    if(EXISTS ${AudIO_SOURCE_DIR}/juce_modules.cmake)
+        include(${AudIO_SOURCE_DIR}/juce_modules.cmake)
+    else()
+        juce_add_modules(${AudIO_SOURCE_DIR}/AudIO)
+    endif()
 endif()
 
 ##
 ## COM Protocol
 ##
-CPMAddPackage( 
+if(EXISTS ${CMAKE_SOURCE_DIR}/../ComProtocol/PktMgr)
+    message(STATUS "Using in-repo sources for ComProtocol")
+    CPMAddPackage( NAME COM_PROTOCOL DOWNLOAD_ONLY True SOURCE_DIR ${CMAKE_SOURCE_DIR}/../ComProtocol )
+else()
+    CPMAddPackage( 
         NAME COM_PROTOCOL
         GIT_REPOSITORY ${MT_PLATFORM_GIT_PATH}/ComProtocol 
         GIT_TAG ${COM_PROTOCOL_GIT_TAG}
         DOWNLOAD_ONLY True
     )
+endif()
 
 if(COM_PROTOCOL_ADDED)	 
     message(STATUS "Added Com Protocol package into \"${COM_PROTOCOL_SOURCE_DIR}\"")

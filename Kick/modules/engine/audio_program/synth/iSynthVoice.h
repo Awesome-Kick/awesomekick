@@ -31,6 +31,11 @@ namespace mt
 
         explicit ISynthVoice( const MTIAtomicProgramMaster& Master, ASoundSlice* Slice = nullptr );
 
+        // Voices are owned as std::unique_ptr<ISynthVoice> (see ISynthObject), so the
+        // derived destructor must run: DrumVoice's parameter atomics listen to the
+        // program's ValueTree and would otherwise be left dangling.
+        virtual ~ISynthVoice() = default;
+
         // Getters and Setters
         inline bool isFree() { return State::FREE == state.load(); }
         inline bool isSettingup() { return State::SETUP == state.load(); }

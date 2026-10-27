@@ -212,7 +212,7 @@ namespace mt
 
             // Update sequence lists...
             updateSequenceList();
-            return _seqNo;
+            return (int)sequences.size() - 1; // index, like createTrack()
         }
         return -1;
     }

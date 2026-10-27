@@ -6,6 +6,10 @@
 #include "contracts/dcl/dcl_contracts.h"
 #include "contracts/dcl/dcl_contracts_helper.h"
 #include "kick_SimulatorInterface.h"
+#ifdef SIM_BUILD
+    #include <map>
+    #include <common/source/kick_Factory.h>
+#endif
 
 #include "ComConfig.hpp"
 
@@ -306,11 +310,30 @@ namespace Controls
     void Controls::InputEvents::initialize()
     {
 #ifdef SIM_BUILD
-        //creating multiple instance of SimulatorInterface using factoty is somehow clearing the connected signals need to find the reason
-        simInterface = Factory<SimulatorInterface>::makeObject( 0 );
-        simInterface->hwInputReceived.connect( []( int id, const std::vector<char>& data ) {
-            Controls::InputEvents::dispatchHardwareEvent( id, data );
-        } );
+        // Software control surface: the simulator registers a SimulatorInterface implementation (type 0)
+        // with the Factory. Its packets enter here exactly where decoded serial frames would.
+        if( !simInterface )
+        {
+            simInterface = Factory<SimulatorInterface>::makeObject( 0 );
+            if( simInterface )
+            {
+                simInterface->hwInputReceived.connect( []( CPktMgr::HWMsg_t& rxMsg ) {
+                    // Same handling as HwSerialData::changeListenerCallback for a decoded request frame.
+                    if( rxMsg.pktDir != CPktMgr::enumPacketDir::EN_PKT_REQUEST || rxMsg.data.empty() )
+                        return;
+
+                    if( contracts::DclContractsHelper::isButtonMessage( rxMsg ) && rxMsg.data.size() > 1
+                        && contracts::DeviceControlContracts::EN_SHIFT == contracts::DclContractsHelper::getButtonCode( rxMsg ) )
+                        Controls::shiftBtnState.store( contracts::DclContractsHelper::getButtonState( rxMsg ) );
+
+                    Controls::InputEvents::dispatchHardwareEvent( rxMsg );
+                } );
+            }
+            else
+            {
+                juce::Logger::outputDebugString( "SIM_BUILD: no SimulatorInterface registered" );
+            }
+        }
 #else
         if( !_FPPort )
         {
@@ -356,7 +379,11 @@ namespace Controls
         }
 
 #ifdef SIM_BUILD
-        if( simInterface ) simInterface->sendMessageToHW( f_HwMsg );
+        if( simInterface )
+        {
+            simInterface->sendMessageToHW( f_HwMsg );
+            return;
+        }
 #endif
         if( _FPPort ) _FPPort->sendMessageToControlSurface( f_HwMsg );
         else

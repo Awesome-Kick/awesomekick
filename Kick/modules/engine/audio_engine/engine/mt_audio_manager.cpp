@@ -140,6 +140,11 @@ namespace mt
     {
         MTAudioRecorderManager::closeRecorder();
         internalTimer.stopTimer();
+
+        // Remove the previewer like the recorders, so it isn't destroyed inside
+        // ~Design while it still unregisters itself from the design's buses.
+        if( _previewer )
+            engine.removeObject( _previewer->getId() );
         _previewer = nullptr;
 
         MTAudioTransportManager::stop();
