@@ -17,6 +17,10 @@ if (KICK_ENGINE_TEST)
     add_subdirectory(kick_engine_test)
 endif()
 
+if (KICK_PROGRAM_BUILDER)
+    add_subdirectory(kick_program_builder)
+endif()
+
 if (KICK_PLAYBACK)
     add_subdirectory(kick_audio)
 endif()

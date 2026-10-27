@@ -50,3 +50,4 @@
 
 // module include files
 #include "header/kick_modeHeader.h"
+#include "header/kick_PadNotes.h"

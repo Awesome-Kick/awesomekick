@@ -558,6 +558,9 @@ namespace mt
         CachedValue<GainConstrainer>          send2;
         CachedValue<GainConstrainer>          send3;
         CachedValue<GainConstrainer>          send4;
+
+        /// The PROGRAM tree itself, for settings without a typed member (e.g. PAD_LAYOUT).
+        juce::ValueTree programState;
     };
 
     struct MTIClipProgramData

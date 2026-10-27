@@ -106,6 +106,7 @@ namespace mt
         if( type == MTProgramType::Midi ) prog = new MTMidiProgram( engine, VT, undoManager );
         if( type == MTProgramType::Cv ) prog = new MTCVProgram( engine, VT, undoManager );
         if( type == MTProgramType::Audio ) prog = new MTAudioProgram( engine, VT, undoManager );
+        if( type == MTProgramType::Plugin ) prog = new MTInstrumentProgram( engine, VT, undoManager );
 
         if( prog )
         {

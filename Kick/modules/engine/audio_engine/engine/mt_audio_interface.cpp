@@ -122,6 +122,37 @@ namespace mt
     sigslot::signal<>    signals::on1_32      = {};
     sigslot::signal<>    signals::on1_32T     = {};
 
+    void signals::disconnectAll()
+    {
+        midiInputsChanged.disconnect_all();
+        bankChanged.disconnect_all();
+        playStateChanged.disconnect_all();
+        padColourChanged.disconnect_all();
+        onProgramSelectionChange.disconnect_all();
+        onSequenceSelectionChange.disconnect_all();
+        onTrackSelectionChange.disconnect_all();
+        onSongStopped.disconnect_all();
+        onNextSeqAboutToPlayInSong.disconnect_all();
+        onSongSequencePlay.disconnect_all();
+        onNextSequencePlay.disconnect_all();
+        onBar.disconnect_all();
+        onBeat.disconnect_all();
+        onTick.disconnect_all();
+        onLoopBegin.disconnect_all();
+        onLoopEnd.disconnect_all();
+        onNote.disconnect_all();
+        on1_2.disconnect_all();
+        on1_2T.disconnect_all();
+        on1_4.disconnect_all();
+        on1_4T.disconnect_all();
+        on1_8.disconnect_all();
+        on1_8T.disconnect_all();
+        on1_16.disconnect_all();
+        on1_16T.disconnect_all();
+        on1_32.disconnect_all();
+        on1_32T.disconnect_all();
+    }
+
     // API definitions
     MTAudioInterface& getAudioInterface()
     {
@@ -142,13 +173,36 @@ namespace mt
 
     void MTAudioInterface::shutdown()
     {
+        if( !manager )
+            return;
+
+        // Nothing in the UI may be notified from here on. Detach again even if the app
+        // already did: UI teardown (visibility changes) can re-register listeners.
+        manager->removeAllListeners();
+        signals::disconnectAll();
+
+        // Close while the manager is still reachable (unique_ptr::reset() nulls
+        // `manager` before running ~MTAudioManager, which closes again).
+        manager->closeProject();
         manager.reset();
     }
     ///
     /// Listners
     ///
-    void MTAudioInterface::addListener( MTAudioInterfaceListener* l ) { manager->addListener( l ); }
-    void MTAudioInterface::removeListener( MTAudioInterfaceListener* l ) { manager->removeListener( l ); }
+    void MTAudioInterface::removeAllListeners()
+    {
+        if( manager ) manager->removeAllListeners();
+    }
+
+    // Null-safe: UI singletons unregister from their static destructors, after shutdown().
+    void MTAudioInterface::addListener( MTAudioInterfaceListener* l )
+    {
+        if( manager ) manager->addListener( l );
+    }
+    void MTAudioInterface::removeListener( MTAudioInterfaceListener* l )
+    {
+        if( manager ) manager->removeListener( l );
+    }
 
     ///
     /// Project API's

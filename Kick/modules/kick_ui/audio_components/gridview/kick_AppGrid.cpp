@@ -532,30 +532,11 @@ namespace kick_ui
         }
         else if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
-            int              bankOffset = ae.getBankOffset();
-            auto             padNo      = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
-            auto             padState   = contracts::DclContractsHelper::getPadState( f_HwMsg );
-            auto             velocity   = contracts::DclContractsHelper::getPadVelocity( f_HwMsg );
-            std::vector<int> pads;
-
-            padNo += bankOffset;
-            pads.push_back( padNo );
-
-            for( auto& it : pads )
-            {
-                juce::MidiMessage Msg;
-
-                if( padState == contracts::DeviceControlContracts::BTN_PRESSED )
-                    Msg = juce::MidiMessage::noteOn( 1, it, (juce::uint8)velocity );
-                else if( padState == contracts::DeviceControlContracts::BTN_RELEASED )
-                    Msg = juce::MidiMessage::noteOff( 1, it );
-
-                ae.addLiveMidiMsg( ae.getSelected(), Msg );
-            }
-            pads.clear();
-            juce::MessageManager::callAsync( [this, padNo] {
-                notesComp.selectNote( padNo + ae.getBankOffset(), gridSettings.getHittingPadMode() );
-            } );
+            const auto note = kick_ui::PadNotes::handle( f_HwMsg );
+            if( note >= 0 )
+                juce::MessageManager::callAsync( [this, note] {
+                    notesComp.selectNote( note, gridSettings.getHittingPadMode() );
+                } );
         }
         else if( contracts::DclContractsHelper::isKnobMessage( f_HwMsg ) )
         {

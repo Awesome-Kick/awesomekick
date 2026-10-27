@@ -185,12 +185,19 @@ public:
 #if PERFETTO
         MelatoninPerfetto::get().endSession();
 #endif
-        // Add your application's shutdown code here ...
-        w = nullptr;
+        // Order matters, and all of it must happen while JUCE is still alive:
+        // detach UI listeners from the engine before destroying any UI (several never
+        // unregister), then the window, the static UI's screens (they reference engine
+        // objects), and the engine last.
+        auto& ai = mt::getAudioInterface();
+        ai.removeAllListeners();
+        mt::signals::disconnectAll();
+
+        w       = nullptr;
         adapter = nullptr;
 
-        // Tear the engine down while JUCE is still alive (see MTAudioInterface::shutdown).
-        mt::getAudioInterface().shutdown();
+        kick_ui::KickHome::Instance().releaseScreens();
+        ai.shutdown();
     }
 
     //==============================================================================

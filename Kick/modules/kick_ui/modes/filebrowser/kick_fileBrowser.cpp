@@ -941,30 +941,12 @@ namespace ui
         if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) && contracts::DclContractsHelper::getButtonCode( f_HwMsg ) == contracts::DeviceControlContracts::BtnLedSequence::EN_KNOB_ENTER && ( contracts::DclContractsHelper::getButtonState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED ) )
             knobClicked();
 
-        if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) && contracts::DclContractsHelper::getPadState( f_HwMsg ) )
+        if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
         {
-            ui::fileUtils::setHighlightLED( contracts::DclContractsHelper::getPadNumber( f_HwMsg ) );
-            int              bankOffset = ae.getBankOffset();
-            auto             padNo      = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
-            auto             padState   = contracts::DclContractsHelper::getPadState( f_HwMsg );
-            auto             velocity   = contracts::DclContractsHelper::getPadVelocity( f_HwMsg );
-            std::vector<int> pads;
-
-            padNo += bankOffset;
-            pads.push_back( padNo );
-
-            for( auto& it : pads )
-            {
-                juce::MidiMessage Msg;
-
-                if( padState == contracts::DeviceControlContracts::BTN_PRESSED )
-                    Msg = juce::MidiMessage::noteOn( 1, it, (juce::uint8)velocity );
-                else if( padState == contracts::DeviceControlContracts::BTN_RELEASED )
-                    Msg = juce::MidiMessage::noteOff( 1, it );
-
-                ae.addLiveMidiMsg( ae.getSelected(), Msg );
-            }
-            pads.clear();
+            // Releases matter too: instrument notes are gated.
+            if( contracts::DclContractsHelper::getPadState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED )
+                ui::fileUtils::setHighlightLED( contracts::DclContractsHelper::getPadNumber( f_HwMsg ) );
+            kick_ui::PadNotes::handle( f_HwMsg );
         }
         else if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) && ( contracts::DclContractsHelper::getButtonState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED ) )
         {

@@ -100,6 +100,12 @@ namespace sim
             s.push_back( [this, i] { pads.getPad( i ).hit( false ); } );
         };
 
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "instrument" )
+        {
+            startInstrumentTest();
+            return;
+        }
+
         wait( 4 );
         note( "jog ENTER (load selected project)" );
         s.push_back( [this] { mainControl.getJog().pushCentre( true ); } );
@@ -140,6 +146,95 @@ namespace sim
         click( DCC::EN_ERASE );
         click( DCC::EN_MAINMODE );
         note( "done" );
+
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startInstrumentTest()
+    {
+        // KICKEM_SELFTEST=instrument: create an instrument program, open its edit screen,
+        // drive Q-links and pads, then quit. KICKEM_SHOT=<folder> saves screen snapshots.
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        auto shot = [&s, this, log]( juce::String name ) {
+            s.push_back( [this, log, name] {
+                const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+                if( dir.isEmpty() )
+                    return;
+                auto file = juce::File( dir ).getChildFile( name + ".png" );
+                file.deleteFile();
+                if( auto out = file.createOutputStream() )
+                {
+                    juce::PNGImageFormat().writeImageToStream( screen.createComponentSnapshot( screen.getLocalBounds() ), *out );
+                    log( "snapshot " + file.getFullPathName() );
+                }
+            } );
+        };
+        auto instrument = []() -> mt::MTInstrumentProgram* {
+            auto& ae = mt::getAudioInterface();
+            return dynamic_cast<mt::MTInstrumentProgram*>( ae.getProgramForTrack( ae.getSelectedSequence(), ae.getSelectedTrack() ) );
+        };
+
+        wait( 4 );
+        s.push_back( [log] { log( "jog ENTER (load selected project)" ); } );
+        s.push_back( [this] { mainControl.getJog().pushCentre( true ); } );
+        s.push_back( [this] { mainControl.getJog().pushCentre( false ); } );
+        wait( 12 );
+
+        s.push_back( [log] {
+            auto& ae = mt::getAudioInterface();
+            if( !ae.getNumSequences() )
+                ae.createSequence();
+            const auto seq  = ae.getSelectedSequence();
+            const auto trk  = ae.createTrack( seq, "Synth" );
+            const auto prog = ae.createProgram( mt::MTProgramType::Plugin, "Synth 1" );
+            ae.setProgramToTrack( prog, seq, trk );
+            ae.setSelectedSequenceAndTrack( seq, trk );
+            ae.setSelectedProgram( prog );
+            log( "created instrument program " + juce::String( prog ) + " on track " + juce::String( trk ) );
+        } );
+        wait( 2 );
+        s.push_back( [log] { log( "PROGRAM EDIT" ); } );
+        click( DCC::EN_PROG_EDIT );
+        wait( 4 );
+        s.push_back( [log] {
+            log( "screen = " + juce::String( (int)kick_ui::KickHome::Instance().getCurrentScreen() ) + " (MenuProgramEdit = " + juce::String( (int)kick_ui::Screen::MenuProgramEdit ) + ")" );
+        } );
+        shot( "instrument_edit_page1" );
+
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( "before: " + i->getParams()[0].name + "=" + juce::String( i->getParam( 0 ), 3 ) + "  " + i->getParams()[3].name + "=" + juce::String( i->getParam( 3 ), 1 ) );
+        } );
+        s.push_back( [log] { log( "Q-link P1 +20, P4 -30" ); } );
+        s.push_back( [this] { qlinks[0]->turn( 20 ); } );
+        s.push_back( [this] { qlinks[3]->turn( -30 ); } );
+        wait( 2 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( "after:  " + i->getParams()[0].name + "=" + juce::String( i->getParam( 0 ), 3 ) + "  " + i->getParams()[3].name + "=" + juce::String( i->getParam( 3 ), 1 ) );
+        } );
+        shot( "instrument_edit_after_qlinks" );
+
+        s.push_back( [log] { log( "bank D, pads 1-4 (C3 D3 E3 F3 in C major 4ths)" ); } );
+        click( DCC::EN_BANK_D );
+        for( int p = 0; p < 4; ++p )
+        {
+            s.push_back( [this, p, log] {
+                log( "pad " + juce::String( p + 1 ) + " -> note " + juce::String( kick_ui::PadNotes::noteForPad( p ) ) );
+                pads.getPad( p ).hit( true, 100 );
+            } );
+            wait( 1 );
+            s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
+        }
+        s.push_back( [log] { log( "done" ); } );
+        wait( 2 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
 
         startTimer( 400 );
     }

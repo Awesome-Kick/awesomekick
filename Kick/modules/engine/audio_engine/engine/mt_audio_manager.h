@@ -51,6 +51,7 @@ namespace mt
 
         void addListener( MTAudioInterfaceListener* l );
         void removeListener( MTAudioInterfaceListener* l );
+        void removeAllListeners() { listeners.clear(); }
 
         // Project API's..
         bool isProjectLoaded() const noexcept { return projectLoaded; };

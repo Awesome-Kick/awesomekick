@@ -68,6 +68,10 @@ namespace mt
         static sigslot::signal<>    on1_16T;
         static sigslot::signal<>    on1_32;
         static sigslot::signal<>    on1_32T;
+
+        /// Disconnects every slot above. UI components connect lambdas capturing
+        /// `this` and never disconnect, so call this before destroying the UI.
+        static void disconnectAll();
     };
 
     class MTAudioInterfaceListener
@@ -125,6 +129,10 @@ namespace mt
         /// is a function-local static, so otherwise the engine is torn down after
         /// JUCE and other statics it depends on. No other calls are valid afterwards.
         void shutdown();
+
+        /// Detaches every MTAudioInterfaceListener. Several UI components never
+        /// unregister, so call this before destroying the UI at shutdown.
+        void removeAllListeners();
 
         // Listeners
         void addListener( MTAudioInterfaceListener* l );

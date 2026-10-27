@@ -31,6 +31,8 @@ namespace sim
 
         /// KICKEM_SELFTEST=1: drive every control type once through the same code paths as mouse clicks.
         void startSelfTest();
+        /// KICKEM_SELFTEST=instrument: exercise an instrument program and its edit screen.
+        void startInstrumentTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };

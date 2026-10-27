@@ -396,6 +396,7 @@ namespace mt
     {
         jassert( V.hasType( IDs::PROGRAM ) );
         juce::ValueTree state = V;
+        programState          = V;
 
         type.referTo( state, IDs::type, UM, MTProgramType::Unknown );
         id.referTo( state, IDs::id, UM, "" );

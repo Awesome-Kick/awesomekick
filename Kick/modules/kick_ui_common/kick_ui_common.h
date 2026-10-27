@@ -55,5 +55,6 @@
     #include "source/kick_IScreen.h"
     #include "source/kick_common_defs.h"
     #include "source/kick_scales.h"
+    #include "source/kick_pad_layout.h"
 
 #endif

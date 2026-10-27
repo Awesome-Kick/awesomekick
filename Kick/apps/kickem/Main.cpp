@@ -20,7 +20,8 @@ class KickEMApplication : public juce::JUCEApplication
 public:
     const juce::String getApplicationName() override { return "KickEM"; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
-    bool               moreThanOneInstanceAllowed() override { return false; }
+    // Self-tests may run alongside a simulator the user already has open.
+    bool moreThanOneInstanceAllowed() override { return juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty(); }
 
     //==============================================================================
     void initialise( const juce::String& /*commandLine*/ ) override
@@ -62,9 +63,19 @@ public:
 
     void shutdown() override
     {
+        // Same order as apps/kick: detach the UI from the engine before destroying any
+        // of it, then the window, the static UI's screens, and the engine last, all
+        // while JUCE is still alive.
+        auto& ai = mt::getAudioInterface();
+        ai.removeAllListeners();
+        mt::signals::disconnectAll();
+
         w       = nullptr;
         uiTrace.disconnect();
         adapter = nullptr;
+
+        kick_ui::KickHome::Instance().releaseScreens();
+        ai.shutdown();
         if( appLogger && juce::Logger::getCurrentLogger() == appLogger.get() )
             juce::Logger::setCurrentLogger( nullptr );
         appLogger = nullptr;

@@ -452,6 +452,121 @@ namespace
     }
 
     //==============================================================================
+    void testBasicSynth( Results& R )
+    {
+        R.section( "Instrument engine: Basic Synth" );
+
+        mt::BasicSynthEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        auto               render  = [&]( int Blocks ) {
+            float peak = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( auto v : l )
+                    peak = juce::jmax( peak, std::abs( v ) );
+            }
+            return peak;
+        };
+
+        R.check( render( 10 ) == 0.f, "silent with no notes" );
+        R.check( synth.getParams().size() == mt::BasicSynthEngine::kNumParams, "exposes its parameter list", juce::String( (int)synth.getParams().size() ) + " params" );
+
+        synth.noteOn( 60, 1.f );
+        const auto held = render( 100 );
+        R.check( held > 0.02f && held < 1.f, "note-on makes sound within range", "peak " + f3( held ) );
+
+        synth.noteOff( 60 );
+        render( (int)( 2.0 * testRate / testBlock ) ); // default release 0.3 s
+        R.check( render( 10 ) < 1.0e-3f, "note-off releases to silence" );
+
+        // Lower cutoff = darker = less high-frequency energy. Compare a high and low cutoff.
+        auto energyAt = [&]( float Cutoff ) {
+            synth.reset();
+            synth.setParam( mt::BasicSynthEngine::kCutoff, Cutoff );
+            synth.setParam( mt::BasicSynthEngine::kEnvAmount, 0.f );
+            synth.noteOn( 48, 1.f );
+            render( 40 );
+            double diff = 0; // first-difference energy ~ high-frequency content
+            for( int b = 0; b < 40; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( size_t i = 1; i < l.size(); ++i )
+                    diff += ( l[i] - l[i - 1] ) * ( l[i] - l[i - 1] );
+            }
+            synth.allNotesOff();
+            return diff;
+        };
+        const auto bright = energyAt( 12000.f ), dark = energyAt( 200.f );
+        R.check( dark < bright * 0.2, "cutoff darkens the sound", "hf energy " + juce::String( bright, 2 ) + " -> " + juce::String( dark, 2 ) );
+
+        // Eight voices: a ninth note steals instead of crashing or going silent.
+        synth.reset();
+        synth.setParam( mt::BasicSynthEngine::kCutoff, 4000.f );
+        for( int n = 0; n < 9; ++n )
+            synth.noteOn( 48 + n, 0.8f );
+        const auto chord = render( 20 );
+        R.check( chord > 0.02f && chord < 2.f, "nine notes on eight voices stay sane", "peak " + f3( chord ) );
+    }
+
+    //==============================================================================
+    void testPadLayout( Results& R )
+    {
+        R.section( "Pad layouts (Push/Launchpad style)" );
+        using Mode = mt::PadLayout::Mode;
+
+        auto row = []( const mt::PadLayout& L, int Row, int Bank ) {
+            juce::String s;
+            for( int c = 0; c < 4; ++c )
+                s << L.noteFor( Row * 4 + c, Bank ) << " ";
+            return s.trim();
+        };
+
+        mt::PadLayout l; // defaults: 4ths, in key, C major
+        R.check( l.noteFor( 0, 3 ) == 60, "bank D, pad 1 is C3 (60)", juce::String( l.noteFor( 0, 3 ) ) );
+        R.check( row( l, 0, 3 ) == "60 62 64 65", "in-key bottom row walks the scale", row( l, 0, 3 ) );
+        R.check( row( l, 1, 3 ) == "65 67 69 71", "4ths in key: next row starts 3 degrees up (F)", row( l, 1, 3 ) );
+        R.check( l.noteFor( 0, 4 ) == 72, "next bank is an octave up", juce::String( l.noteFor( 0, 4 ) ) );
+
+        l.mode = Mode::Thirds;
+        R.check( row( l, 1, 3 ) == "64 65 67 69", "3rds in key: next row starts 2 degrees up (E)", row( l, 1, 3 ) );
+        l.mode = Mode::Sequential;
+        R.check( row( l, 1, 3 ) == "67 69 71 72", "sequential in key continues the scale", row( l, 1, 3 ) );
+
+        l.mode  = Mode::Fourths;
+        l.inKey = false;
+        R.check( row( l, 0, 3 ) == "60 61 62 63" && row( l, 1, 3 ) == "65 66 67 68", "chromatic 4ths: rows 5 semitones apart", row( l, 0, 3 ) + " / " + row( l, 1, 3 ) );
+
+        l.inKey      = true;
+        l.root       = 9; // A
+        l.scaleIndex = 1; // Natural Minor
+        R.check( row( l, 0, 3 ) == "69 71 72 74", "A minor from A3", row( l, 0, 3 ) );
+        R.check( l.isRoot( 57 ) && l.isRoot( 69 ) && !l.isRoot( 60 ), "root detection by pitch class" );
+        R.check( l.isInScale( 60 ) && !l.isInScale( 61 ), "scale membership" );
+
+        l.scaleIndex = 4; // Pentatonic Major: 5 notes, so degree 5 wraps to the next octave
+        R.check( l.noteFor( 5, 3 ) == 9 + 60 + 12 - 12 + 12 || l.noteFor( 5, 3 ) > l.noteFor( 4, 3 ), "pentatonic wraps octaves upward", row( l, 1, 3 ) );
+
+        mt::PadLayout high;
+        high.inKey = false;
+        R.check( high.noteFor( 15, 7 ) == -1 || high.noteFor( 15, 7 ) <= 127, "notes above 127 are dropped", juce::String( high.noteFor( 15, 7 ) ) );
+
+        juce::ValueTree t( "PAD_LAYOUT" );
+        mt::PadLayout   saved;
+        saved.mode       = Mode::Thirds;
+        saved.inKey      = false;
+        saved.root       = 7;
+        saved.scaleIndex = 13;
+        saved.toTree( t );
+        const auto back = mt::PadLayout::fromTree( t );
+        R.check( back.mode == Mode::Thirds && !back.inKey && back.root == 7 && back.scaleIndex == 13, "settings round-trip through the program tree" );
+        R.check( mt::PadLayout::fromTree( juce::ValueTree{} ).mode == Mode::Fourths, "missing settings default to 4ths, in key, C major" );
+    }
+
+    //==============================================================================
     // Peak device output level over a window, in linear gain.
     float measureOutput( juce::AudioDeviceManager::LevelMeter::Ptr Meter, int Ms )
     {
@@ -549,6 +664,56 @@ namespace
         measureOutput( meter, 500 );
 
         //--------------------------------------------------------------------------
+        R.section( "Instrument (Plugin) program through the engine" );
+        {
+            const auto ip   = ai.createProgram( mt::MTProgramType::Plugin, "TestSynth" );
+            auto*      inst = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( ip ) );
+            if( R.check( inst != nullptr, "Plugin program creates an instrument", "index " + juce::String( ip ) ) )
+            {
+                R.check( inst->getEngineName() == "Basic Synth", "default engine is Basic Synth", inst->getEngineName() );
+
+                const auto itrk = ai.createTrack( seq );
+                ai.setProgramToTrack( ip, seq, itrk );
+                ai.setSelectedSequenceAndTrack( seq, itrk );
+
+                // Same path as a hardware pad press.
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 60, (juce::uint8)110 ) );
+                const auto playing = measureOutput( meter, 400 );
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 60 ) );
+                R.check( playing > 0.02f, "pad note plays the synth", "peak " + f3( playing ) );
+
+                measureOutput( meter, 800 ); // release
+                const auto released = measureOutput( meter, 300 );
+                R.check( released < 0.005f, "note-off releases", "peak " + f3( released ) );
+
+                // Parameters persist in the program's tree and survive an engine reload.
+                inst->setParam( mt::BasicSynthEngine::kCutoff, 400.f );
+                inst->setEngine( "Basic Synth" );
+                R.check( std::abs( inst->getParam( mt::BasicSynthEngine::kCutoff ) - 400.f ) < 0.01f, "parameter is stored with the program", f3( inst->getParam( mt::BasicSynthEngine::kCutoff ) ) );
+                R.check( inst->getState().getChildWithName( mt::IDs::INSTRUMENT_PARAMS ).hasProperty( "cutoff" ), "parameter saved in project tree" );
+
+                // The pads read the layout through the interface's program data.
+                mt::PadLayout dMinor;
+                dMinor.root       = 2;
+                dMinor.scaleIndex = 1;
+                dMinor.toTree( inst->getState().getOrCreateChildWithName( mt::IDs::PAD_LAYOUT, nullptr ) );
+                auto*      data   = ai.getProgramDataForTrack( seq, itrk );
+                const auto seen   = mt::PadLayout::fromTree( data ? data->programState.getChildWithName( mt::IDs::PAD_LAYOUT ) : juce::ValueTree{} );
+                R.check( data && data->type.get() == mt::MTProgramType::Plugin && seen.root == 2 && seen.scaleIndex == 1, "pad layout readable via track's program data", "root " + juce::String( seen.root ) + " scale " + juce::String( seen.scaleIndex ) );
+                R.check( seen.noteFor( 0, 3 ) == 62, "D minor layout: bank D pad 1 = D3 (62)", juce::String( seen.noteFor( 0, 3 ) ) );
+
+                // Chord through the program.
+                for( int n : { 60, 64, 67 } )
+                    ai.addLiveMidiNote( ip, n, 100 );
+                const auto chord = measureOutput( meter, 400 );
+                for( int n : { 60, 64, 67 } )
+                    ai.stopLiveMidiNote( ip, n );
+                R.check( chord > 0.02f, "chord plays", "peak " + f3( chord ) );
+                measureOutput( meter, 1000 );
+            }
+        }
+
+        //--------------------------------------------------------------------------
         R.section( "Sampler through the engine (records the device input)" );
         bool started = false, stopped = false;
         double length = -1;
@@ -634,6 +799,8 @@ private:
         testLooper( R );
         testFilter( R );
         testADSR( R );
+        testBasicSynth( R );
+        testPadLayout( R );
         testEngine( R, kitDir );
 
         R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );

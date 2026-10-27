@@ -89,6 +89,7 @@ namespace kick_ui
         programs.emplace_back( std::make_unique<DrumProgramEdit>() );
         programs.emplace_back( std::make_unique<KeyGroupProgramEdit>() );
         programs.emplace_back( std::make_unique<AudioProgramEdit>() );
+        programs.emplace_back( std::make_unique<InstrumentProgramEdit>() );
 
         for( const auto& it : programs )
             it->setVisible( false );
@@ -170,6 +171,7 @@ namespace kick_ui
             case mt::MTProgramType::Drum: selectedProgram = programs[3].get(); break;
             case mt::MTProgramType::Keygroup: selectedProgram = programs[4].get(); break;
             case mt::MTProgramType::Audio: selectedProgram = programs[5].get(); break;
+            case mt::MTProgramType::Plugin: selectedProgram = programs[6].get(); break;
         }
 
         if( selectedProgram )
@@ -231,30 +233,13 @@ namespace kick_ui
         {
             if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) || contracts::DclContractsHelper::isKnobMessage( f_HwMsg ) )
             {
-                auto&            ae         = mt::getAudioInterface();
-                int              bankOffset = ae.getBankOffset();
-                juce::String     selBank    = ae.getBank();
-                auto             padNo      = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
-                auto             padState   = contracts::DclContractsHelper::getPadState( f_HwMsg );
-                auto             velocity   = contracts::DclContractsHelper::getPadVelocity( f_HwMsg );
-                std::vector<int> pads;
-                selectedPadLabel.setText( selBank + juce::String::formatted( "%02d", padNo + 1 ), juce::dontSendNotification );
-
-                padNo += bankOffset;
-                pads.push_back( padNo );
-
-                for( auto& it : pads )
+                if( contracts::DclContractsHelper::isPadButtonMessage( f_HwMsg ) )
                 {
-                    juce::MidiMessage Msg;
-
-                    if( padState == contracts::DeviceControlContracts::BTN_PRESSED )
-                        Msg = juce::MidiMessage::noteOn( 1, it, (juce::uint8)velocity );
-                    else if( padState == contracts::DeviceControlContracts::BTN_RELEASED )
-                        Msg = juce::MidiMessage::noteOff( 1, it );
-
-                    ae.addLiveMidiMsg( ae.getSelected(), Msg );
+                    auto& ae    = mt::getAudioInterface();
+                    auto  padNo = contracts::DclContractsHelper::getPadNumber( f_HwMsg );
+                    selectedPadLabel.setText( ae.getBank() + juce::String::formatted( "%02d", padNo + 1 ), juce::dontSendNotification );
+                    PadNotes::handle( f_HwMsg );
                 }
-                pads.clear();
             }
             else if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) && ( contracts::DclContractsHelper::getButtonState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED ) )
             {

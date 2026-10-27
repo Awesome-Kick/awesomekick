@@ -37,6 +37,11 @@ namespace kick_ui
             return _instance;
         }
 
+        /// Destroys all screens. Call from JUCEApplication::shutdown() before the audio
+        /// engine shuts down: this object is a static, so otherwise its screens are
+        /// destroyed at process exit, after the engine objects they reference.
+        void releaseScreens();
+
         inline Screen getCurrentScreen() const { return currentScreen; }
         inline Screen getPreviousScreen() const { return stack.empty() ? Screen::HomeListView : stack.top(); }
         IScreen*      getScreen( Screen screen );

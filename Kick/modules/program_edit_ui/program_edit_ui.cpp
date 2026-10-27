@@ -28,6 +28,7 @@
 #include "sources/midi/kick_MidiProgramEdit.h"
 #include "sources/cvgate/kick_CvGateProgramEdit.h"
 #include "sources/audio/kick_AudioProgramEdit.h"
+#include "sources/instrument/kick_InstrumentProgramEdit.h"
 
 // Module source files...
 #include "sources/kick_ProgramEdit.cpp"

@@ -42,6 +42,8 @@
 #include "synth/clipProgram.cpp"
 #include "synth/DrumProgram.cpp"
 #include "synth/KeygroupProgram.cpp"
+#include "instrument/mt_basic_synth_engine.cpp"
+#include "instrument/mt_instrument_object.cpp"
 
 #include "source/mt_audio_iprogram.cpp"
 #include "source/mt_audio_common_program.cpp"
@@ -52,3 +54,4 @@
 #include "source/mt_audio_midi_program.cpp"
 #include "source/mt_audio_cv_program.cpp"
 #include "source/mt_audio_audio_program.cpp"
+#include "source/mt_audio_instrument_program.cpp"

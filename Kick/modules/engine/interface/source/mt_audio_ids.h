@@ -113,6 +113,13 @@ namespace mt
         DECLARE_ID( samplePlay )
         DECLARE_ID( poly )
 
+        // Instrument (Plugin) programs.
+        DECLARE_ID( instrumentEngine )
+        DECLARE_ID( INSTRUMENT_PARAMS )
+        DECLARE_ID( PAD_LAYOUT )
+        DECLARE_ID( layoutMode )
+        DECLARE_ID( inKey ) // octave, rootNote and scale are declared below
+
         DECLARE_ID( SPLAY )
         DECLARE_ID( SMUTE )
         DECLARE_ID( ac1 )

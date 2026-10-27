@@ -399,19 +399,35 @@ namespace kick_ui
                 contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setPadColourAndStateInfoMessage( padDataList ) );
                 break;
 
+            case mt::MTProgramType::Plugin:
+            {
+                // Push-style: root pads blue, other in-scale pads white, the rest unlit.
+                const auto layout = mt::PadLayout::fromTree( progData ? progData->programState.getChildWithName( mt::IDs::PAD_LAYOUT ) : juce::ValueTree{} );
+                padDataList.clear();
+                for( int pad = 0; pad < NUM_PADS_IN_BANK; ++pad )
+                {
+                    const auto note   = layout.noteFor( pad, bankOffset / NUM_PADS_IN_BANK );
+                    const auto lit    = note >= 0 && layout.isInScale( note );
+                    const auto colour = layout.isRoot( note ) ? contracts::DeviceControlContracts::PadColourLightSkyBlue : contracts::DeviceControlContracts::PadColourNeutralWhite;
+                    padDataList.push_back( { pad, lit ? contracts::DeviceControlContracts::PadButtonState::StateSampleAssigned : contracts::DeviceControlContracts::PadButtonState::StateSampleNotAssigned, colour } );
+                }
+                contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setPadColourAndStateInfoMessage( padDataList ) );
+                break;
+            }
+
             case mt::MTProgramType::Keygroup:
             case mt::MTProgramType::Midi:
-            case mt::MTProgramType::Plugin:
             case mt::MTProgramType::Cv:
                 padDataList.clear();
                 for( auto colourIndex = bankOffset; colourIndex < bankOffset + NUM_PADS_IN_BANK; colourIndex++ )
                 {
+                    // Pad numbers are 0..15 within the bank (as in the Drum case above).
                     if( samples.size() )
                     {
-                        padDataList.push_back( { colourIndex, contracts::DeviceControlContracts::PadButtonState::StateSampleAssigned, padColourData.Colours[colourIndex] } );
+                        padDataList.push_back( { colourIndex - bankOffset, contracts::DeviceControlContracts::PadButtonState::StateSampleAssigned, padColourData.Colours[colourIndex] } );
                     }
                     else
-                        padDataList.push_back( { colourIndex, contracts::DeviceControlContracts::PadButtonState::StateSampleNotAssigned, padColourData.Colours[colourIndex] } );
+                        padDataList.push_back( { colourIndex - bankOffset, contracts::DeviceControlContracts::PadButtonState::StateSampleNotAssigned, padColourData.Colours[colourIndex] } );
                 }
                 contracts::DclSignals::sendCommandToDcl( contracts::DclContractsHelper::setPadColourAndStateInfoMessage( padDataList ) );
                 break;
