@@ -170,11 +170,11 @@ namespace kick_ui
             case 3:
                 dynamic_cast<SubmixMixer*>( pView )->knobCommand( knob, value );
                 break;
-            case 4:
-                dynamic_cast<TrackMidiMixer*>( pView )->knobCommand( knob, value );
+            case 4: // order matches pViews: Programs, Sends, Returns, Submixes, Output, Midi, Audio
+                dynamic_cast<OutputTrackMixer*>( pView )->knobCommand( knob, value );
                 break;
             case 5:
-                dynamic_cast<OutputTrackMixer*>( pView )->knobCommand( knob, value );
+                dynamic_cast<TrackMidiMixer*>( pView )->knobCommand( knob, value );
                 break;
             case 6:
                 dynamic_cast<AudioTrackMixer*>( pView )->knobCommand( knob, value );

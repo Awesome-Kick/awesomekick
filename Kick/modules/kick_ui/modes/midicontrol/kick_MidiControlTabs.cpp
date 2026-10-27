@@ -1335,10 +1335,11 @@ namespace kick_ui
 
     void MidiControlHardware::handleCommand( CPktMgr::HWMsg_t& f_HWMsg )
     {
-        float padVelocity   = contracts::DclContractsHelper::getPadVelocity( f_HWMsg );
-        int   padAfterTouch = contracts::DclContractsHelper::getPadAftertouch( f_HWMsg );
-        int   padNumber     = contracts::DclContractsHelper::getPadNumber( f_HWMsg );
-        int   buttonState   = contracts::DclContractsHelper::getButtonState( f_HWMsg );
+        // Button and knob packets are shorter than pad packets: only read pad fields from pads.
+        const bool isPad         = contracts::DclContractsHelper::isPadButtonMessage( f_HWMsg );
+        float      padVelocity   = isPad ? contracts::DclContractsHelper::getPadVelocity( f_HWMsg ) : 0;
+        int        padAfterTouch = isPad ? contracts::DclContractsHelper::getPadAftertouch( f_HWMsg ) : 0;
+        int        buttonState   = contracts::DclContractsHelper::getButtonState( f_HWMsg );
 
         midimessages( Knob, knobValue, padVelocity, padAfterTouch, buttonState );
 

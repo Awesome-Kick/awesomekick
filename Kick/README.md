@@ -24,7 +24,7 @@ The build will not work out of the box:
 Material that could not be redistributed was removed. The code may still refer to it by path:
 
 - Audio samples (factory content and metronome / percussion sounds).
-- The Myriad Pro font. Supply any font you have the rights to.
+- The Myriad Pro font. The default theme now uses Source Sans 3 (SIL OFL 1.1) instead; to use another font, drop it in `assets/Default` and change `<FONT _0=...>` in `theme.xml`.
 - The prebuilt aarch64 SDK tarball.
 - `modules/3rdParty/juce_serialport`, which has no license.
 
@@ -47,3 +47,4 @@ Material that could not be redistributed was removed. The code may still refer t
 | stftPitchShift (Juergen Hock) | `modules/engine/objects/sampler/stftPitchShift` | MIT |
 | Gaussian blur (Roland Rabien) | `modules/kick_ui_controls/source/kick_utils_blur.h` | BSD 3-Clause |
 | ttymidi (Thiago Teixeira) | `apps/midiPort/src/ttymidi.c` | GPL-3.0-or-later |
+| Source Sans 3 font (Adobe) | `assets/Default/SourceSans3-Regular.ttf` | SIL OFL 1.1, see `assets/Default/SourceSans3-OFL.md` |

@@ -35,6 +35,8 @@ namespace sim
         void startInstrumentTest();
         /// KICKEM_SELFTEST=audio: list audio device types and snapshot Settings > Audio.
         void startAudioSettingsTest();
+        /// KICKEM_SELFTEST=tour: press every panel button (and its SHIFT function), log and snapshot each screen.
+        void startTourTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };

@@ -26,6 +26,21 @@ public:
     //==============================================================================
     void initialise( const juce::String& /*commandLine*/ ) override
     {
+        // Self-tests start from a copy of the preferences so they never change the user's
+        // (recent projects, current project, audio device), and the copy is thrown away.
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty()
+            && juce::SystemStats::getEnvironmentVariable( "KICK_PREFS_DIR", {} ).isEmpty() )
+        {
+            auto copy = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_selftest_prefs" );
+            copy.deleteRecursively();
+            getAppDirs( MTPrefs ).copyDirectoryTo( copy );
+#if JUCE_WINDOWS
+            _putenv_s( "KICK_PREFS_DIR", copy.getFullPathName().toRawUTF8() );
+#else
+            setenv( "KICK_PREFS_DIR", copy.getFullPathName().toRawUTF8(), 1 );
+#endif
+        }
+
         // With KICKEM_LOG=<file>, also route the app's juce::Logger output into the simulator trace file.
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_LOG", {} ).isNotEmpty() && juce::Logger::getCurrentLogger() == nullptr )
         {

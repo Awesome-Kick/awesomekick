@@ -1,0 +1,1233 @@
+# KICK Firmware: User Manual (community build)
+
+This manual describes the community build of the Behringer KICK firmware in this repository. It covers:
+
+- the desktop app (`Kick.exe`);
+- the hardware simulator (`KT_KickEM.exe`);
+- what the firmware does on the device.
+
+No official manual exists yet, so this one was put together in two ways. First, the UI and engine source was read screen by screen. Second, the test harness was run against the actual build:
+
+- **the engine test runner** (`KickEngineTest`, 112 checks), and
+- **the simulator tour** (`KICKEM_SELFTEST=tour`). The tour loads a kit and presses every front-panel button and its SHIFT function. On each screen it turns every Q-link, turns the jog wheel and hits a pad, then logs the screen it lands on and takes a snapshot.
+
+The screenshots in this manual come from that tour.
+
+Each feature is marked with how much is known about it:
+
+| Mark | Meaning |
+|---|---|
+| ✅ | **Tested.** Exercised by the engine tests or a simulator self-test in this build. |
+| 🔍 | **From code.** Described from reading the source; not driven by a test. |
+| ⚠️ | **Partial.** Parts of the screen work; the caveats are listed. |
+| ❌ | **Not implemented.** The button or control exists but does nothing yet. |
+
+Most of the firmware is **unfinished upstream**. MUSIC Tribe released it as a work in progress, and a lot of the UI is laid out without a working engine behind it yet. Section 15 lists those gaps in one place.
+
+---
+
+## Contents
+
+1. [Running it](#1-running-it)
+2. [The front panel](#2-the-front-panel)
+3. [Core concepts](#3-core-concepts)
+4. [Projects](#4-projects)
+5. [Main mode](#5-main-mode)
+6. [Playing the pads](#6-playing-the-pads)
+7. [Grid view](#7-grid-view)
+8. [Step sequencer](#8-step-sequencer)
+9. [List edit, Next Sequence and Song](#9-list-edit-next-sequence-and-song)
+10. [Programs and Program Edit](#10-programs-and-program-edit)
+11. [Sampling: Sampler, Looper, Sample Edit, Browser](#11-sampling-sampler-looper-sample-edit-browser)
+12. [Mixing: mixers, mutes, inserts, XY FX](#12-mixing-mixers-mutes-inserts-xy-fx)
+13. [Performance and control](#13-performance-and-control)
+14. [Preferences](#14-preferences)
+15. [Feature status and known gaps](#15-feature-status-and-known-gaps)
+16. [For developers: the test harness](#16-for-developers-the-test-harness)
+
+---
+
+## 1. Running it
+
+There are two ways to run the firmware on a PC.
+
+**`Kick.exe`** (in `build/win`) shows the touchscreen UI on its own, at 1024×600. With no front panel attached, you drive it with the mouse (as a touchscreen) and the PC keyboard. Some flows assume the hardware buttons and can't be finished with the mouse. Creating a program with **+** is one example. For those, use the simulator.
+
+**`KT_KickEM.exe`** (in `build/sim`) is the **simulator**. It draws the whole front panel around the real UI: pads, Q-links, jog wheel, touch slider and every button. Panel input goes through the same code path the hardware uses. Pad LEDs and button LEDs light up as they would on the device. There is a desktop shortcut called **KICK Simulator**.
+
+### Using the simulator panel
+
+- **Buttons:** click to press.
+- **SHIFT functions** (the second label on a button) can be reached two ways:
+  - Click **SHIFT** first. It latches for the next button press, and the SHIFT labels brighten while it's latched.
+  - Or hold the PC **Shift** key while clicking the button.
+- **Pads:** click a pad to hit it. Clicking near the top of the pad gives a louder hit than clicking near the bottom.
+- **Knobs:** drag a Q-link, or use the mouse wheel over it.
+
+### PC keyboard shortcuts 🔍
+
+Both apps accept these keys. The pad keys are laid out the same way as the pads, with the bottom row first.
+
+| Keys | Panel control |
+|---|---|
+| `Z X C V` / `A S D F` / `Q W E R` / `1 2 3 4` | Pads 1–4 / 5–8 / 9–12 / 13–16 |
+| `F1`–`F4`, `F6`–`F8` | Bank A–D, F–H (bank E has no key) |
+| `Space` / `F12` / `F11` | PLAY / PLAY START / STOP |
+| `F9` / `F10` | REC / OVERDUB |
+| `↑` `↓` / `Enter` | Jog wheel turn / jog wheel push |
+| `←` `→` | − / + |
+| `T` `Y` `U` `I` `O` | MAIN, BROWSE, TRACK MIX, TRACK MUTE, NEXT SEQ |
+| `5` `6` `7` `8` `9` | GRID, SAVE, PAD MIX, PAD MUTE, FX |
+| `G` `H` `J` `K` `L` | STEP SEQ, TC, SAMPLER, SAMPLE EDIT, PROGRAM EDIT |
+| `B` `N` `M` `,` `.` | AUTOMATION, ON/OFF, LOOPER, LINK EDIT, MIDI CONTROL |
+| `Esc` / `Insert` | MENU / PREFS |
+| `Delete` / `Tab` / `PgUp` / `PgDn` | ERASE / LINK / BACK / COPY |
+| `0` `P` `=` `]` `-` `[` | FULL LEVEL, HALF LEVEL, 16 LEVELS, NOTES, NOTE REPEAT, LATCH |
+
+### Audio
+
+Choose the audio device under **PREFS → Audio** (see section 14). On Windows, ASIO drivers are listed when the app was built with the ASIO SDK.
+
+---
+
+## 2. The front panel
+
+On the panel, the label underneath each button is its **SHIFT** function. The tour pressed every button below, and the "Opens" column is what the app reported.
+
+| Button | SHIFT function | What it does | Status |
+|---|---|---|---|
+| **MAIN** | **GRID** | Main mode / Grid view | ✅ |
+| **BROWSE** | **SAVE** | File Browser / save the project now | ✅ / 🔍 |
+| **TRACK MIX** | **PAD MIX** | Track Mixer / Pad Mixer | ✅ |
+| **TRACK MUTE** | **PAD MUTE** | Track Mute / Pad Mute | ✅ |
+| **NEXT SEQ** | **FX** | Next Sequence / XY FX | ✅ |
+| **STEP SEQ** | **AUTOMATION** | Step Sequencer / *nothing yet* | ✅ / ❌ |
+| **TAP TEMPO** | **MASTER** | *nothing yet* | ❌ |
+| **NOTE REPEAT** | **LATCH** | *nothing yet* | ❌ |
+| **TC** | **ON/OFF** | *nothing yet* (Timing Correct is in List Edit) | ❌ |
+| **SAMPLER** | **LOOPER** | Sampler / Looper | ✅ |
+| **SAMPLE EDIT** | **LINK EDIT** | Sample Editor / Q-Link Edit | ✅ |
+| **PROGRAM EDIT** | **MIDI CONTROL** | Program Edit / MIDI Control | ✅ |
+| **MENU** | **PREFS** | Menu / Preferences | ✅ |
+| **16 LEVELS** | **NOTES** | *nothing yet* / Pad Perform ("Pad Notes") | ❌ / ✅ |
+| **FULL LEVEL** | **HALF LEVEL** | Fixed-velocity toggles. Only the Step Sequencer reads them. | ⚠️ |
+| **ERASE** | | Deletes selected notes in Grid; clears a pad in Assign Sample | 🔍 |
+| **COPY** | | Duplicates the selected notes in Grid | 🔍 |
+| **LINK** | | Stub; no visible effect | ❌ |
+| **BACK** | | No effect. Use the on-screen ← arrow instead. | ❌ |
+| **− / +** | | Step the focused value down or up | 🔍 |
+| **Banks A–D** | **E–H** | Pick the pad bank (16 pads × 8 banks = 128 notes) | ✅ |
+| **PLAY / PLAY START / STOP** | | Transport (see below) | ✅ |
+| **REC / OVERDUB** | | Looper only. There is no sequence recording yet. | ⚠️ |
+| **Jog wheel** | push = ENTER | Move the selection / change the focused value; push to confirm or open | ✅ |
+| **Q-links P1–P4** | | Edit whatever the current screen maps to them | ✅ |
+| **Touch slider** | | Sends 0–100 to the focused control | 🔍 |
+| **Master / REC GAIN knobs** | | Analog on the device; the software doesn't read them | 🔍 |
+
+### Transport ✅
+
+- **PLAY** plays the selected sequence from the current position.
+- **PLAY START** plays it from the beginning.
+- **STOP** pauses, so a second PLAY carries on from the same position.
+
+Each screen handles the transport buttons itself. Main, Grid, Step Seq, Program Edit, the mixers and the mutes all do. Next Sequence and Song have their own play logic (section 9).
+
+The tour confirmed that PLAY starts the loaded kit's beat and STOP stops it.
+
+### How a control gets edited
+
+1. **Tap a field** on the touchscreen to give it focus. While a field has focus, the jog wheel, **− / +** and the slider change it.
+2. **When nothing is focused,** the jog wheel and Q-links do the current screen's own job. For example, the jog scrolls lists and the Q-links edit the four parameters shown.
+3. **Custom Q-link assignments:** if **Q-Link Edit** is set to *Custom*, the Q-links follow your custom assignments on every screen instead (section 13).
+
+---
+
+## 3. Core concepts
+
+```
+Project
+ ├─ Sequences (patterns): name, BPM, bars, loop range, transpose
+ │   └─ Tracks: one program each, plus note events, level, transpose, mute/solo, MIDI in
+ ├─ Programs (the sound sources tracks play)
+ ├─ Sample pool (assets), buses (outputs, returns, submixes), looper and sampler state
+ └─ Songs (ordered lists of sequences)
+```
+
+### Program types
+
+When you create a program you pick one of seven types:
+
+| Type | What it plays |
+|---|---|
+| **Drum** | 128 pads, each with up to 4 sample layers, envelopes and an LFO |
+| **Keygroup** | Samples mapped across the keyboard (note ranges, root notes) |
+| **Clip** | Pads launch audio clips, with launch quantize |
+| **Audio** | An audio-track arrangement: samples placed on the timeline |
+| **Plugin / Instrument** | A built-in synth engine with scale-aware pads (new in this build) |
+| **MIDI** | Sends notes and CCs out of a MIDI port |
+| **CV** | Sends notes as CV/gate on the 8 CV outputs |
+
+### Pads and banks
+
+There are 16 pads and 8 banks (A–H), so a program can address 128 notes. For drum-style programs, pad 1 of bank A is note 0 and pad 16 of bank H is note 127. Instrument programs map pads to notes differently, through their pad layout (section 6).
+
+---
+
+## 4. Projects
+
+On disk, a project is a folder:
+
+```
+My Song/
+  My Song.kickPrj   (the whole project as XML)
+  Samples/          (samples recorded or imported into the project)
+  Export/
+```
+
+The `.kickPrj` file must have the same name as its folder. The app opens `<folder>/<folder name>.kickPrj`. If the names don't match, it quietly creates a new, empty project instead.
+
+Where the folders live:
+
+- **On the device:** `/home/Kick/projects`, `/app/demos`, `/app/templates`.
+- **On Windows:** `projects`, `demos` and `templates` folders next to the exe.
+
+**Saving** 🔍 happens in three ways:
+
+- **SHIFT + BROWSE** (SAVE) saves immediately.
+- The project is also saved when you close it, load another one, or quit the app.
+- Auto-save is listed in Preferences, but it isn't wired up yet (section 15).
+
+### The startup screen (Recent Projects) 🔍
+
+When the app starts, it shows three rows plus a button:
+
+- **Demos:** the shipped demo projects.
+  - A demo opens in place and isn't added to your recent list.
+  - Saving overwrites the demo.
+- **Templates:** pick one, then type a name on the on-screen keyboard. The template is copied into `projects/<name>/`.
+- **Recent:** your last projects (up to 5).
+  - Long-press an entry for **Load** or **Remove from list**.
+  - The **Auto Load** toggle reopens the last project at startup.
+- **New project:** asks for a name. Names that already exist are refused.
+
+To move around: turn the jog wheel to move the highlight, and push it to open the highlighted item. After a project loads, the app goes to Main mode.
+
+You can also open a project from the **Browser**: double-tap its `.kickPrj` file.
+
+---
+
+## 5. Main mode
+
+**Press MAIN.** ✅
+
+![Main mode, Track tab](img/main.png)
+
+**Top bar:**
+
+- Mode tabs:
+  - Menu
+  - Main
+  - Grid
+  - Step Seq
+  - FX
+- The project name.
+- Buttons:
+  - Play
+  - Open project
+  - Metronome
+  - Tempo
+  - Settings
+
+Below the top bar, three tabs choose what's listed: **Sequence**, **Track** and **Program**. The **Undo / Redo / Delete / +** buttons act on the list. Undo and redo share one history for the whole project.
+
+### Sequence tab 🔍
+
+Each sequence row has:
+
+| Field | Range / notes |
+|---|---|
+| Name | |
+| BPM | 20–240 |
+| SEQ / GLOBAL tempo | Choose between this sequence's own tempo and the global tempo |
+| BARS | 1–100 |
+| LOOP START / LOOP END | |
+| Loop on/off | |
+| Transpose | −36 to +36 |
+
+**Q-links:** P1 = BPM, P2 = Bars, P3 = Loop Start, P4 = Loop End.
+
+The **⋯ Sequence Options** menu offers:
+
+- **Half Length**
+- **Double Length**
+- **Insert Bars**
+- **Copy Events:** choose a range of sequence, track, pads and bars, then a destination.
+- **Copy Bars:** Replace or Merge.
+- **Copy Sequence**
+- **Clear**
+
+*Time Signature* is listed but doesn't do anything yet.
+
+### Track tab 🔍
+
+Each track row has:
+
+| Field | Range / notes |
+|---|---|
+| Name and program | |
+| MIDI input port and channel | |
+| Length | 0 means "follow the sequence" |
+| Level | |
+| Transpose | |
+| Mute / Solo | |
+| Meter | |
+
+The **Arm** and **Monitor** buttons don't do anything yet.
+
+**Q-links:** P1 = MIDI channel, P2 = Length, P3 = Level, P4 = Transpose.
+
+The **Track Options** menu offers:
+
+- **Half Speed / Double Speed**
+- **Explode**
+- **Quantize:** this is *pitch* quantize to a scale and note range. There is no timing quantize.
+- **Humanize**
+- **Split Events** (2–32 parts)
+- **Copy Track**
+- **Random Events**
+- **Erase** (over a range)
+
+### Program tab 🔍
+
+Each program row has these buttons:
+
+- **ROUTE:** opens the Track Mixer.
+- **ASSIGN:** opens Assign Sample.
+- **SAMPLER:** opens the Sampler.
+- **EDIT:** opens the program's editor:
+  - Drum → Sample Edit
+  - Keygroup / MIDI / CV → Pad Perform
+  - Clip / Audio → Program Edit
+
+MIDI and CV programs also show their port and channel settings on the row.
+
+The **Program Options** menu offers:
+
+- **Copy Pads**
+- **Duplicate Program**
+- **Duplicate Program To Track**
+- **Pad Colour**
+
+**+ (create)** opens **CREATE PROGRAM**, where you pick one of the seven types. On the Track tab, + adds a track; if there is no sequence yet, it creates one first.
+
+### Status bar
+
+The status bar along the bottom of most screens shows:
+
+- **Left:** the current Sequence, Track and Program. Tap any of them to choose another.
+- **Right:** the playhead position as BAR : BEAT : TICK.
+
+---
+
+## 6. Playing the pads
+
+On **Main**, **Grid** and **Browser**, and in **Program Edit**, the pads play the selected track's program live. ✅
+
+For **sample programs** (Drum, Keygroup, Clip, MIDI, CV), the note is the pad number plus the bank offset. Velocity comes from how hard you hit the pad. On Main, aftertouch is also sent.
+
+### Instrument pad layouts ✅
+
+Instrument (Plugin) programs map pads to notes in a grid, like a Push or Launchpad. Each layout is described by how many notes it moves **up a row**:
+
+| Layout | In Key | Chromatic |
+|---|---|---|
+| **4ths** (default) | each row is 3 scale steps higher | each row is 5 semitones higher |
+| **3rds** | each row is 2 scale steps higher | each row is 4 semitones higher |
+| **Sequential** | 4 notes per row | 4 notes per row |
+
+- **Bank buttons set the octave.** Bank D, pad 1 is C3 (MIDI note 60). Bank A starts three octaves lower.
+- **Pad lights** (✅ in the simulator): pads on the **root** note light sky-blue, and other in-scale notes light white.
+- **In Key** mode only offers notes in the scale.
+- **Chromatic** mode offers every note.
+
+You set the layout, root and scale in **Program Edit** (section 10).
+
+When you let go of a pad, the note it started is always the one that stops. This holds even if you changed bank, layout or track while holding it.
+
+---
+
+## 7. Grid view
+
+**SHIFT + MAIN** (GRID) opens a piano roll for the selected track. ✅
+
+![Grid view](img/grid.png)
+
+### Header
+
+- **Track selector.** Selecting an Audio-program track jumps to Program Edit.
+- **Bars:** the track's length.
+- **Play.**
+- **Tools:** Magnify, Select, Pencil, Erase.
+- **Edit buttons:** Cut, Copy, Paste. Paste places notes at the playhead.
+- **Settings.**
+
+### Left column
+
+- **Time division:** 1, 4, 4T, 8, 8T, 16, 16T, 32, 32T, 64, 64T.
+- **Note list:** pad names for drum programs, a keyboard for melodic ones.
+
+### Tools 🔍
+
+| Tool | What you do with it |
+|---|---|
+| **Pencil** | Tap an empty cell to add a note one grid step long. Drag a note's body to move it; drag its edge to resize. Drag across empty cells to paint notes. Double-tap a note to delete it. |
+| **Erase** | Tap or drag over notes to delete them. |
+| **Select** | Drag a box to select notes. |
+| **Magnify** | Pinch to zoom. |
+
+### Bottom bar
+
+- **E** opens a lane for editing per-note **Velocity** (0–127), **Probability** (0–100) or **Ratchet** (1–8).
+- **Z / − / +** zoom.
+- **Edit Start / Edit End / Transpose / Nudge / Don't Snap** choose what the jog wheel does to the selected notes.
+
+### Hardware controls
+
+- **Jog wheel:** applies the chosen Edit Start / Edit End / Transpose / Nudge action to the selected notes.
+- **Q-links:** P1 and P2 scroll, P3 zooms horizontally, P4 zooms vertically.
+- **Pads:** play the note and highlight it. With *Hitting pad selects all events* turned on, a pad selects every event on that note.
+- **ERASE:** deletes the selected notes.
+- **COPY:** duplicates the selection straight after itself.
+
+### Settings
+
+- **Snap mode:** Absolute or Relative.
+- **Hitting pad selects all events**
+- **Auto Scroll:** Off, Follow or Page.
+
+---
+
+## 8. Step sequencer
+
+**STEP SEQ** opens a 16-step editor for one pad at a time. ✅
+
+![Step sequencer](img/step_seq.png)
+
+### Header
+
+- Track
+- Total bars
+- BPM
+
+### Top row
+
+- **Pad:** which pad's steps you're editing (A01 …).
+- **Parameter:** Velocity, Probability or Ratchet.
+- **Page:** step pages 1–8.
+- **Bar**
+- **Time Div:** how long each step is.
+
+### Steps and pads 🔍
+
+- **Pad N** toggles step N on the current page. Tapping a step's button on screen does the same. Drag up and down in a step's bar to set its value.
+- **Banks A–H** choose step pages 1–8. In **Pad Select** mode they change pad bank instead.
+- **Pad Select** mode: pads choose which sound to edit instead of toggling steps. The chosen pad lights green.
+- **Velocity of new steps:**
+  - With **HALF LEVEL** lit, a new step takes the velocity you hit the pad with.
+  - With **FULL LEVEL** lit, it uses the default velocity.
+
+### Other controls
+
+- **Q-link N** adjusts step N's value.
+- **Jog wheel** and **− / +** nudge the pad's events one step.
+- **Bottom row:**
+  - Clear Pad
+  - Clear Bar
+  - Bar − / +
+  - Pad Select
+  - Pad − / +
+  - Nudge − / +
+- **Right panel:**
+  - **Vertical slider:** offsets every value by up to ±64.
+  - **Presets:** Ramp, Triangle, Pulse, Flip, Mirror, Inverse. Press a preset again to cycle through its variants.
+
+If the project has no tracks, the screen says so. Create a track first (section 5).
+
+---
+
+## 9. List edit, Next Sequence and Song
+
+### List Edit (MENU → List Edit) 🔍
+
+List Edit shows the track's events as a table. The columns are:
+
+- Event
+- Time
+- Pad/Note
+- Length
+- Velocity
+- Mod
+- Value
+- Prob
+- Rat
+
+Use **Insert** and **Delete** to add or remove events. The Q-links edit Note, Length, Velocity and Prob on the visible rows.
+
+Its **TC (Timing Correct)** dialog has these settings:
+
+- Time division
+- Swing 50–75
+- Shift timing
+- Window
+- Strength
+
+**The TC dialog doesn't apply anything yet.** Swing isn't implemented in the engine either.
+
+### Next Sequence (NEXT SEQ) ✅ (opens) / 🔍 (behaviour)
+
+![Next sequence](img/next_seq.png)
+
+Each pad stands for one sequence. The bank offset applies, so pad N in bank A is sequence N.
+
+1. While stopped, hit a pad to choose the starting sequence.
+2. Press **PLAY**.
+3. While it plays, hit another pad to **queue** that sequence next. The queued pad blinks. The switch happens when the current sequence ends.
+
+The on-screen buttons change when queued sequences switch in:
+
+| Button | Effect |
+|---|---|
+| **Sudden** | Switch immediately |
+| **Next Bar** | Switch at the next bar |
+| **Hold** | Stop queuing |
+| **Clear** | Drop the queued sequence |
+
+**Q-links:** P1 = BPM, P2 = Length, P3 = Loop Start, P4 = Loop End.
+
+### Song (MENU → Song) 🔍
+
+A song is a list of steps. Each step has a sequence, a repeat count (1–128), a number of bars and a BPM.
+
+- **Create a song:** use *CREATE NEW SONG*. You name it with the on-screen keyboard.
+- **Add steps:** hit a pad to choose a sequence, then press **Insert**. Inserting the same sequence again raises its repeat count.
+- **Edit:** **Delete** and **Clear** remove steps.
+- **Tempo:** there is a song BPM, and a toggle chooses between each sequence's own tempo and the song tempo.
+- **Play:** PLAY or PLAY START plays from the selected step.
+
+*Export* and *Convert > SEQ* are not implemented yet.
+
+---
+
+## 10. Programs and Program Edit
+
+**PROGRAM EDIT** opens the editor for the selected program. ✅
+
+The editor depends on the program type. On every type:
+
+- Hitting a pad selects which pad you're editing.
+- The transport buttons work.
+
+![Program Edit (drum)](img/program_edit.png)
+
+### Shared ranges
+
+| Setting | Range |
+|---|---|
+| Semi | −12 to +12 |
+| Fine | −99 to +99 |
+| Mute group | Off, 1–32 |
+| Polyphony | 1–32 |
+| Pan | Full left to full right |
+
+### Drum 🔍
+
+Drum programs have five tabs:
+
+- **Main**
+  - **MASTER:** Level, Pan, Semi, Fine, Poly. Double-tap Poly to reset it to 8.
+  - **PAD:** Level, Pan, Semi, Fine.
+  - **Layer Play:** how the pad picks a layer. Cycle, Velocity or Random.
+  - **Sample Play:** One Shot, Note Off or Note On.
+  - **Mute Group.**
+- **Samples**
+  - A waveform and 4 layer buttons.
+  - Start, End, Loop Start, Loop End.
+  - Semi, Fine.
+  - Loop and Reverse toggles.
+- **Layer Mix:** Semi, Fine, Level and Pan for each of the 4 layers.
+- **Envelopes:** one envelope each for Amplitude, Filter and Pitch.
+  - Shape: AD, ADSR, AHD, AHDS or AHDSR.
+  - Each stage runs 0–127, plus Depth.
+- **LFO**
+  - Waveform: Sine, Triangle, Saw Up, Saw Down, Square, Noise, Sample & Hold.
+  - Rate: 0.1–200.
+  - Amounts to Pitch, Filter, Amp and Pan.
+
+Each voice has a multimode filter in the engine (low-pass, high-pass, band-pass and others, 27 types). The Drum editor doesn't show its type, cutoff or resonance yet.
+
+### Keygroup 🔍
+
+Keygroup programs have the same tabs as Drum, with these differences:
+
+- **Main** adds:
+  - Inserts
+  - Output bus
+  - KG Poly
+- **Samples** is split over two pages. Tap the Samples tab again to switch pages.
+  - **Page 2** adds:
+    - Loop points
+    - Offset
+    - Tail length and start
+    - Reverse
+    - Level and Pan
+
+Two known problems:
+
+- *Key Track* does nothing yet.
+- The **Sample Play** list is labelled in a different order from the engine, so *Note On* and *Note Off* are swapped.
+
+### Clip 🔍
+
+Clip programs have two views.
+
+- **Program view:**
+  - Semi and Fine.
+  - **Launch Quantize:** Off, 2 Bar, 1 Bar, 1/2 … 1/64.
+  - A 4×4 pad grid. Double-tap a pad to assign a clip to it.
+- **Pad view:**
+  - A waveform.
+  - Start, End, Semi, Fine.
+  - Mute group.
+  - Warp, Reverse and Fade.
+
+### Audio 🔍
+
+The Audio editor is an arrangement editor for an audio track.
+
+- **Placing clips:** *BROWSE SAMPLES* places a sample at a BAR / BEAT / TICK position.
+- **Clip settings:** Level, Mute, Reverse and Warp.
+- **Editing:**
+  - Duplicate.
+  - Nudge, Edit Start and Edit End move by one quantize step per Q-link detent.
+- **Automation lane:** Volume, Pan, Mute and Sends 1–4.
+
+Not implemented yet:
+
+- Fade In and Fade Out.
+- Semi, Fine and BPM (Warp turns these controls on, but they do nothing).
+- TC.
+- Don't Snap.
+- Split.
+
+### Instrument (Plugin) ✅
+
+New in this build: an instrument program plays a built-in synth engine instead of samples.
+
+![Instrument Program Edit](img/instrument_edit.png)
+
+**Top row:**
+
+- **ENGINE:** which synth engine plays. Switching engines resets the parameters to that engine's defaults.
+- **PAD LAYOUT:** 4ths, 3rds or Sequential (section 6).
+- **NOTES:** In Key or Chromatic.
+- **ROOT:** C to B.
+- **SCALE:** about 40 scales, including major, the minors, modes, blues, pentatonics and a range of world scales. SCALE is greyed out in Chromatic mode.
+
+**Parameters:** the engine's parameters appear four at a time. Use **<** and **>** to page through them.
+
+- **Q-links P1–P4** turn the four knobs shown. Each detent moves 1% of the range.
+- Frequency and time parameters use a logarithmic curve.
+
+**Built-in engine: Basic Synth.** An 8-voice subtractive synth:
+
+- Two oscillators that morph from saw to square, with detune.
+- A sub oscillator.
+- A resonant low-pass filter with its own envelope.
+- An amp envelope.
+
+| Parameter | Range | Default |
+|---|---|---|
+| Wave | 0–1 (saw → square) | 0 |
+| Detune | 0–50 ct | 8 ct |
+| Sub | 0–1 | 0.3 |
+| Cutoff | 30–18 000 Hz | 1 800 Hz |
+| Resonance | 0–1 | 0.25 |
+| Filter Env | 0–1 | 0.45 |
+| Filter Decay | 5 ms–4 s | 0.35 s |
+| Attack | 1 ms–4 s | 5 ms |
+| Decay | 5 ms–4 s | 0.4 s |
+| Sustain | 0–1 | 0.6 |
+| Release | 5 ms–6 s | 0.3 s |
+| Level | 0–1 | 0.7 |
+
+**What else is covered:**
+
+- **Pitch bend** (±2 semitones) and **mod wheel** (CC1; opens the filter up to 3 octaves) work over MIDI.
+- *All Notes Off* (CC123) releases everything.
+- **Save and undo:** engine choice, parameters and pad layout are saved in the project. Undo and redo work for all of them.
+- **Routing and effects:** outputs, sends and inserts work as they do for any program.
+
+**Tests:** the engine tests cover note on/off, envelopes, parameters, the pad layouts, pitch bend, mod wheel, switching engines, mute, undo and save/reload. The simulator self-test then confirmed the edit screen and Q-link control.
+
+Instrument programs aren't supported everywhere yet:
+
+- The **EDIT** button on the program row does nothing. Use **PROGRAM EDIT** instead.
+- **Q-Link Edit (Custom), Pad Mixer and MIDI Learn** don't list instrument parameters yet.
+
+### MIDI ⚠️
+
+The MIDI program editor has 128 CC sliders, 16 per page.
+
+**The sliders aren't connected to the engine yet.** CCs sent through custom Q-link assignments do work.
+
+The MIDI port, program change, bank MSB/LSB and channel are set on the Main → Program row.
+
+### CV 🔍
+
+The CV editor shows a read-only monitor of CV outputs 1–8 (0–5 V).
+
+Start notes and calibration are under PREFS → CV. Note priority and the port assignments are set on the Main → Program row.
+
+---
+
+## 11. Sampling: Sampler, Looper, Sample Edit, Browser
+
+### Sampler (SAMPLER) ✅ opens / 🔍 behaviour
+
+![Sampler](img/sampler.png)
+
+**Left panel:**
+
+- **Input:** In L, In R or In L+R, each recorded as mono or stereo.
+- **Threshold** meter.
+- **Inserts.**
+- **Monitor** and monitor level. The monitor level control isn't connected yet.
+
+**Record button:** press it to arm (*Waiting for Signal*). Recording starts when the input crosses the threshold. Press again to stop.
+
+**Recording modes:**
+
+| Mode | How it works |
+|---|---|
+| **Sample** | A plain recording. |
+| **Slice** | The first pad hit starts recording. Each later hit adds a slice marker. |
+| **Pad Tap** | Tap a pad to mark the start of its slice and tap again to mark the end. The pad is red while its slice is open and green once it's done. |
+| **Pad Hold** | Each slice lasts as long as you hold its pad. |
+
+**After you stop:**
+
+- **Save / Discard / Play** the take.
+- **Edit:** saves the take and opens it in Sample Edit in Chop mode.
+
+**The Save dialog sets:**
+
+- the name;
+- which program and pad to assign it to;
+- the root note;
+- whether to *create a new program*: with non-destructive slices, or with pad parameters.
+
+**Q-links:** P1 and P2 set the maximum recording length, and P3 sets the threshold.
+
+**Status:** the engine tests check recording, the reverse-recording trim, and stopping. The Sampler's *Export* and *Clear* buttons don't do anything yet.
+
+### Looper (SHIFT + SAMPLER) ✅
+
+![Looper](img/looper.png)
+
+**Controls:**
+
+- The same input panel as the Sampler. The looper has its own insert chain.
+- **LENGTH:** 1–16 bars.
+- **Reverse.**
+- **Replace / overdub.**
+- **SEQ:** syncs the loop to the sequencer.
+- Output **Gain** and **Pan**.
+
+**Transport:** REC, OVERDUB, PLAY, PLAY START and STOP drive the looper while this screen is open.
+
+**Header:**
+
+- **Export:** writes the loop as a WAV file. You can assign it to a pad of a Drum, Keygroup, Clip or Audio program.
+- **Clear:** empties the loop.
+
+The engine tests check record, overdub, undo (including undoing the first take), stereo length changes and the insert chain.
+
+### Sample Edit (SAMPLE EDIT) ✅ opens / ⚠️ functions
+
+![Sample edit](img/sample_edit.png)
+
+**Header:** pick a sample from the **SAMPLES LIST**. The **Settings** dialog sets:
+
+- cue and slice preview;
+- auto scroll;
+- timeline units: Time, Samples or Beats.
+
+**Tune mode** shows the slice and its tuning.
+
+- **Pads 1–4** play the selection four ways: from the start, up to the start, up to the end, and from the end. **Pads 5–8** do the same but stop when you let go.
+- *Detect BPM, To Seq, Match, Semi* and *Fine* don't do anything yet.
+
+**Chop mode** splits the sample into slices.
+
+- **Mode:**
+  - **Manual:** add slices with *Slice +*.
+  - **Threshold:** set a threshold and a minimum length.
+  - **Regions:** 1–128 equal slices.
+  - **Quantize:** set bars and a time division.
+- **Slice controls:**
+  - Start, End, Cue.
+  - Split, Combine, Legato, Play Cue.
+  - Pads select and play slices.
+- **Q-links** move the slice start (P1–P4). P1 moves in the finest steps and P4 in the coarsest, 1000× larger.
+- *Repeat* and *X Fade* don't do anything yet.
+
+**Process** offers these functions:
+
+- Discard
+- Delete
+- Silence
+- Extract
+- Normalize
+- Reverse
+- Fade In / Fade Out (linear, log or exponential)
+- Gain Change (±18 dB)
+- Copy
+- Stereo → Mono
+- Pitch Shift, Time Stretch and Bit Reduce. The engine doesn't support these three yet; they report that they couldn't be done.
+
+**Assign** puts a slice on a pad. It only works with **Drum** programs, and it ignores its assign-type and crop options.
+
+### Browser (BROWSE) ✅
+
+![Browser](img/browse.png)
+
+**Locations:**
+
+- Internal
+- Factory Sample Library
+- Demos
+- SD card and USB drives when they're inserted, with an Eject button
+
+**Header:**
+
+- **Five favourite slots:** tap once to store the current folder; tap again later to jump back to it.
+- **New Project.**
+
+**Tools:**
+
+- Search
+- Select (multi-select)
+- Delete, Cut, Copy, Paste and Rename. The open project can't be deleted, cut or renamed.
+
+**Bottom bar:**
+
+- **Filter:** Projects, Samples or All.
+- **Sample Assign.**
+- **Play** (preview).
+- **Audition:** Off, Auto or Manual.
+- **Load** and **Load All.**
+- Preview volume.
+
+**Opening items:** double-tap an item, or push the jog wheel.
+
+- A folder opens.
+- A `.kickPrj` file loads that project.
+- A sample is added to the project's sample pool.
+
+**Sample formats listed:** WAV, BWF, AIFF, FLAC, OGG, MP3 and WMA. Which of them actually load depends on the audio formats this build was compiled with.
+
+### Assign Sample (Main → Program → ASSIGN, or from the mixers and the Browser) 🔍
+
+**Drum, Clip and Keygroup programs:**
+
+- Pick a sample from the list. Selecting it auditions it.
+- To assign it, double-tap a pad or push the jog wheel.
+- **ERASE + pad** clears that pad.
+- *Clear Assignment* (the first entry in the list) removes the sample.
+
+**Keygroup programs** get an extra table. It shows each sample's Min, Root and Max notes, with Load, Clear and Audition buttons.
+
+---
+
+## 12. Mixing: mixers, mutes, inserts, XY FX
+
+### Track Mixer (TRACK MIX) ✅
+
+![Track mixer](img/track_mix.png)
+
+The header list chooses which strips to show:
+
+| View | What each strip has |
+|---|---|
+| **Programs** | Level, pan, mute, solo, inserts, output bus, meter |
+| **Sends** | Sends 1–4 per program |
+| **Returns** | 4 return buses: level, pan, mute, solo, inserts, output |
+| **Submixes** | 4 submixes: level, pan, mute, inserts, output |
+| **Output** | Output buses: level, pan, mute, inserts |
+| **Midi** | MIDI tracks: port, channel, level, mute, solo |
+| **Audio** | Audio tracks: input, output, level, pan, mute, solo, inserts |
+
+The **master strip** at the bottom has output, inserts, level, pan, mute and a meter. Its *Limiter* button does nothing yet.
+
+The Q-links edit the first visible strip: output, level, pan and mute/solo.
+
+**Known limits:**
+
+- The mute/solo you set with a Q-link changes the on-screen button only. Tap the button on screen to actually mute or solo.
+- Several buttons don't do anything yet:
+  - Monitor
+  - Arm
+  - Audio input
+  - Return/Output solo
+
+### Pad Mixer (SHIFT + TRACK MIX) ✅
+
+![Pad mixer](img/pad_mix.png)
+
+The Pad Mixer works with **Drum and Clip** programs. Each assigned pad gets a row with:
+
+- level
+- pan
+- solo (soloing one pad mutes the others)
+- mute
+
+Tap a pad on the screen to select its row, or double-tap it to assign a sample. The Q-links edit the first visible row.
+
+### Track Mute / Pad Mute ✅
+
+![Track mute](img/track_mute.png)
+
+**Track Mute:** pad N mutes or unmutes track N.
+
+- With **Solo** on, hitting a pad solos that track instead.
+- **Clear Solos** resets every solo.
+- **Group tab:** puts tracks into mute groups 1–15.
+- Banks A–H page through the tracks.
+
+**Pad Mute** does the same for the pads of the selected **Drum** program. It also has pad groups, and Q-link N sets pad N's group.
+
+On both screens, the *Instant / Time Division* options and the automation settings do nothing yet. Muting always happens immediately.
+
+### Inserts 🔍
+
+Open the Inserts screen from:
+
+- any **Inserts** button on a mixer strip;
+- **Keygroup Main**;
+- the **Looper**.
+
+**Slots:** each strip has 4 insert slots.
+
+- **Tap an empty slot** to pick a category, then an effect.
+- **Tap a filled slot** to show its parameters as knobs. All of them run 0–1.
+- **Per slot:** *Enable / Bypass* and *Delete*.
+- **All Inserts** enables or deletes every slot at once.
+
+**Effects:** all of them come from the open-source **Airwindows** library: about 327 effects in 21 categories.
+
+| Category | Examples |
+|---|---|
+| Ambience | Chorus, ChorusEnsemble, TapeDelay2, StarChild |
+| Amp Sims | BassAmp, FireAmp, GrindAmp, Cabs |
+| Bass | BassKit, DubSub, Floor |
+| Biquads | Biquad, BiquadDouble |
+| Brightness | Air2, DeEss, Slew |
+| Clipping | ADClip7, ClipSoftly |
+| Consoles | Console4 … Console8, PurestConsole |
+| Distortion | Density2, Drive, HardVacuum |
+| Dithers | TPDFDither, PaulDither |
+| Dynamics | ButterComp2, Pressure5, SoftGate, VariMu, DrumSlam |
+| Effects | Tremolo, GlitchShifter, Exciter |
+| Filter | EQ, Highpass2, Lowpass2, Baxandall2 |
+| Lo-Fi | DeRez2, BitGlitter, Flutter |
+| Noise | DarkNoise, TapeDust |
+| Reverb | Chamber2, Galactic, MatrixVerb, Verbity2 |
+| Saturation | Tube2, Spiral2, Mojo |
+| Stereo | AutoPan, Wider, Srsly2 |
+| Subtlety | Coils2, Interstage |
+| Tape | IronOxide5, ToTape6 |
+| Tone Color | Channel4 … Channel9, Luxor |
+| Utility | MidSide, PurestGain, LeftoMono |
+| XYZ Filter | XLowpass, YBandpass, ZNotch, ZRegion |
+
+### XY FX (SHIFT + NEXT SEQ) ❌
+
+![XY FX](img/fx.png)
+
+The XY FX screen is laid out but not connected to any audio. It has:
+
+- an on/off switch, an output (Out 1, 2 or 1+2) and a Latch toggle;
+- **Presets:** Beat Repeat LPF/BPF/HPF, the filters, and Phaser;
+- Attack, Release and Wet/Dry. The Q-links map to Preset, Attack, Release and Wet/Dry.
+
+**None of it reaches the audio engine yet.**
+
+---
+
+## 13. Performance and control
+
+### Pad Perform / Pad Notes (SHIFT + 16 LEVELS) ✅
+
+![Pad perform](img/notes.png)
+
+Pad Perform plays notes and chords from the pads. Choose a **Type**:
+
+- Chromatic
+- Notes (in a scale)
+- Chords
+- Progression
+- Chromatic Chords
+
+**Other settings:**
+
+- Root note
+- Scale
+- Chord
+- **Bank behaviour:** *Continuous* or *Start on Root*.
+- Start octave
+
+**Q-links:** P1 = Type, P2 = Scale, P3 = Root, P4 = Scale (P2 and P4 both set the scale).
+
+This mode keeps its own pad-to-note mapping, separate from the instrument pad layouts in section 6.
+
+### Q-Link Edit (SHIFT + SAMPLE EDIT) ✅
+
+![Q-link edit](img/link_edit.png)
+
+There are two modes:
+
+- **Screen** (the default): the Q-links follow whatever screen you're on.
+- **Custom:** the Q-links always control your own assignments.
+
+To set up a Custom assignment:
+
+1. Pick a track.
+2. Pick a Q-link.
+3. Pick a category: MIDI CC, Mix, Program, or Insert 1–4.
+4. Pick the parameter.
+
+The parameters on offer depend on the program type:
+
+| Program type | What you can assign |
+|---|---|
+| Drum | Pan, velocity, mute/solo, sends, global tune |
+| Clip | Launch quantize, plus reverse, warp and fade for each pad |
+| Keygroup | Synth-style parameters |
+| MIDI | CC 0–127 |
+| CV | CV outputs |
+| Insert 1–4 slots | The parameters of the effect in that slot |
+
+The **Momentary** toggle changes how an assignment responds while you hold the Q-link.
+
+### MIDI Control (SHIFT + PROGRAM EDIT) ✅
+
+![MIDI control](img/midi_control.png)
+
+MIDI Control turns the KICK into a MIDI controller.
+
+**Hardware tab:** choose which panel buttons, Q-links 1–4, pads 1–16 and XY axes send MIDI. For each one you set:
+
+- the channel and CC number;
+- for buttons: momentary or toggle, and how the LED lights;
+- for Q-links: relative or absolute, and a range;
+- for pads: note, aftertouch and LED.
+
+You also choose the MIDI output port here.
+
+**XY tab:** the channel, CC and range for each XY axis.
+
+**MIDI Learn:** maps incoming MIDI to mixer controls.
+
+- **Sources:** tracks, programs, returns, submixes and main.
+- **Parameters:** volume, pan, mute, solo and sends.
+- **Buttons:** Add, Delete, Clear All.
+
+**MIDI Monitor:** a pop-up that shows incoming and outgoing messages.
+
+> Fixed in this build: leaving MIDI Control with a panel button used to read pad data out of a shorter button message. That was out of bounds: Debug builds stopped with an assertion, and on the device it read past the end of the message.
+
+### Colour Editor (MENU → Color Editor) 🔍
+
+- **Painting:** pick one of 18 colours, then tap pads to paint them. *All Pads* paints every pad at once.
+- **How pads light:**
+  - *Empty pad:* Dim or Off.
+  - *Pad off:* Dim or Off.
+  - *Pad on:* Velocity, Full or Off.
+- **Make Default:** keeps the current colours as the default.
+
+### Menu (MENU) ✅
+
+![Menu](img/menu.png)
+
+The Menu is a 4×4 grid of every screen. It's the only way into **List Edit**, **Song** and the **Colour Editor**.
+
+You can open a tile with the pads as well as by touch. The pad grid is mirrored left to right compared with the screen, so **pad 1 (bottom-left) opens the bottom-right tile** (MIDI Control). The tour confirmed this.
+
+---
+
+## 14. Preferences
+
+**SHIFT + MENU** (PREFS) opens Preferences. ✅
+
+![Preferences](img/prefs.png)
+
+The tabs, left to right:
+
+1. **Info**
+   - Serial number and firmware/control versions.
+   - Factory Reset, Firmware Update, Restore Defaults.
+2. **Project Defaults**
+   - What happens on launch.
+   - Number of recent projects.
+   - Auto-save and its interval.
+   - Default tempo, bars, time signature, root/scale, number of sequences and tracks.
+   - Bit depth.
+   - Project naming.
+
+   Of these, only the recent-project count is used today. The defaults aren't applied to new projects yet, and auto-save doesn't run.
+3. **Hardware**
+   - Pad threshold, sensitivity and curve.
+   - Velocity and aftertouch.
+   - Brightness.
+   - Tap-tempo LED.
+   - Date, time and time zone.
+4. **Audio** (new) ✅
+   - Audio device type: ASIO, Windows Audio or DirectSound on Windows; ALSA on Linux.
+   - Device, input channels (up to 2), output pair, sample rate and buffer size.
+   - Saved to `prefs/audio_device.xml` and reopened at the next start.
+
+   On Windows, ASIO drivers appear when the app is built with `-DKICK_ASIO_SDK_DIR=<path to the Steinberg ASIO SDK>`.
+5. **MIDI**
+   - Input and output ports.
+   - Whether each port carries track data and/or control data.
+6. **CV**
+   - Start note for CV 1–8.
+   - Calibration screen: expected voltage with − / + for each row, then Apply.
+7. **Ethernet**
+   - Enabled, DHCP or manual, IP, subnet, gateway, DNS.
+8. **Wi-Fi**
+   - Scan, choose a network, enter the password, connect.
+
+![Audio settings](img/settings_audio.png)
+
+Two other screens are reached from elsewhere:
+
+- **Software update:** opened from Info → Firmware Update.
+  - Looks for an update image on a PC over USB, a USB drive or an SD card.
+  - Shows each image's version, checks the image, then installs it with a progress screen.
+- **System Resources:** opened from the chip icon in the screen header.
+  - Shows CPU, RAM, internal storage, SD card and USB use.
+  - *Purge All* and *Purge Unused* do nothing yet.
+
+---
+
+## 15. Feature status and known gaps
+
+### Works (tested in this build)
+
+- Loading projects; playing and stopping sequences.
+- Pads play sounds, with velocity.
+- The sequencer plays note events.
+- **Sampler:** recording and trimming.
+- **Looper:** record, overdub, undo and inserts.
+- Drum programs: sample playback, envelopes and the filter.
+- Instrument programs with Basic Synth, pad layouts and pad lights.
+- Program Edit for instruments.
+- **Audio device selection**, including ASIO.
+- Every screen that a panel button opens.
+- Undo/redo and save/reload for instrument programs.
+
+### Not implemented yet (upstream)
+
+| Area | Missing |
+|---|---|
+| Buttons | TAP TEMPO, MASTER, NOTE REPEAT, LATCH, AUTOMATION, 16 LEVELS, TC, ON/OFF and BACK do nothing. LINK is a stub. |
+| Recording | No step or live recording into sequences. REC and OVERDUB only work in the Looper. |
+| Timing | No swing or timing correction. Time signature can't be changed. The sequencer clock is 96 PPQN, timed on a background thread, so notes land on audio-block boundaries (10 ms) rather than sample-accurately. |
+| FX | XY FX isn't connected to audio. |
+| Sample Edit | Pitch shift, time stretch, bit reduce. BPM detect, match and to-sequence. Repeat and X-fade. Assign options. |
+| Programs | No drum filter UI or per-layer velocity ranges. Keygroup Key Track does nothing. MIDI program CC sliders aren't connected. Several Audio editor tools are missing. |
+| Song | Export and Convert to Sequence. |
+| Mixers | Arm, Monitor and Limiter buttons. Return/output solo. Pad Mixer sends and routing. |
+| Preferences | Project defaults and auto-save aren't applied. Purge does nothing. Only 4 calibration rows for the 8 CV outputs. |
+| Mutes | Time-division (quantised) muting and mute automation. |
+
+### Fixed in this community build
+
+**Instruments, audio and stability:**
+
+- Instrument programs, the Basic Synth engine, pad layouts and their LEDs.
+- The Audio preferences page, with ASIO.
+- Clean shutdown, with no crashes on exit.
+- Sequence creation returned the wrong index, so new sequences didn't line up.
+- Silent pads, caused by an audio block-size mismatch.
+
+**Looper and recorder:**
+
+- The looper is now stereo throughout and undo works.
+- Sample-recorder fixes.
+
+**Panel and UI fixes:**
+
+- Notes started while a track was muted now release properly.
+- The Program Edit screen no longer treats Q-link turns as pad hits.
+- Leaving **MIDI Control** with a panel button no longer reads past the end of the message.
+- **Track Mixer:** turning a Q-link on the *Output* or *Midi* view no longer crashes. The two views were swapped in the code.
+- **Grid:** COPY and ERASE now act once per press; they used to fire again on release.
+- **SHIFT + pad** and **SHIFT + Q-link** combinations now see the SHIFT key. Before, the UI read a state that nothing ever set. *Fixed in code, but not yet driven by a test.*
+
+**Other:**
+
+- The UI font is now Source Sans 3 (SIL Open Font License), replacing Myriad Pro, which couldn't be redistributed.
+
+---
+
+## 16. For developers: the test harness
+
+All of these run on Windows from the build folders.
+
+### Engine tests
+
+```
+build/win/KickEngineTest.exe
+```
+
+- **What it covers:** about 112 headless checks: the recorder, looper, filter, envelopes, Basic Synth, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
+
+### Simulator self-tests
+
+Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-tests can run while you have your own simulator open.
+
+| `KICKEM_SELFTEST` | What it does |
+|---|---|
+| `1` | Presses every control type once |
+| `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads |
+| `audio` | Lists the audio devices, opens PREFS → Audio |
+| `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
+
+These environment variables control the self-tests:
+
+| Variable | Effect |
+|---|---|
+| `KICKEM_LOG=<file>` | Writes a trace of every panel event and self-test step. Lines starting with `SELFTEST` are the results. |
+| `KICKEM_SHOT=<folder>` | Saves a screenshot at each step. The images in this manual came from here. |
+| `KICKEM_TOUR_PROJECT=<name>` | Which project in `projects/` the tour loads (default *Vintage Soul Kit*) |
+| `KICKEM_TOUR_FROM=<label>` | Start the tour at one button, e.g. `MIDI CONTROL` |
+| `KICK_PREFS_DIR=<folder>` | Use a different preferences folder |
+
+**Your files are safe during self-tests:**
+
+- The tests work on a **copy** of the project, so the save-on-exit can't change your projects.
+- They use a **copy of the preferences**, so your recent-projects list and settings are left alone.
+
+### Regenerating the screenshots
+
+PowerShell:
+
+```powershell
+$env:KICKEM_SELFTEST = "tour"; $env:KICKEM_SHOT = "$PWD\shots"; $env:KICKEM_LOG = "$PWD\shots\log.txt"
+Start-Process build\sim\KT_KickEM.exe -WorkingDirectory build\sim -Wait
+```
+
+Then copy the `tour_*.png` files you want into `docs/manual/img/`.

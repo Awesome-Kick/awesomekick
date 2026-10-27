@@ -496,7 +496,8 @@ namespace kick_ui
     {
         static int lastpadPressed = -1;
 
-        if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) )
+        // COPY and ERASE act once, on press (releases also arrive here).
+        if( contracts::DclContractsHelper::isButtonMessage( f_HwMsg ) && contracts::DclContractsHelper::getButtonState( f_HwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED )
         {
             int btnNum = contracts::DclContractsHelper::getButtonCode( f_HwMsg );
             if( btnNum == contracts::DeviceControlContracts::BtnLedSequence::EN_COPY )

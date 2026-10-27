@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <THEME name="Default">
-	<FONT _0="Myriad Pro Regular.ttf"/>
+	<FONT _0="SourceSans3-Regular.ttf"/>
 	<DEFAULT _0="0x00"/>
 	<TITLE _1="0xffFFB608" _2="0xffFFFFFF" _3="0xffB2B2B2"/>
 	<TEXT _0="0xff000000" _1="0xffFFFFFF" _2="0xffFFB608" _3="0xffB2B2B2" _4="0xff1B1B1B"/>

@@ -15,7 +15,6 @@
 
 namespace Controls
 {
-    std::atomic<bool> shiftBtnState{ false };
     std::atomic<bool> halfLevelState{ false };
 
     ///
@@ -245,7 +244,7 @@ namespace Controls
                         {
                             DBG( "Button state = " << contracts::DclContractsHelper::getButtonState( rxMsg ) );
                             if( ( contracts::DeviceControlContracts::EN_SHIFT == contracts::DclContractsHelper::getButtonCode( rxMsg ) ) )
-                                Controls::shiftBtnState.store( contracts::DclContractsHelper::getButtonState( rxMsg ) );
+                                contracts::shiftBtnState.store( contracts::DclContractsHelper::getButtonState( rxMsg ) );
                         }
                         // juce::String log;
                         // log += "Cmd:" + juce::String( rxMsg.pktCmd ) + " " + "type:" + juce::String( rxMsg.pktType );
@@ -324,7 +323,7 @@ namespace Controls
 
                     if( contracts::DclContractsHelper::isButtonMessage( rxMsg ) && rxMsg.data.size() > 1
                         && contracts::DeviceControlContracts::EN_SHIFT == contracts::DclContractsHelper::getButtonCode( rxMsg ) )
-                        Controls::shiftBtnState.store( contracts::DclContractsHelper::getButtonState( rxMsg ) );
+                        contracts::shiftBtnState.store( contracts::DclContractsHelper::getButtonState( rxMsg ) );
 
                     Controls::InputEvents::dispatchHardwareEvent( rxMsg );
                 } );

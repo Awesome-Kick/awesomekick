@@ -25,6 +25,10 @@
 juce::File getAppDirs( DirType T )
 {
     auto seprator = juce::File::getSeparatorString();
+    // KICK_PREFS_DIR=<folder> keeps preferences elsewhere (used by the simulator self-tests).
+    if( T == MTPrefs )
+        if( auto dir = juce::SystemStats::getEnvironmentVariable( "KICK_PREFS_DIR", {} ); dir.isNotEmpty() )
+            return juce::File( dir ).getFullPathName() + seprator;
 #if defined( _WIN32 ) || defined( _WIN64 )
     auto rootP = juce::File::getSpecialLocation( juce::File::currentApplicationFile ).getParentDirectory().getFullPathName() + seprator;
     if( T == MTAssets )

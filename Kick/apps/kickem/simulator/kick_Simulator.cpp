@@ -110,6 +110,11 @@ namespace sim
             startAudioSettingsTest();
             return;
         }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "tour" )
+        {
+            startTourTest();
+            return;
+        }
 
         wait( 4 );
         note( "jog ENTER (load selected project)" );
@@ -190,11 +195,12 @@ namespace sim
         // so loading the first project in the list would modify the user's own projects.
         s.push_back( [log] {
             auto exeDir  = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            // The engine opens <folder>/<folder name>.kickPrj.
             auto source  = exeDir.getChildFile( "templates/Template 01/Template 01.kickPrj" );
-            auto scratch = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_selftest/SelfTest.kickPrj" );
+            auto scratch = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_selftest/SelfTest" );
             scratch.getParentDirectory().deleteRecursively();
-            scratch.getParentDirectory().createDirectory();
-            const bool ok = source.copyFileTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            scratch.createDirectory();
+            const bool ok = source.copyFileTo( scratch.getChildFile( "SelfTest.kickPrj" ) ) && mt::getAudioInterface().loadProject( scratch );
             log( "loaded scratch project " + scratch.getFullPathName() + ( ok ? "" : " (FAILED)" ) );
         } );
         wait( 8 );
@@ -303,6 +309,149 @@ namespace sim
                 log( "snapshot " + file.getFullPathName() );
             }
         } );
+        s.push_back( [log] { log( "done" ); } );
+        wait( 2 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startTourTest()
+    {
+        // KICKEM_SELFTEST=tour: load a scratch copy of a kit (KICKEM_TOUR_PROJECT=<project name>,
+        // default "Vintage Soul Kit"), then press every panel button and its SHIFT function from
+        // the main screen. Each stop logs the screen the app reports and, with KICKEM_SHOT, saves a snapshot.
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  screenName = []() -> juce::String {
+            static const char* names[] = { "HomeOptions", "HomeListView", "HomeGridView", "HomeSequencerView", "HomeXYView", "HomePreferencesView",
+                                           "HomePreferences", "MenuSampleEdit", "MenuProgramEdit", "MenuSampler", "MenuLooper", "MenuPadMute",
+                                           "MenuTrackMute", "MenuPadMixer", "MenuChannelMixer", "MenuKnobEdit", "MenuListEdit", "MenuPadPerform",
+                                           "MenuMidiControl", "MenuFileBrowser", "MenuNextSequence", "MenuSong", "MenuColorEdit", "MenuAssignSample",
+                                           "RecentProject", "EditProgram", "SWUpdateView", "SWUpdateWindow", "ProcessEdit", "CVClib",
+                                           "SystemResources", "Inserts", "Temp" };
+            const int i = (int)kick_ui::KickHome::Instance().getCurrentScreen() - (int)kick_ui::Screen::HomeOptions;
+            return i >= 0 && i < (int)std::size( names ) ? juce::String( names[i] ) : juce::String( i + (int)kick_ui::Screen::HomeOptions );
+        };
+        auto shot = [&s, this, log]( juce::String name ) {
+            s.push_back( [this, log, name] {
+                const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+                if( dir.isEmpty() )
+                    return;
+                auto file = juce::File( dir ).getChildFile( name + ".png" );
+                file.deleteFile();
+                if( auto out = file.createOutputStream() )
+                    juce::PNGImageFormat().writeImageToStream( screen.createComponentSnapshot( screen.getLocalBounds() ), *out );
+            } );
+        };
+        auto press = [&s, this]( int code, bool shifted ) {
+            s.push_back( [this, code, shifted] {
+                if( auto* b = findButton( code ) )
+                    b->press( true, shifted );
+            } );
+            s.push_back( [this, code] {
+                if( auto* b = findButton( code ) )
+                    b->press( false );
+            } );
+        };
+        auto visit = [&]( juce::String label, int code, bool shifted ) {
+            s.push_back( [log, label] { log( "press " + label ); } );
+            press( code, shifted );
+            wait( 4 );
+            s.push_back( [log, label, screenName] { log( "  " + label + " -> screen " + screenName() ); } );
+            shot( "tour_" + label.replace( " ", "_" ).replace( "/", "_" ) );
+            // Poke the screen's controls: every Q-link, the jog and a pad. Preferences are global
+            // (not part of the scratch project), so leave that screen alone.
+            if( label != "PREFS" )
+            {
+                for( int q = 0; q < 4; ++q )
+                {
+                    s.push_back( [this, q] { qlinks[(size_t)q]->turn( 1 ); } );
+                    s.push_back( [this, q] { qlinks[(size_t)q]->turn( -1 ); } );
+                }
+                s.push_back( [this] { mainControl.getJog().turn( 1 ); } );
+                s.push_back( [this] { mainControl.getJog().turn( -1 ); } );
+                s.push_back( [this] { pads.getPad( 0 ).hit( true, 100 ); } );
+                s.push_back( [this] { pads.getPad( 0 ).hit( false ); } );
+                s.push_back( [log, label, screenName] { log( "  " + label + " controls ok, screen " + screenName() ); } );
+            }
+            // Back to the main screen for the next stop.
+            press( DCC::EN_MAINMODE, false );
+            wait( 3 );
+        };
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto name   = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "Vintage Soul Kit" );
+            auto source = exeDir.getChildFile( "projects" ).getChildFile( name );
+            if( !source.isDirectory() )
+                source = exeDir.getChildFile( "templates/Template 01" );
+            // The engine opens <folder>/<folder name>.kickPrj, so keep the project's folder name.
+            auto root = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_tour" );
+            root.deleteRecursively();
+            auto       scratch = root.getChildFile( source.getFileName() );
+            const bool ok      = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            auto&      ae      = mt::getAudioInterface();
+            log( "loaded scratch copy of " + source.getFileName() + ( ok ? "" : " (FAILED)" ) + ": " + juce::String( ae.getNumSequences() ) + " sequence(s), "
+                 + juce::String( ae.getNumPrograms() ) + " program(s)" );
+        } );
+        wait( 8 );
+        press( DCC::EN_MAINMODE, false );
+        wait( 3 );
+        s.push_back( [log, screenName] {
+            auto& ae = mt::getAudioInterface();
+            log( "main screen = " + screenName() + ", sequences " + juce::String( ae.getNumSequences() ) );
+        } );
+        shot( "tour_MAIN" );
+
+        // Transport from the main screen.
+        s.push_back( [log] { log( "press PLAY" ); } );
+        press( DCC::EN_PLAY, false );
+        wait( 5 );
+        s.push_back( [log] { log( juce::String( "  playing = " ) + ( mt::getAudioInterface().isSequencePlaying() ? "yes" : "no" ) ); } );
+        shot( "tour_PLAYING" );
+        s.push_back( [log] { log( "press STOP" ); } );
+        press( DCC::EN_STOP, false );
+        wait( 2 );
+        s.push_back( [log] { log( juce::String( "  playing = " ) + ( mt::getAudioInterface().isSequencePlaying() ? "yes" : "no" ) ); } );
+
+        struct Stop
+        {
+            const char* label;
+            int         code;
+            bool        shifted;
+        };
+        const Stop stops[] = {
+            { "GRID", DCC::EN_MAINMODE, true },          { "BROWSE", DCC::EN_BROWSE, false },
+            { "TRACK MIX", DCC::EN_TRACK_MIX, false },   { "PAD MIX", DCC::EN_TRACK_MIX, true },
+            { "TRACK MUTE", DCC::EN_TRACK_MUTE, false }, { "PAD MUTE", DCC::EN_TRACK_MUTE, true },
+            { "NEXT SEQ", DCC::EN_NEXT_SEQ, false },     { "FX", DCC::EN_NEXT_SEQ, true },
+            { "STEP SEQ", DCC::EN_STEP_SEQ, false },     { "AUTOMATION", DCC::EN_STEP_SEQ, true },
+            { "TAP TEMPO", DCC::EN_TAP_TEMPO, false },   { "MASTER", DCC::EN_TAP_TEMPO, true },
+            { "NOTE REPEAT", DCC::EN_NOTE_REPEAT, false }, { "LATCH", DCC::EN_NOTE_REPEAT, true },
+            { "TC", DCC::EN_TC, false },                 { "ON-OFF", DCC::EN_TC, true },
+            { "SAMPLER", DCC::EN_SAMPLER, false },       { "LOOPER", DCC::EN_SAMPLER, true },
+            { "SAMPLE EDIT", DCC::EN_SAMPLE_EDIT, false }, { "LINK EDIT", DCC::EN_SAMPLE_EDIT, true },
+            { "PROGRAM EDIT", DCC::EN_PROG_EDIT, false }, { "MIDI CONTROL", DCC::EN_PROG_EDIT, true },
+            { "MENU", DCC::EN_MENU, false },             { "PREFS", DCC::EN_MENU, true },
+            { "FULL LEVEL", DCC::EN_FULL_LEVEL, false }, { "HALF LEVEL", DCC::EN_FULL_LEVEL, true },
+            { "16 LEVELS", DCC::EN_16LEVELS, false },    { "NOTES", DCC::EN_16LEVELS, true },
+            { "COPY", DCC::EN_COPY, false },             { "LINK", DCC::EN_LINK, false },
+            { "REC", DCC::EN_RECORD, false },            { "OVERDUB", DCC::EN_OVERDUB, false },
+            { "PLAY START", DCC::EN_PLAYSTART, false },  { "STOP", DCC::EN_STOP, false },
+        };
+        // KICKEM_TOUR_FROM=<label> starts the button tour at that stop.
+        auto from    = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_FROM", {} );
+        bool started = from.isEmpty();
+        for( const auto& stop : stops )
+        {
+            started = started || from == stop.label;
+            if( started )
+                visit( stop.label, stop.code, stop.shifted );
+        }
+
         s.push_back( [log] { log( "done" ); } );
         wait( 2 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
