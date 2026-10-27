@@ -511,6 +511,7 @@ namespace kick_ui
                 case contracts::DeviceControlContracts::EN_PLAY: ae.setSequencePlay( aeSel.sequence, false, true ); return;
                 case contracts::DeviceControlContracts::EN_PLAYSTART: ae.setSequencePlay( aeSel.sequence, true, true ); return;
                 case contracts::DeviceControlContracts::EN_STOP: ae.setSequencePause(); return;
+                case contracts::DeviceControlContracts::EN_RECORD: recorder.pressRecord(); return; // same as the on-screen record button
             }
         }
     }

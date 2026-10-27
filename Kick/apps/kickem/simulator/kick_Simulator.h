@@ -41,6 +41,10 @@ namespace sim
         void startPopupTest();
         /// KICKEM_SELFTEST=picker: switch the track to a new Plugin program through its program picker (scaled mouse click included).
         void startPickerTest();
+        /// KICKEM_SELFTEST=resources: play a kit with System Resources open, log its CPU / DSP / RAM readings.
+        void startResourcesTest();
+        /// KICKEM_SELFTEST=record: REC, play pads into the sequence, STOP; check the notes, then undo the take.
+        void startRecordTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };

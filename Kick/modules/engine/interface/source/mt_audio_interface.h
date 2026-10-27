@@ -458,6 +458,12 @@ namespace mt
         int addLiveMidiNote( const int Program, const int Note, const int Velocity );
         int stopLiveMidiNote( const int Program, const int Note );
 
+        // Live recording: while on and the sequence plays, notes sent with addLiveMidiMsg (pads,
+        // MIDI in) are written into their track, snapped to the sequence's TIME DIV. Each take is
+        // one undo step. Turning it off, or stopping / pausing, ends the take.
+        void setSequenceRecording( bool Record );
+        bool isSequenceRecording() const noexcept { return seqRecording; }
+
         // Asset Manager...
         int getNumFolders();
         int getNumFiles();
@@ -602,6 +608,19 @@ namespace mt
     private:
         std::unique_ptr<MTAudioManager> manager;
         MTPadColors                     keyGroupPadColour;
+
+        // Live recording (message thread).
+        struct RecordingNote
+        {
+            MTSelected   target{};
+            unsigned int start{ 0 };
+            int          velocity{ 0 };
+            bool         held{ false };
+        };
+        bool                         seqRecording{ false };
+        std::array<RecordingNote, 128> recordingNotes{};
+        void recordLiveMidiMsg( const MTSelected& Selection, const juce::MidiMessage& Msg );
+        void finishRecordedNote( int Note );
     }; // Class MTAudioInterface
 
     /// @brief This function returns global audio interface.

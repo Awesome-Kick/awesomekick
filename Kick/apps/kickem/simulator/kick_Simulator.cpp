@@ -125,6 +125,16 @@ namespace sim
             startPickerTest();
             return;
         }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "resources" )
+        {
+            startResourcesTest();
+            return;
+        }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "record" )
+        {
+            startRecordTest();
+            return;
+        }
 
         wait( 4 );
         note( "jog ENTER (load selected project)" );
@@ -672,6 +682,211 @@ namespace sim
             auto* prog = ae.getProgramDataForTrack( ae.getSelectedSequence(), ae.getSelectedTrack() );
             log( "track now plays " + ( prog ? prog->name.get() + " (" + mt::toString( prog->type.get() ) + ")" : juce::String( "nothing" ) ) );
         } );
+        s.push_back( [log] { log( "done" ); } );
+        wait( 1 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startResourcesTest()
+    {
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source = exeDir.getChildFile( "projects/Vintage Soul Kit" );
+            auto root   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_resources" );
+            root.deleteRecursively();
+            auto       scratch = root.getChildFile( source.getFileName() );
+            const bool ok      = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            log( juce::String( "loaded scratch kit" ) + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
+        click( DCC::EN_MAINMODE );
+        wait( 3 );
+        click( DCC::EN_PLAY );
+        wait( 2 );
+        // GRID (SHIFT + MAIN): its header has the chip button; Main's top bar doesn't.
+        s.push_back( [this] { if( auto* b = findButton( DCC::EN_MAINMODE ) ) b->press( true, true ); } );
+        s.push_back( [this] { if( auto* b = findButton( DCC::EN_MAINMODE ) ) b->press( false ); } );
+        wait( 3 );
+        s.push_back( [this, log] {
+            // Open the page the way the header's chip button does.
+            std::function<ui::KickImageButton*( juce::Component& )> find = [&find]( juce::Component& c ) -> ui::KickImageButton* {
+                if( auto* b = dynamic_cast<ui::KickImageButton*>( &c ); b && b->getName() == "Resources" && b->isShowing() )
+                    return b;
+                for( auto* child : c.getChildren() )
+                    if( auto* hit = find( *child ) )
+                        return hit;
+                return nullptr;
+            };
+            if( auto* b = find( screen ) )
+            {
+                log( "opening System Resources" );
+                b->triggerClick();
+            }
+            else
+                log( "Resources button not found" );
+        } );
+        // The page refreshes once a second; let it take a few readings while the kit plays.
+        wait( 10 );
+        s.push_back( [this, log] {
+            std::function<void( juce::Component& )> dump = [&]( juce::Component& c ) {
+                if( auto* sl = dynamic_cast<ui::KickSlider*>( &c ); sl && sl->isShowing() )
+                    log( "  " + sl->getName() + " = " + juce::String( sl->getValue(), 1 ) + " %" );
+                for( auto* child : c.getChildren() )
+                    dump( *child );
+            };
+            if( auto* modal = juce::Component::getCurrentlyModalComponent() )
+                dump( *modal );
+            log( juce::String( "playing = " ) + ( mt::getAudioInterface().isSequencePlaying() ? "yes" : "no" ) );
+            const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+            if( dir.isNotEmpty() )
+                if( auto out = juce::File( dir ).getChildFile( "system_resources.png" ).createOutputStream() )
+                    juce::PNGImageFormat().writeImageToStream( screen.createComponentSnapshot( screen.getLocalBounds() ), *out );
+        } );
+        // Leave time for an outside reading of this process before quitting.
+        wait( 8 );
+        click( DCC::EN_STOP );
+        s.push_back( [] { juce::Component::getCurrentlyModalComponent() ? juce::Component::getCurrentlyModalComponent()->exitModalState( 0 ) : void(); } );
+        s.push_back( [log] { log( "done" ); } );
+        wait( 1 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startRecordTest()
+    {
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        // Starts of the selected track's notes on Note.
+        auto starts = []( int Note ) {
+            auto&                    ae = mt::getAudioInterface();
+            std::vector<mt::MTNote>  notes;
+            std::vector<int>         result;
+            ae.getNotesInRange( ae.getSelected(), notes, mt::NotesInRange( Note, Note ) );
+            for( auto& n : notes )
+                result.push_back( n.start.get() );
+            std::sort( result.begin(), result.end() );
+            return result;
+        };
+        static std::vector<int> before; // shared between steps
+        constexpr int           pad  = 2; // bank A pad 3 = note 2
+        constexpr int           note = 2;
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source = exeDir.getChildFile( "projects/Trap Kit" );
+            auto root   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_record" );
+            root.deleteRecursively();
+            auto       scratch = root.getChildFile( source.getFileName() );
+            const bool ok      = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            log( juce::String( "loaded scratch Trap Kit" ) + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
+        click( DCC::EN_MAINMODE );
+        wait( 3 );
+        s.push_back( [log, starts] {
+            auto& ae = mt::getAudioInterface();
+            before   = starts( note );
+            auto* tm = ae.getTempoMgr( ae.getSelectedSequence() );
+            log( "note " + juce::String( note ) + " has " + juce::String( (int)before.size() ) + " events before recording; grid "
+                 + juce::String( tm ? tm->getTicksPerQuantization() : 0 ) + " ticks, " + juce::String( tm ? tm->getBPM() : 0 ) + " BPM" );
+        } );
+        s.push_back( [log] { log( "press REC" ); } );
+        click( DCC::EN_RECORD );
+        wait( 1 );
+        s.push_back( [this, log] {
+            auto& ae = mt::getAudioInterface();
+            log( juce::String( "recording = " ) + ( ae.isSequenceRecording() ? "yes" : "no" ) + ", playing = " + ( ae.isSequencePlaying() ? "yes" : "no" )
+                 + ", REC LED = " + ( findButton( DCC::EN_RECORD ) && findButton( DCC::EN_RECORD )->isLedOn() ? "on" : "off" ) );
+        } );
+        // Five hits, a little under a second apart (timer steps are 400 ms), held ~200-400 ms.
+        for( int i = 0; i < 5; ++i )
+        {
+            s.push_back( [this] { pads.getPad( pad ).hit( true, 90 + 5 * 0 ); } );
+            s.push_back( [this] { pads.getPad( pad ).hit( false ); } );
+        }
+        wait( 2 );
+        s.push_back( [log] { log( "press STOP" ); } );
+        click( DCC::EN_STOP );
+        wait( 2 );
+        s.push_back( [this, log, starts] {
+            auto&      ae    = mt::getAudioInterface();
+            const auto after = starts( note );
+            auto*      tm    = ae.getTempoMgr( ae.getSelectedSequence() );
+            const int  grid  = tm ? juce::jmax( 1, tm->getTicksPerQuantization() ) : 1;
+            juce::StringArray added;
+            int               offGrid = 0;
+            for( auto t : after )
+                if( std::find( before.begin(), before.end(), t ) == before.end() )
+                {
+                    added.add( juce::String( t ) );
+                    offGrid += ( t % grid ) != 0;
+                }
+            log( "recording = " + juce::String( ae.isSequenceRecording() ? "yes" : "no" ) + ", REC LED = "
+                 + ( findButton( DCC::EN_RECORD ) && findButton( DCC::EN_RECORD )->isLedOn() ? "on" : "off" ) );
+            log( "note " + juce::String( note ) + " now has " + juce::String( (int)after.size() ) + " events; new at ticks [" + added.joinIntoString( ", " ) + "], "
+                 + juce::String( offGrid ) + " off the grid" );
+            ae.getUndoManager().undo();
+            log( "after one undo: " + juce::String( (int)starts( note ).size() ) + " events (expected " + juce::String( (int)before.size() ) + ")" );
+        } );
+
+        // Sampler: panel REC arms, recording starts when the input crosses the threshold, REC again stops
+        // (or cancels while still waiting for signal).
+        auto inputLevel = [] {
+            float peak = -100.f;
+            for( auto& m : mt::getAudioInterface().getRecorderInputMeter() )
+                peak = juce::jmax( peak, m.peak );
+            return peak;
+        };
+        auto samplerState = [log, inputLevel]( juce::String when ) {
+            auto& ae = mt::getAudioInterface();
+            log( "sampler " + when + ": running = " + juce::String( ae.isRecorderRunning() ? "yes" : "no" ) + ", progress " + juce::String( ae.getRecorderProgress(), 3 )
+                 + ", input peak " + juce::String( inputLevel(), 1 ) + " dB, threshold " + juce::String( ae.getRecorderThresholdDB(), 1 ) + " dB" );
+        };
+        s.push_back( [log] { log( "press SAMPLER, then REC" ); } );
+        click( DCC::EN_SAMPLER );
+        wait( 3 );
+        click( DCC::EN_RECORD );
+        wait( 5 );
+        s.push_back( [samplerState] { samplerState( "2 s after REC" ); } );
+        s.push_back( [log, inputLevel] {
+            auto& ae = mt::getAudioInterface();
+            if( ae.getRecorderProgress() <= 0.0f )
+                log( "nothing above the threshold yet; REC again should cancel the arm" );
+        } );
+        click( DCC::EN_RECORD );
+        wait( 2 );
+        s.push_back( [samplerState] { samplerState( "after second REC" ); } );
+        // If the first take never triggered (quiet room), retry with the threshold at its minimum.
+        s.push_back( [log] {
+            auto& ae = mt::getAudioInterface();
+            if( ae.getRecorderProgress() <= 0.0f )
+            {
+                log( "retrying with the threshold at -100 dB" );
+                ae.setRecorderThresholdDB( -100.f );
+            }
+        } );
+        click( DCC::EN_RECORD );
+        wait( 5 );
+        s.push_back( [samplerState] { samplerState( "2 s into retry" ); } );
+        click( DCC::EN_RECORD );
+        wait( 2 );
+        s.push_back( [samplerState] { samplerState( "stopped" ); } );
         s.push_back( [log] { log( "done" ); } );
         wait( 1 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );

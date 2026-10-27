@@ -444,6 +444,19 @@ namespace kick_ui
                             ae.saveProject();
                             break;
 
+                        // Record pads into the sequence (the Sampler and Looper use REC themselves).
+                        // Starts playback from the top if stopped; press again, or STOP, to finish.
+                        case contracts::DeviceControlContracts::EN_RECORD:
+                        case contracts::DeviceControlContracts::EN_OVERDUB:
+                            if( getCurrentScreen() != Screen::MenuLooper && getCurrentScreen() != Screen::MenuSampler )
+                            {
+                                const bool record = !ae.isSequenceRecording();
+                                ae.setSequenceRecording( record );
+                                if( record && !ae.isSequencePlaying() )
+                                    ae.setSequencePlay( ae.getSelectedSequence(), true, true );
+                            }
+                            break;
+
                         default: break;
                     }
                 }
@@ -480,6 +493,15 @@ namespace kick_ui
                 log += " register handle command";
                 juce::Logger::writeToLog( log );
                 getScreen( getCurrentScreen() )->handleCommand( f_HwMsg );
+            }
+
+            // REC lights while pads are being recorded (STOP on any screen ends it).
+            static bool recordLed = false;
+            if( ae.isSequenceRecording() != recordLed )
+            {
+                recordLed = ae.isSequenceRecording();
+                contracts::DclSignals::sendCommandToDcl( recordLed ? contracts::DclContractsHelper::setLEDONMessage( contracts::DeviceControlContracts::EN_RECORD )
+                                                                   : contracts::DclContractsHelper::setLEDOFFMessage( contracts::DeviceControlContracts::EN_RECORD ) );
             }
         }
         else if( !ui::RecentProject::isProjectLoading && contracts::DclContractsHelper::isCenterKnobMessage( f_HwMsg ) )

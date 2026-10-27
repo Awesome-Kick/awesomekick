@@ -36,6 +36,7 @@ Most of the firmware is **unfinished upstream**. MUSIC Tribe released it as a wo
 6. [Playing the pads](#6-playing-the-pads)
 7. [Grid view](#7-grid-view)
 8. [Step sequencer](#8-step-sequencer)
+   - [8a. Recording pads into a sequence](#8a-recording-pads-into-a-sequence-)
 9. [List edit, Next Sequence and Song](#9-list-edit-next-sequence-and-song)
 10. [Programs and Program Edit](#10-programs-and-program-edit)
 11. [Sampling: Sampler, Looper, Sample Edit, Browser](#11-sampling-sampler-looper-sample-edit-browser)
@@ -118,7 +119,7 @@ On the panel, the label underneath each button is its **SHIFT** function. The to
 | **− / +** | | Step the focused value down or up | 🔍 |
 | **Banks A–D** | **E–H** | Pick the pad bank (16 pads × 8 banks = 128 notes) | ✅ |
 | **PLAY / PLAY START / STOP** | | Transport (see below) | ✅ |
-| **REC / OVERDUB** | | Looper only. There is no sequence recording yet. | ⚠️ |
+| **REC / OVERDUB** | | Record pads into the sequence (section 8a). On the Sampler and Looper screens, they record audio instead. | ✅ |
 | **Jog wheel** | push = ENTER | Move the selection / change the focused value; push to confirm or open | ✅ |
 | **Q-links P1–P4** | | Edit whatever the current screen maps to them | ✅ |
 | **Touch slider** | | Sends 0–100 to the focused control | 🔍 |
@@ -460,6 +461,35 @@ When you let go of a pad, the note it started is always the one that stops. This
   - **Presets:** Ramp, Triangle, Pulse, Flip, Mirror, Inverse. Press a preset again to cycle through its variants.
 
 If the project has no tracks, the screen says so. Create a track first (section 5).
+
+---
+
+## 8a. Recording pads into a sequence ✅
+
+Recording works on any screen except the Sampler and Looper, which use REC for audio:
+
+1. **Select the track** you want to record into (status bar, or the Track tab in Main).
+2. **Set TIME DIV** in the Grid (1/16 by default). Recorded hits snap to it.
+3. **Press REC** (or OVERDUB). The REC light comes on. If the sequence was stopped, it starts from the top.
+4. **Play the pads.** Each hit is written into the track at the nearest TIME DIV step.
+   - The note's length is how long you held the pad.
+   - Recording loops with the track, so you can keep adding parts on each pass.
+5. **Press REC again, or STOP,** to finish the take. The light goes off.
+
+**How takes are kept:**
+- Takes always add notes. Nothing already in the track is erased.
+- **Undo** removes the whole take in one step.
+
+**Notes and limits:**
+- A hit that snaps forward to a step the playhead hasn't reached yet is written just after the playhead passes. That way it doesn't sound twice.
+- Instrument (Plugin) tracks record the notes from their pad layout, and MIDI coming in on a track is recorded the same way.
+- There's no count-in or swing yet.
+
+The `record` self-test checks this:
+- REC turns the light on and starts playback.
+- Five pad hits become five new notes, all on the grid.
+- STOP turns the light off.
+- One undo removes the take.
 
 ---
 
@@ -1123,8 +1153,12 @@ Two other screens are reached from elsewhere:
 - **Software update:** opened from Info → Firmware Update.
   - Looks for an update image on a PC over USB, a USB drive or an SD card.
   - Shows each image's version, checks the image, then installs it with a progress screen.
-- **System Resources:** opened from the chip icon in the screen header.
-  - Shows CPU, RAM, internal storage, SD card and USB use.
+- **System Resources:** opened from the chip icon in the header of most screens (not Main or Menu). It refreshes once a second.
+  - **CPU:** the bar is the whole machine; the title shows the KICK app's own share.
+  - **AUDIO DSP:** how much of each audio block the engine needs, with the buffer size and sample rate. Near 100 % means dropouts. This is the number to watch when adding instruments and effects.
+  - **RAM:** the bar is the whole machine (without reclaimable cache); the title shows the app's own memory.
+  - **Storage:** internal, SD card and USB use. On a PC, *Internal* is the drive the app runs from, and SD/USB are hidden.
+  - On a PC these figures describe your computer, not KICK hardware. The device build reads the same figures from Linux.
   - *Purge All* and *Purge Unused* do nothing yet.
 
 ---
@@ -1150,7 +1184,7 @@ Two other screens are reached from elsewhere:
 | Area | Missing |
 |---|---|
 | Buttons | TAP TEMPO, MASTER, NOTE REPEAT, LATCH, AUTOMATION, 16 LEVELS, TC, ON/OFF and BACK do nothing. LINK is a stub. |
-| Recording | No step or live recording into sequences. REC and OVERDUB only work in the Looper. |
+| Recording | No count-in, swing or replace mode for pad recording (takes always add). Note Repeat isn't implemented. |
 | Timing | No swing or timing correction. Time signature can't be changed. The sequencer clock is 96 PPQN, timed on a background thread, so notes land on audio-block boundaries (10 ms) rather than sample-accurately. |
 | FX | XY FX isn't connected to audio. |
 | Sample Edit | Pitch shift, time stretch, bit reduce. BPM detect, match and to-sequence. Repeat and X-fade. Assign options. |
@@ -1183,6 +1217,11 @@ Two other screens are reached from elsewhere:
 - **Track Mixer:** turning a Q-link on the *Output* or *Midi* view no longer crashes. The two views were swapped in the code.
 - **Grid:** COPY and ERASE now act once per press; they used to fire again on release.
 - **Dialogs and notifications in the simulator:** they open over the KICK screen, scaled with the panel. They used to cover the whole simulator window at monitor size, anchored to its top-left corner. The panel also stays usable while a dialog is open.
+- **Silent programs after reloading a project** (AudIO). Removing an object from the audio graph left it registered as an input of every bus it fed, keyed by the address of its bookkeeping record. The next object to reuse that address was treated as "already connected" and never wired to its output, so it was silent. The bus also kept reading the freed object's output buffer. Objects are now disconnected from all buses when removed. A stress test went from 16–17 silent reloads in 30 to 0 in 100.
+- **Audio object IDs** (AudIO): the ID counter was a `static` in a header, so each module counted on its own and objects could share an ID. It's now one counter for the whole program.
+- **Pad recording:** REC and OVERDUB record pads into the selected track, snapped to TIME DIV, one undo step per take (new).
+- **Sampler:** panel REC works on the Sampler screen. Pressing record while it waits for signal now cancels the arm; before, nothing responded.
+- **System Resources** shows real figures. Before, on a PC, RAM was a fixed 50 % and CPU a looping counter. There is also a new AUDIO DSP load meter and the app's own CPU and memory. On the device, RAM no longer counts disk cache as used, and CPU shows current load instead of the average since boot.
 - **Lists and tables** (Browser, program picker, mixers and others) now pick the row under the pointer. Before, in the scaled simulator or a windowed build, clicks landed on a row higher up. Q-links over lists also map to the right rows now.
 - **Select Program** offers **+ New ‹type›** and keeps the chosen program's type. Before, types with no programs couldn't be picked, and the type came back as *Unknown*.
 - **SHIFT + pad** and **SHIFT + Q-link** combinations now see the SHIFT key. Before, the UI read a state that nothing ever set. *Fixed in code, but not yet driven by a test.*
@@ -1205,6 +1244,7 @@ build/win/KickEngineTest.exe
 
 - **What it covers:** about 112 headless checks: the recorder, looper, filter, envelopes, Basic Synth, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
+- **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
 ### Simulator self-tests
 
@@ -1216,6 +1256,8 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
+| `record` | Records pad hits into Trap Kit and checks the grid snap, the REC light and undo. Then arms, records and stops the Sampler from the panel. |
+| `resources` | Plays a kit with System Resources open and logs its CPU, DSP, RAM and storage readings. |
 | `picker` | Switches the track to a new Plugin program through its Select Program dialog. Includes a click on the Plugin row in the scaled simulator. |
 | `popup` | Opens a list dialog and reports where it lands, what a click on it hits, and whether the panel still works. Then picks an option with the jog wheel and ENTER. |
 

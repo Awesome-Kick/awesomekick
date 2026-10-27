@@ -41,6 +41,11 @@ namespace mt
         juce::ValueTree& getVT() { return vTree; };
         juce::ValueTree& getState() { return vTree; };
 
+        /// The track's playhead and loop length in ticks. The sequencer thread advances the
+        /// position; read elsewhere it is good to within a tick.
+        unsigned int getTickPosition() const noexcept { return tickPos; }
+        unsigned int getLengthInTicks() const noexcept { return lengthInTicks.load(); }
+
         // Index API's
         void       setIndex( int Index ) { MTITrackData::index = Index; };
         inline int getIndex() const { return MTITrackData::index; }

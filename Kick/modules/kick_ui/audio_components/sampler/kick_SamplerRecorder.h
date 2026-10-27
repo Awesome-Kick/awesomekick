@@ -70,6 +70,9 @@ namespace kick_ui
         RecordChannels getRecordChannels();
 
         void  setRecordMode( RecordMode newMode );
+        RecordMode getRecordMode() const { return mode; }
+        /// The record button: arm, stop, or (while armed and waiting for signal) cancel.
+        void pressRecord();
         void  setMonitorOn( bool on );
         float getRecordThresholdDB();
         void  setRecordThresholdDB( float threshDb );

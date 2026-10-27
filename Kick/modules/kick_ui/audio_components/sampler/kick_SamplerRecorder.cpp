@@ -27,14 +27,7 @@ namespace kick_ui
         timerControl.setNumberDisplay( ui::ViewType::withTitleBottom );
 
         formatManager.registerBasicFormats();
-        recordButton.onClick = [&]() {
-            if( RecordMode::recordModeNone == mode )
-                setRecordMode( RecordMode::recordModeRecord );
-            else if( RecordMode::recordModeRecording == mode )
-                setRecordMode( RecordMode::recordModeStopped );
-            else if( RecordMode::recordModeStopped == mode )
-                setRecordMode( RecordMode::recordModeRecord );
-        };
+        recordButton.onClick = [&]() { pressRecord(); };
 
         recorderListner.onRecorderLengthChanged = [&]( double LengthInSeconds ) {
             _recordLength = LengthInSeconds;
@@ -258,6 +251,21 @@ namespace kick_ui
     SamplerRecorder::RecordChannels SamplerRecorder::getRecordChannels()
     {
         return (SamplerRecorder::RecordChannels)ae.getRecorderMode();
+    }
+
+    void SamplerRecorder::pressRecord()
+    {
+        if( RecordMode::recordModeNone == mode )
+            setRecordMode( RecordMode::recordModeRecord );
+        else if( RecordMode::recordModeRecording == mode )
+            setRecordMode( RecordMode::recordModeStopped );
+        else if( RecordMode::recordModeStopped == mode )
+            setRecordMode( RecordMode::recordModeRecord );
+        else if( RecordMode::recordModeRecord == mode ) // armed, nothing above the threshold yet: cancel
+        {
+            stopRecording( true );
+            setRecordMode( RecordMode::recordModeNone );
+        }
     }
 
     void SamplerRecorder::setRecordMode( RecordMode newMode )
