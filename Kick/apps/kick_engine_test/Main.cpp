@@ -124,6 +124,34 @@ namespace
     };
 
     //==============================================================================
+    // Objects are made in different modules (AudIO buses, AudIO_juce recorders, engine
+    // instruments). They must still get distinct IDs: a Design refuses an ID it already holds.
+    void testObjectIds( Results& R )
+    {
+        R.section( "AudIO object IDs" );
+
+        AudIO::Design      design( 2, 2 );
+        std::set<uint32_t> ids;
+        int                made = 0;
+        auto               add  = [&]( uint32_t id ) {
+            ids.insert( id );
+            ++made;
+        };
+        for( int i = 0; i < 32; ++i )
+        {
+            add( design.createBus() );
+            {
+                TestSampleRecorder rec( design );
+                add( rec.getId() );
+            }
+            {
+                mt::InstrumentObject ins( design, "id test" );
+                add( ins.getId() );
+            }
+        }
+        R.check( (int)ids.size() == made, "objects from different modules get distinct IDs", juce::String( (int)ids.size() ) + " distinct of " + juce::String( made ) );
+    }
+
     void testSampleRecorder( Results& R )
     {
         R.section( "SampleRecorder (synthetic input)" );
@@ -961,9 +989,88 @@ namespace
         ai.looperClear();
         R.check( !ai.isLooperRunning() && ai.isLooperEmpty(), "stop and clear" );
     }
-} // namespace
 
 //==============================================================================
+    /// KICK_TEST_RELOAD_CYCLES=N: close and reload one project N times, playing an instrument
+    /// after each load. Hunts the intermittent "silent after reload" bug.
+    void testReloadStress( Results& R, int Cycles )
+    {
+        R.section( "Reload stress (" + juce::String( Cycles ) + " cycles)" );
+
+        auto& ai = mt::getAudioInterface();
+        pump( 1500 );
+        auto& dm = ai.getAudioDeviceManager();
+        if( !R.check( dm.getCurrentAudioDevice() != nullptr, "audio device opened" ) )
+            return;
+        auto meter = dm.getOutputLevelGetter();
+
+        auto dir = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kick_reload_stress" ).getChildFile( "Stress" );
+        dir.getParentDirectory().deleteRecursively();
+        dir.createDirectory();
+
+        if( !R.check( ai.loadProject( dir ), "create the project" ) )
+            return;
+        pump( 500 );
+        if( !ai.getNumSequences() )
+            ai.createSequence();
+        const auto seq  = ai.getSelectedSequence();
+        const auto trk  = ai.createTrack( seq, "Synth" );
+        const auto prog = ai.createProgram( mt::MTProgramType::Plugin, "Stress Synth" );
+        ai.setProgramToTrack( prog, seq, trk );
+        ai.addLiveMidiNote( prog, 60, 110 );
+        const auto first = measureOutput( meter, 400 );
+        ai.stopLiveMidiNote( prog, 60 );
+        measureOutput( meter, 600 );
+        R.check( first > 0.02f, "plays before any reload", "peak " + f3( first ) );
+        R.check( ai.saveProject(), "save" );
+
+        int silent = 0;
+        for( int i = 1; i <= Cycles; ++i )
+        {
+            ai.closeProject();
+            pump( 300 );
+            const bool loaded = ai.loadProject( dir );
+            pump( 800 );
+            const auto pi = ai.getProgramIndexByName( "Stress Synth" );
+            ai.addLiveMidiNote( pi, 60, 110 );
+            // Device output and the program's own output meter (dB) over the note.
+            float peak = 0, progDb = -100.f;
+            for( auto end = juce::Time::getMillisecondCounter() + 400; juce::Time::getMillisecondCounter() < end; )
+            {
+                pump( 5 );
+                peak = juce::jmax( peak, (float)meter->getCurrentLevel() );
+                if( auto* p = ai.getProgram( pi ) )
+                    for( auto& m : p->readOutMeter() )
+                        progDb = juce::jmax( progDb, m.peak );
+            }
+            ai.stopLiveMidiNote( pi, 60 );
+            const auto cpu = dm.getCpuUsage();
+            measureOutput( meter, 600 );
+            if( !loaded || peak < 0.02f )
+            {
+                ++silent;
+                auto* dev = dm.getCurrentAudioDevice();
+                R.note( "cycle " + juce::String( i ) + ": loaded " + juce::String( loaded ? "yes" : "no" ) + ", program index " + juce::String( pi ) + ", peak " + f3( peak )
+                        + ", program meter " + f3( progDb ) + " dB"
+                        + [&] {
+                              auto* ins = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( pi ) );
+                              auto* obj = ins ? ins->getAudioObject() : nullptr;
+                              if( !obj )
+                                  return juce::String( ", no audio object" );
+                              return ", output '" + ins->getOutput() + "', object " + juce::String( obj->getId() ) + " -> " + juce::String( obj->getConnectedTo( 0 ) ) + " / "
+                                     + juce::String( obj->getConnectedTo( 1 ) ) + ", default out " + juce::String( AudIO::DawRouting::getDefaultStereoOutID() );
+                          }()
+                        + ", device playing " + juce::String( dev && dev->isPlaying() ? "yes" : "no" ) + ", callback load " + f3( cpu ) );
+            }
+        }
+        R.check( silent == 0, "every reload is audible", juce::String( silent ) + " silent of " + juce::String( Cycles ) );
+        ai.closeProject();
+        pump( 300 );
+        dir.getParentDirectory().deleteRecursively();
+    }
+
+} // namespace
+
 class KickEngineTestApp : public juce::JUCEApplication
 {
 public:
@@ -996,6 +1103,17 @@ private:
         // The engine owns the AudIO memory pool, so create it before any buffers.
         mt::getAudioInterface();
 
+        if( const auto cycles = juce::SystemStats::getEnvironmentVariable( "KICK_TEST_RELOAD_CYCLES", {} ).getIntValue(); cycles > 0 )
+        {
+            testReloadStress( R, cycles );
+            R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );
+            exeDir.getChildFile( "engine_test_results.txt" ).replaceWithText( R.lines.joinIntoString( "\n" ) );
+            setApplicationReturnValue( R.failed );
+            quit();
+            return;
+        }
+
+        testObjectIds( R );
         testSampleRecorder( R );
         testLooper( R );
         testFilter( R );

@@ -233,6 +233,24 @@ namespace AudIO
                 }
             }
 
+            // Take it out of every bus it feeds, as Design::removeFromBus does. Buses key their
+            // inputs by this meta's address: left behind, the entry made the next object that
+            // happened to get the same address look "already connected", so sendToBus() refused
+            // it (silent programs after a project reload), and the bus kept reading this
+            // object's freed output buffer.
+            for( auto& bus : _buses )
+            {
+                if( bus->getId() == id )
+                    continue;
+                auto [removed, chn] = bus->removeInput( *objMeta );
+                if( removed )
+                    if( auto busMeta = getObjectMeta( bus->getId() ) )
+                    {
+                        objMeta->unpatch( *busMeta, 0, chn );
+                        objMeta->unpatch( *busMeta, 1, chn + 1 );
+                    }
+            }
+
             _dirty.store( true );
             if( _running )
             {

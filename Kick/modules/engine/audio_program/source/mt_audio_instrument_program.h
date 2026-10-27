@@ -43,6 +43,9 @@ namespace mt
         void               enableOutputMetering( bool ) override {}
         const MTMeterData& readOutMeter() const override { return object->readOutMeter(); }
 
+        /// The program's audio object (routing and diagnostics).
+        const InstrumentObject* getAudioObject() const noexcept { return object; }
+
     private:
         void valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property ) override;
 

@@ -3,10 +3,16 @@
 #include "IProcessable.h"
 #include "RampedParameter.h"
 #include "ObjectFactory.h"
+#include <atomic>
 
 namespace AudIO
 {
-    static uint32_t audioObjectId{ 1 };
+    // One counter for the whole program. This used to be 'static', which gives every source
+    // file that includes this header its own counter, so objects made in different modules
+    // (engine programs, AudIO buses, recorders) could get the same ID. A Design keys objects by
+    // ID and refuses a duplicate, so the clashing object was never added: silent programs after
+    // a few project reloads.
+    inline std::atomic<uint32_t> audioObjectId{ 1 };
 
     class Object : public IProcessable
     {
