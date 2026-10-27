@@ -135,6 +135,11 @@ namespace mt
         /// Pop-ups and dialogs...
         ///
 
+        /// Component that pop-ups and notifications are placed in: the 1024x600 KICK screen.
+        /// Until one is set, they go to the active top-level window / the desktop.
+        void             setPopupParent( juce::Component* Parent );
+        juce::Component* getPopupParent();
+
         void showDialog( const juce::String& Title, juce::Component* Comp, std::function<void( int )> Callback,
                          juce::Rectangle<int> bounds   = ui::layout::dialog,
                          juce::Colour backgroundColour = ui::Theme::backgroundColour( 1 ), juce::Colour titleTextColour = ui::Theme::titleColour( 1 ), juce::Colour titleBackgroundColour = ui::Theme::backgroundColour( 2 ) );

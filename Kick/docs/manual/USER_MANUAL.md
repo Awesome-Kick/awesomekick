@@ -137,6 +137,8 @@ The tour confirmed that PLAY starts the loaded kit's beat and STOP stops it.
 ### How a control gets edited
 
 1. **Tap a field** on the touchscreen to give it focus. While a field has focus, the jog wheel, **− / +** and the slider change it.
+   - **Drop-down lists (▼) open on a double-tap.** With a mouse, that's a double-click. You can also focus the list and push the jog wheel (ENTER).
+   - **In an open list,** tap an option, or turn the jog wheel and push ENTER. Dialogs open over the KICK screen; the panel keeps working while one is open.
 2. **When nothing is focused,** the jog wheel and Q-links do the current screen's own job. For example, the jog scrolls lists and the Q-links edit the four parameters shown.
 3. **Custom Q-link assignments:** if **Q-Link Edit** is set to *Custom*, the Q-links follow your custom assignments on every screen instead (section 13).
 
@@ -283,6 +285,12 @@ Each track row has:
 | Meter | |
 
 The **Arm** and **Monitor** buttons don't do anything yet.
+
+**Changing a track's program or type:** tap the program icon on the left of the track row to open **Select Program**.
+
+1. Choose a type on the left.
+2. Pick one of that type's programs, or **+ New ‹type›** to create one (for example *+ New Plugin* for an instrument).
+3. Press **Apply**. The track now plays that program.
 
 **Q-links:** P1 = MIDI channel, P2 = Length, P3 = Level, P4 = Transpose.
 
@@ -1174,6 +1182,9 @@ Two other screens are reached from elsewhere:
 - Leaving **MIDI Control** with a panel button no longer reads past the end of the message.
 - **Track Mixer:** turning a Q-link on the *Output* or *Midi* view no longer crashes. The two views were swapped in the code.
 - **Grid:** COPY and ERASE now act once per press; they used to fire again on release.
+- **Dialogs and notifications in the simulator:** they open over the KICK screen, scaled with the panel. They used to cover the whole simulator window at monitor size, anchored to its top-left corner. The panel also stays usable while a dialog is open.
+- **Lists and tables** (Browser, program picker, mixers and others) now pick the row under the pointer. Before, in the scaled simulator or a windowed build, clicks landed on a row higher up. Q-links over lists also map to the right rows now.
+- **Select Program** offers **+ New ‹type›** and keeps the chosen program's type. Before, types with no programs couldn't be picked, and the type came back as *Unknown*.
 - **SHIFT + pad** and **SHIFT + Q-link** combinations now see the SHIFT key. Before, the UI read a state that nothing ever set. *Fixed in code, but not yet driven by a test.*
 
 **Other:**
@@ -1205,6 +1216,8 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
+| `picker` | Switches the track to a new Plugin program through its Select Program dialog. Includes a click on the Plugin row in the scaled simulator. |
+| `popup` | Opens a list dialog and reports where it lands, what a click on it hits, and whether the panel still works. Then picks an option with the jog wheel and ENTER. |
 
 These environment variables control the self-tests:
 

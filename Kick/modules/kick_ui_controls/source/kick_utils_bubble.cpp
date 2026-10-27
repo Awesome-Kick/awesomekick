@@ -27,7 +27,11 @@ namespace mt
         bubbleNotification()
             : juce::BubbleMessageComponent()
         {
-            addToDesktop( 0 );
+            // On the KICK screen when there is one, so the bubble's position is in screen coordinates.
+            if( auto parent = utils::getPopupParent(); parent && !dynamic_cast<juce::TopLevelWindow*>( parent ) )
+                parent->addChildComponent( this );
+            else
+                addToDesktop( 0 );
             setAllowedPlacement( BubbleMessageComponent::above );
         }
 
@@ -45,7 +49,8 @@ namespace mt
 
         void show( const juce::AttributedString& Str, juce::Rectangle<int> Bounds = ui::layout::statusBar, int TimeInMS = 1500 )
         {
-            showAt( Bounds, Str, TimeInMS );
+            // showNotification() creates a new bubble each time; let it delete itself when done.
+            showAt( Bounds, Str, TimeInMS, true, true );
             setPosition( Bounds.getCentre(), -1 );
         }
 

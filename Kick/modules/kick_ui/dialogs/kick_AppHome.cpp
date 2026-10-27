@@ -136,6 +136,10 @@ namespace kick_ui
     {
         //mt::FocusDebugger::enableFocusDebugger( true );
 
+        // Dialogs and notifications open over this screen, wherever it is shown
+        // (full screen on the device, inset and scaled in the simulator).
+        mt::utils::setPopupParent( this );
+
         // Setup default look and feel.
         setLookAndFeel( ui::KickLooknFeel::getLnf() );
 

@@ -27,15 +27,9 @@ namespace mt
     class fsPopup : public juce::Component
     {
     public:
-        fsPopup()
-        {
-            setOpaque( true );
-
-            auto display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay();
-            auto b       = display->totalArea;
-            setBounds( b ); // Overall component Area.
-            addToDesktop( compPeer::windowIsTemporary | compPeer::windowHasDropShadow );
-        }
+        // Covers the whole of its parent (the KICK screen, see utils::setPopupParent);
+        // getFullScreenModalPopUP() attaches it and sizes it.
+        fsPopup() { setOpaque( true ); }
 
         virtual ~fsPopup() = default;
 
@@ -60,9 +54,11 @@ namespace mt
         {
             image.clear( ui::layout::screen );
 
-            if( auto w = juce::TopLevelWindow::getActiveTopLevelWindow() )
+            // Blurred backdrop of the screen behind us (without this pop-up's previous contents).
+            setVisible( false );
+            if( auto p = getParentComponent() )
             {
-                image = w->createComponentSnapshot( ui::layout::screen, false );
+                image = p->createComponentSnapshot( ui::layout::screen.getIntersection( p->getLocalBounds() ), true );
                 stack_blur<10>( image );
             }
 
@@ -83,6 +79,14 @@ namespace mt
                 if( isCurrentlyModal() )
                     exitModalState( exitCode );
             } );
+        }
+
+        // Modal only within the KICK screen: controls outside it (the simulator's front panel)
+        // keep working while a dialog is open, as the hardware panel does.
+        bool canModalEventBeSentToComponent( const juce::Component* target ) override
+        {
+            auto* parent = getParentComponent();
+            return parent && target && !dynamic_cast<juce::TopLevelWindow*>( parent ) && target != parent && !parent->isParentOf( target );
         }
 
     protected:
@@ -315,19 +319,31 @@ namespace mt
     Type* getFullScreenModalPopUP()
     {
         static std::vector<std::unique_ptr<Type>> _popups;
+
+        // Attach to the KICK screen and cover it, on top of everything else there.
+        auto attach = []( Type& p ) {
+            if( auto parent = utils::getPopupParent() )
+            {
+                if( p.getParentComponent() != parent )
+                    parent->addChildComponent( p );
+                p.setBounds( parent->getLocalBounds().getIntersection( ui::layout::screen ) );
+                p.toFront( false );
+            }
+        };
+
         for( auto& it : _popups )
         {
             if( !it->isInUse.load() )
             {
                 it->isInUse = true;
+                attach( *it );
                 return it.get();
             }
         }
 
         _popups.emplace_back( new Type() );
         auto& p = _popups.back();
-        auto  c = juce::TopLevelWindow::getActiveTopLevelWindow();
-        c->addAndMakeVisible( p.get() );
+        attach( *p );
         return p.get();
     }
 

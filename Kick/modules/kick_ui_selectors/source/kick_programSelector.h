@@ -47,6 +47,10 @@ namespace kick_ui
         mt::MTProgramType                                      getprogramType( int Index );
         std::map<mt::MTProgramType, std::vector<juce::String>> programs;
         void                                                   updateRowSelection( bool basedOnTrackProgram = true );
+        /// If "+ New <type>" was picked, create that program and select it. Call on Apply.
+        void resolveNewProgram();
+        /// The extra list entry offered under each program type.
+        static juce::String newProgramOption( mt::MTProgramType Type ) { return juce::String( "+ New " ) + mt::toString( Type ); }
 
     private:
         bool                      isBasedOnTrackProgram{ true };
@@ -57,7 +61,7 @@ namespace kick_ui
         ui::KickImageButton   image;
         mt::MTAudioInterface& ae{ mt::getAudioInterface() };
         juce::String          selectedProgram{ "" };
-        mt::MTProgramType     selectedType{ mt::MTProgramType::Unknown }, tempType{ mt::MTProgramType::Unknown };
+        mt::MTProgramType     selectedType{ mt::MTProgramType::Unknown };
 
         void paint( juce::Graphics& g ) override;
         void resized() override;

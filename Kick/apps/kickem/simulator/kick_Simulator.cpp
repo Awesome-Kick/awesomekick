@@ -115,6 +115,16 @@ namespace sim
             startTourTest();
             return;
         }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "popup" )
+        {
+            startPopupTest();
+            return;
+        }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "picker" )
+        {
+            startPickerTest();
+            return;
+        }
 
         wait( 4 );
         note( "jog ENTER (load selected project)" );
@@ -456,6 +466,215 @@ namespace sim
         wait( 2 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
 
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startPopupTest()
+    {
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        auto windowShot = [&s, this, log]( juce::String name ) {
+            s.push_back( [this, log, name] {
+                const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+                auto*      top = getTopLevelComponent();
+                if( dir.isEmpty() || !top )
+                    return;
+                auto file = juce::File( dir ).getChildFile( name + ".png" );
+                file.deleteFile();
+                if( auto out = file.createOutputStream() )
+                    juce::PNGImageFormat().writeImageToStream( top->createComponentSnapshot( top->getLocalBounds() ), *out );
+                log( "window snapshot " + file.getFullPathName() );
+            } );
+        };
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source = exeDir.getChildFile( "projects/Vintage Soul Kit" );
+            auto root   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_popup" );
+            root.deleteRecursively();
+            auto scratch = root.getChildFile( source.getFileName() );
+            const bool ok = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            log( juce::String( "loaded scratch kit" ) + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
+        click( DCC::EN_MAINMODE ); // the Main screen's track row has list boxes (I/P MIDI PORT, channel)
+        wait( 4 );
+        s.push_back( [this, log] {
+            std::function<ui::KickListBox*( juce::Component& )> find = [&find]( juce::Component& c ) -> ui::KickListBox* {
+                if( auto* l = dynamic_cast<ui::KickListBox*>( &c ); l && l->isShowing() && l->isEnabled() )
+                    return l;
+                for( auto* child : c.getChildren() )
+                    if( auto* hit = find( *child ) )
+                        return hit;
+                return nullptr;
+            };
+            if( auto* l = find( screen ) )
+            {
+                log( "opening list '" + l->getName() + "'" );
+                l->knobClicked();
+            }
+            else
+            {
+                // Every pop-up goes through the same dialog code, so any content will do.
+                log( "no list box showing; opening a dialog through mt::utils::showOptions" );
+                auto list = std::make_unique<ui::KickList>( "Test", std::vector<juce::String> { "One", "Two", "Three" } );
+                list->show( "TEST" );
+                popupTestContent = std::move( list );
+            }
+        } );
+        wait( 4 );
+        windowShot( "popup_window" );
+        s.push_back( [this, log] {
+            auto* top = getTopLevelComponent();
+            log( "window " + top->getLocalBounds().toString() + ", KICK screen in window " + top->getLocalArea( &screen, screen.getLocalBounds() ).toString() );
+            for( auto* c : top->getChildren() )
+                log( "  window child " + juce::String( typeid( *c ).name() ) + " bounds " + c->getBounds().toString() + ( c->isVisible() ? " visible" : "" ) );
+            if( auto* modal = juce::Component::getCurrentlyModalComponent() )
+            {
+                log( "modal " + juce::String( typeid( *modal ).name() ) + " on desktop=" + juce::String( (int)modal->isOnDesktop() ) + " bounds in window "
+                     + top->getLocalArea( modal, modal->getLocalBounds() ).toString() );
+                for( auto* c : modal->getChildren() )
+                    if( c->isVisible() )
+                    {
+                        auto r   = top->getLocalArea( c, c->getLocalBounds() );
+                        auto hit = top->getComponentAt( r.getCentre() );
+                        log( "  content " + juce::String( typeid( *c ).name() ) + " at " + r.toString() + "; a click at its centre reaches "
+                             + ( hit ? juce::String( typeid( *hit ).name() ) : juce::String( "nothing" ) ) );
+                    }
+            }
+            else
+                log( "no modal component" );
+            if( auto* modal = juce::Component::getCurrentlyModalComponent() )
+                log( juce::String( "panel PLAY button clickable while open: " ) + ( modal->canModalEventBeSentToComponent( findButton( DCC::EN_PLAY ) ) ? "yes" : "no" )
+                     + ", screen behind the dialog clickable: " + ( modal->canModalEventBeSentToComponent( &screen ) ? "yes" : "no" ) );
+        } );
+        // Drive the open list from the panel: jog +1 then ENTER should pick "Two" and close it.
+        s.push_back( [this] { mainControl.getJog().turn( 1 ); } );
+        wait( 1 );
+        s.push_back( [this] { mainControl.getJog().pushCentre( true ); } );
+        s.push_back( [this] { mainControl.getJog().pushCentre( false ); } );
+        wait( 2 );
+        s.push_back( [this, log] {
+            auto* list = dynamic_cast<ui::KickList*>( popupTestContent.get() );
+            log( "after jog +1 / ENTER: selected " + ( list ? list->getSelected() : juce::String( "?" ) ) + ", dialog "
+                 + ( juce::Component::getCurrentlyModalComponent() ? "still open" : "closed" ) );
+        } );
+        s.push_back( [] { juce::Component::getCurrentlyModalComponent() ? juce::Component::getCurrentlyModalComponent()->exitModalState( 0 ) : void(); } );
+        wait( 2 );
+        s.push_back( [log] { log( "done" ); } );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startPickerTest()
+    {
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  click = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+        // All components of a type under Root, in tree order.
+        auto findAll = []( juce::Component* root, auto* typeTag ) {
+            using T = std::remove_pointer_t<decltype( typeTag )>;
+            std::vector<T*>                        found;
+            std::function<void( juce::Component* )> walk = [&]( juce::Component* c ) {
+                if( auto* t = dynamic_cast<T*>( c ) )
+                    found.push_back( t );
+                for( auto* child : c->getChildren() )
+                    walk( child );
+            };
+            if( root )
+                walk( root );
+            return found;
+        };
+
+        wait( 4 );
+        s.push_back( [log] {
+            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source = exeDir.getChildFile( "projects/Trap Kit" );
+            auto root   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_picker" );
+            root.deleteRecursively();
+            auto       scratch = root.getChildFile( source.getFileName() );
+            const bool ok      = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            log( juce::String( "loaded scratch Trap Kit" ) + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
+        click( DCC::EN_MAINMODE );
+        wait( 4 );
+        s.push_back( [this, log, findAll] {
+            // The track row's program picker: its icon button opens the "Select Program" dialog.
+            auto pickers = findAll( &screen, (kick_ui::KickProgramSelectorWithDisplay*)nullptr );
+            for( auto* p : pickers )
+                if( p->isShowing() )
+                    for( auto* b : findAll( p, (ui::KickImageButton*)nullptr ) )
+                        if( b->getName() == "Program" )
+                        {
+                            log( "opening the track's program picker" );
+                            b->triggerClick();
+                            return;
+                        }
+            log( "no program picker showing (" + juce::String( (int)pickers.size() ) + " found)" );
+        } );
+        wait( 4 );
+        s.push_back( [this, log, findAll] {
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            auto  rows  = findAll( modal, (kick_ui::ProgramSelectorDisplay*)nullptr );
+            auto  table = findAll( modal, (ui::KickTableView*)nullptr );
+            if( rows.size() < 5 || table.empty() )
+            {
+                log( "picker dialog not found" );
+                return;
+            }
+            // Click the centre of the Plugin row (row 4) the way the canvas forwards a real click:
+            // the event's position is in the row component, which the simulator draws scaled.
+            auto* row = rows[4];
+            auto  src = juce::Desktop::getInstance().getMainMouseSource();
+            auto  pos = row->getLocalBounds().getCentre().toFloat();
+            juce::MouseEvent e( src, pos, {}, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, row, row, juce::Time::getCurrentTime(), pos, juce::Time::getCurrentTime(), 1, false );
+            static_cast<juce::Component*>( table[0] )->mouseDown( e );
+            log( "clicked the Plugin row; table selected row " + juce::String( table[0]->getSelectedRow() ) + " (expected 4)" );
+        } );
+        wait( 3 );
+        s.push_back( [log, findAll] {
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            for( auto* b : findAll( modal, (ui::KickToggleButton*)nullptr ) )
+                if( b->getButtonText() == "+ New Plugin" && b->isShowing() )
+                {
+                    log( "picking '+ New Plugin'" );
+                    b->triggerClick();
+                    return;
+                }
+            log( "'+ New Plugin' option not shown" );
+        } );
+        wait( 2 );
+        s.push_back( [log, findAll] {
+            auto* modal = juce::Component::getCurrentlyModalComponent();
+            for( auto* b : findAll( modal, (ui::KickImageButton*)nullptr ) )
+                if( b->getName() == "Apply" && b->isShowing() )
+                {
+                    log( "Apply" );
+                    b->triggerClick();
+                    return;
+                }
+            log( "Apply button not found" );
+        } );
+        wait( 4 );
+        s.push_back( [log] {
+            auto& ae   = mt::getAudioInterface();
+            auto* prog = ae.getProgramDataForTrack( ae.getSelectedSequence(), ae.getSelectedTrack() );
+            log( "track now plays " + ( prog ? prog->name.get() + " (" + mt::toString( prog->type.get() ) + ")" : juce::String( "nothing" ) ) );
+        } );
+        s.push_back( [log] { log( "done" ); } );
+        wait( 1 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
         startTimer( 400 );
     }
 

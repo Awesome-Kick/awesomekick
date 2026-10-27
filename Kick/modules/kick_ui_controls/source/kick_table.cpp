@@ -240,13 +240,21 @@ namespace ui
         setHasFocusOutline( false );
     }
 
+    // Position in the canvas. Screen coordinates would be off wherever the UI is scaled or
+    // not at the screen origin (the simulator, a windowed desktop build).
+    static int canvasY( juce::Component& canvas, const juce::MouseEvent& event ) { return event.getEventRelativeTo( &canvas ).getPosition().getY(); }
+
+    // Canvas origin in KICK-screen coordinates (the rows below are located by on-screen heights).
+    static juce::Point<int> canvasOrigin( juce::Component& canvas )
+    {
+        if( auto* screen = mt::utils::getPopupParent(); screen && screen->isParentOf( &canvas ) )
+            return screen->getLocalPoint( &canvas, juce::Point<int>() );
+        return canvas.getScreenPosition();
+    }
+
     void KickTableView::mouseDown( const juce::MouseEvent& event )
     {
-        auto viewPos  = canvas.getScreenPosition();
-        auto clickPos = event.getScreenPosition();
-
-        auto Y   = clickPos.getY() - viewPos.getY();
-        auto row = canvas.getRowFromY( Y );
+        auto row = canvas.getRowFromY( canvasY( canvas, event ) );
         if( enableRowSelectionFlag )
             selectRow( row < getNumRows() ? row : getSelectedRow() );
     }
@@ -255,7 +263,7 @@ namespace ui
     {
         int              rowHeight      = canvas.rowHeight;
         int              rowWidth       = canvas.rowWidth;
-        auto             viewPos        = canvas.getScreenPosition();
+        auto             viewPos        = canvasOrigin( canvas );
         auto             startingHeight = height;
         auto             startingWidth  = width;
         std::vector<int> rows;
@@ -287,11 +295,7 @@ namespace ui
 
     void KickTableView::mouseDoubleClick( const juce::MouseEvent& event )
     {
-        auto viewPos  = canvas.getScreenPosition();
-        auto clickPos = event.getScreenPosition();
-
-        auto Y   = clickPos.getY() - viewPos.getY();
-        auto row = canvas.getRowFromY( Y );
+        auto row = canvas.getRowFromY( canvasY( canvas, event ) );
         if( rowComponents.size() > 0 )
             if( onRowDoubleClicked && juce::isPositiveAndBelow( row, rowComponents.size() ) )
                 onRowDoubleClicked( row );

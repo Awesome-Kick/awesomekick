@@ -35,6 +35,17 @@ namespace mt
         /// Pop-ups and dialogs...
         ///
 
+        static juce::Component::SafePointer<juce::Component> popupParent;
+
+        void setPopupParent( juce::Component* Parent ) { popupParent = Parent; }
+
+        juce::Component* getPopupParent()
+        {
+            if( popupParent != nullptr )
+                return popupParent.getComponent();
+            return juce::TopLevelWindow::getActiveTopLevelWindow();
+        }
+
         inline void showDialog_( bool IsOptions, const juce::String& Title, juce::Component* Comp, std::function<void( int )> Callback,
                                  juce::Rectangle<int> bounds, juce::Colour backgroundColour, juce::Colour titleTextColour, juce::Colour titleBackgroundColour, juce::Colour buttonBackgroundColour )
         {

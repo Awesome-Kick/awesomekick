@@ -101,7 +101,6 @@ namespace kick_ui
         progList.onSelectionChanged = [&]( int Index, const juce::String& Option ) {
             if( Option.isNotEmpty() )
                 selectedProgram = Option;
-            selectedType = tempType;
         };
         provider.numRows = [&]() {
             return 7;
@@ -117,12 +116,7 @@ namespace kick_ui
                 auto type = getprogramType( Row );
                 comp->setProperties( getProgramIcon( type ), mt::toString( type ) );
 
-                if( programs[type].size() )
-                    comp->setDisableComp( false );
-                else
-                {
-                    comp->setDisableComp( true );
-                }
+                comp->setDisableComp( false ); // empty types still offer "+ New <type>"
 
                 return comp;
             }
@@ -151,7 +145,20 @@ namespace kick_ui
 
     const mt::MTProgramType KickProgramSelector::getSelectedProgramType()
     {
-        return selectedType;
+        // The type of the chosen program; the highlighted row may have moved on since.
+        const auto type = ae.getProgramType( selectedProgram );
+        return type != mt::MTProgramType::Unknown ? type : selectedType;
+    }
+
+    void KickProgramSelector::resolveNewProgram()
+    {
+        if( selectedType == mt::MTProgramType::Unknown || selectedProgram != newProgramOption( selectedType ) )
+            return;
+        const auto index = ae.createProgram( selectedType );
+        if( index < 0 )
+            return;
+        selectedProgram = ae.getProgramNameByIndex( index );
+        refreshContent();
     }
 
     mt::MTProgramType KickProgramSelector::getprogramType( int Index )
@@ -235,7 +242,10 @@ namespace kick_ui
                 }
             }
         }
-        progList.setContent( Options, rowNum, juce::sendNotificationAsync );
+        auto withNew = Options;
+        if( selectedType != mt::MTProgramType::Unknown )
+            withNew.push_back( newProgramOption( selectedType ) );
+        progList.setContent( withNew, rowNum, juce::sendNotificationAsync );
     }
 
     void KickProgramSelector::resized()
@@ -294,6 +304,7 @@ namespace kick_ui
                 selector->getName(), selector.get(), [&]( int r ) {
                     if( r == UI::APPLY )
                     {
+                        selector->resolveNewProgram();
                         refresh();
                         if( onSelectionChanged )
                             onSelectionChanged( selector->getSelectedProgram(), selector->getSelectedProgramType() );

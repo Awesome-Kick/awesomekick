@@ -37,9 +37,14 @@ namespace sim
         void startAudioSettingsTest();
         /// KICKEM_SELFTEST=tour: press every panel button (and its SHIFT function), log and snapshot each screen.
         void startTourTest();
+        /// KICKEM_SELFTEST=popup: open a list pop-up on the Main screen, report where it lands and what a click on it hits.
+        void startPopupTest();
+        /// KICKEM_SELFTEST=picker: switch the track to a new Plugin program through its program picker (scaled mouse click included).
+        void startPickerTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };
+        std::unique_ptr<juce::Component>   popupTestContent;
 
         juce::Component& screen;
 
