@@ -821,6 +821,181 @@ namespace
     }
 
     //==============================================================================
+    void testModularCablesAndEffects( Results& R )
+    {
+        R.section( "Modular: cables, effects, user presets, macro names" );
+        namespace mm = mt::modular;
+        using B      = mm::PatchBuilder;
+
+        mt::ModularEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        bool               finite  = true;
+        // Peak, and first-difference energy (~ high-frequency content), over some blocks.
+        auto render = [&]( int Blocks, double* Hf = nullptr ) {
+            float  peak = 0;
+            double hf   = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( size_t i = 0; i < l.size(); ++i )
+                {
+                    finite = finite && std::isfinite( l[i] ) && std::isfinite( r[i] );
+                    peak   = juce::jmax( peak, std::abs( l[i] ), std::abs( r[i] ) );
+                    if( i > 0 )
+                        hf += ( l[i] - l[i - 1] ) * ( l[i] - l[i - 1] );
+                }
+            }
+            if( Hf )
+                *Hf = hf;
+            return peak;
+        };
+        auto blocksFor = []( double Seconds ) { return (int)( Seconds * testRate / testBlock ); };
+
+        // Cross FM: column 1's sine (muted in the mix by a VCA at 0) phase-modulates column 0's.
+        B          b( "Cable" );
+        const auto carrier = b.add( "osc", 0, 0, { { "wave", 0 }, { "input", 1 }, { "pm", 1 }, { "level", 1 } } );
+        const auto modOsc  = b.add( "osc", 1, 0, { { "wave", 0 }, { "tune", 19 }, { "level", 1 } } );
+        b.add( "vca", 1, 1, { { "gain", 0 } } );
+        auto plain = b.tree.createCopy();
+        b.cable( carrier, modOsc, 1.f );
+
+        auto hfOf = [&]( const juce::ValueTree& Patch ) {
+            synth.reset();
+            synth.setPatch( Patch );
+            synth.noteOn( 60, 1.f );
+            render( 4 );
+            double hf = 0;
+            render( 20, &hf );
+            synth.allNotesOff();
+            render( 4 );
+            return hf;
+        };
+        const auto withoutCable = hfOf( plain ), withCable = hfOf( b.tree );
+        R.check( finite && withCable > withoutCable * 3.0, "a cable phase-modulates another column (more harmonics)",
+                 "hf " + juce::String( withoutCable, 3 ) + " -> " + juce::String( withCable, 3 ) );
+
+        // Its amount is a value: no rebuild, and 0 sounds like no cable.
+        const auto builds = synth.getBuildCount();
+        b.tree.getChildWithProperty( mm::PatchIDs::id, carrier ).getChildWithName( mm::PatchIDs::CABLE ).setProperty( mm::PatchIDs::amount, 0.f, nullptr );
+        synth.setPatch( b.tree );
+        R.check( synth.getBuildCount() == builds, "cable amount changes without a rebuild" );
+        synth.noteOn( 60, 1.f );
+        render( 4 );
+        double zeroed = 0;
+        render( 20, &zeroed );
+        synth.allNotesOff();
+        render( 4 );
+        R.check( std::abs( zeroed - withoutCable ) < withoutCable * 0.05, "amount 0 sounds like no cable", juce::String( zeroed, 3 ) + " vs " + juce::String( withoutCable, 3 ) );
+
+        // A feedback loop (each module cabled from the other) stays finite.
+        {
+            B          fb( "Feedback" );
+            const auto a = fb.add( "osc", 0, 0, { { "wave", 0 }, { "input", 1 }, { "pm", 2 }, { "level", 1 } } );
+            const auto d = fb.add( "drive", 1, 0, { { "drive", 0.8f } } );
+            fb.cable( a, d, 1.f ).cable( d, a, 1.f );
+            synth.setPatch( fb.tree );
+            synth.noteOn( 48, 1.f );
+            const auto peak = render( blocksFor( 1.0 ) );
+            synth.allNotesOff();
+            render( 4 );
+            R.check( finite && peak > 0.01f && peak < 2.f, "a feedback cable loop stays finite", "peak " + f3( peak ) );
+        }
+
+        // Effects: a delay repeats a short blip after the voice has ended.
+        {
+            B          fx( "Echo" );
+            const auto vca = fx.add( "vca", 0, 1, { { "gain", 0 } } );
+            const auto env = fx.add( "adsr", 1, 0, { { "attack", 0.001f }, { "decay", 0.03f }, { "sustain", 0 }, { "release", 0.03f } } );
+            fx.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            fx.mod( vca, "gain", B::module( env ), 1.f );
+            auto dry = fx.tree.createCopy();
+            fx.addEffect( "fxdelay", 0, { { "time", 300 }, { "feedback", 0.4f }, { "pingpong", 0 }, { "mix", 0.5f } } );
+
+            auto echoAt = [&]( const juce::ValueTree& Patch ) {
+                synth.reset();
+                synth.setPatch( Patch );
+                synth.noteOn( 69, 1.f );
+                render( blocksFor( 0.05 ) );
+                synth.noteOff( 69 );
+                render( blocksFor( 0.22 ) ); // to ~270 ms: the voice is long gone
+                const auto voices = synth.getNumActiveVoices();
+                const auto echo   = render( blocksFor( 0.1 ) ); // 270..370 ms: the first repeat
+                return std::make_pair( echo, voices );
+            };
+            const auto [dryEcho, dryVoices] = echoAt( dry );
+            const auto [wetEcho, wetVoices] = echoAt( fx.tree );
+            R.check( dryEcho < 1.0e-4f && wetEcho > 0.01f && wetVoices == 0, "the delay effect repeats after the voice ended",
+                     "dry " + juce::String( dryEcho, 5 ) + ", wet " + f3( wetEcho ) + ", voices " + juce::String( wetVoices ) );
+            render( blocksFor( 6.0 ) );
+            R.check( render( 10 ) < 1.0e-4f, "and dies away" );
+        }
+
+        // A macro can modulate an effect: reverb mix from 0 to full with Macro 3.
+        {
+            B          fx( "Verb" );
+            const auto vca = fx.add( "vca", 0, 1, { { "gain", 0 } } );
+            const auto env = fx.add( "adsr", 1, 0, { { "attack", 0.001f }, { "decay", 0.05f }, { "sustain", 0 }, { "release", 0.05f } } );
+            fx.add( "noise", 0, 0, { { "level", 1 } } );
+            fx.mod( vca, "gain", B::module( env ), 1.f );
+            const auto verb = fx.addEffect( "reverb", 0, { { "size", 0.8f }, { "mix", 0 } } );
+            fx.mod( verb, "mix", "macro3", 1.f ).mod( verb, "size", "velocity", 1.f ); // velocity is per voice: ignored on an effect
+            synth.setPatch( fx.tree );
+
+            auto tail = [&]( float Macro ) {
+                synth.reset();
+                synth.setParam( mt::ModularEngine::kMacro1 + 2, Macro );
+                synth.noteOn( 60, 1.f );
+                render( blocksFor( 0.05 ) );
+                synth.noteOff( 60 );
+                render( blocksFor( 0.2 ) );
+                return render( blocksFor( 0.2 ) );
+            };
+            const auto off = tail( 0.f ), on = tail( 1.f );
+            synth.setParam( mt::ModularEngine::kMacro1 + 2, 0.f );
+            R.check( finite && off < 1.0e-4f && on > 0.002f, "a macro modulates an effect (reverb mix)", f3( off ) + " -> " + f3( on ) );
+        }
+
+        // Macro names: stored, else what they modulate, else "Macro n".
+        {
+            const auto init = mm::createPreset( 0 ), bell = mm::createPreset( 3 );
+            mm::PatchEditor initRead( init, nullptr ), bellRead( bell, nullptr );
+            R.check( initRead.macroLabel( 0 ) == "Cutoff" && initRead.macroLabel( 3 ) == "Macro 4" && bellRead.macroLabel( 0 ) == "Brightness",
+                     "macros named by what they modulate, or by the patch", initRead.macroLabel( 0 ) + ", " + initRead.macroLabel( 3 ) + ", " + bellRead.macroLabel( 0 ) );
+
+            auto            edited = init.createCopy();
+            mm::PatchEditor ed( edited, nullptr );
+            const auto      vca = (int)ed.moduleAt( 0, 2 ).getProperty( mm::PatchIDs::id );
+            ed.addMod( vca, "gain", "macro1", 0.2f );
+            const auto two = ed.macroLabel( 0 );
+            ed.setMacroName( 0, "Tone" );
+            const auto named = ed.macroLabel( 0 );
+            ed.setMacroName( 0, "" );
+            R.check( two == "Cutoff +1" && named == "Tone" && ed.macroLabel( 0 ) == "Cutoff +1", "several targets, a set name, and back to automatic", two + " / " + named );
+        }
+
+        // User presets, in a temporary folder.
+        {
+            auto dir = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kick_test_modular_presets" );
+            dir.deleteRecursively();
+            mm::UserPresets::setDirectory( dir );
+
+            const auto savedOk    = mm::UserPresets::save( b.tree, "My Cable FM" );
+            const auto factoryNo  = !mm::UserPresets::save( b.tree, "Init" ) && !mm::UserPresets::save( b.tree, "  " );
+            const auto names      = mm::UserPresets::getNames();
+            const auto loaded     = mm::UserPresets::load( "My Cable FM" );
+            const auto sameModule = loaded.getChildWithProperty( mm::PatchIDs::id, carrier ).getChildWithName( mm::PatchIDs::CABLE ).isValid();
+            const auto removed    = mm::UserPresets::remove( "My Cable FM" ) && mm::UserPresets::getNames().isEmpty();
+            R.check( savedOk && factoryNo && names.contains( "My Cable FM" ) && loaded.getProperty( mm::PatchIDs::name ).toString() == "My Cable FM" && sameModule && removed,
+                     "user presets save, list, load (with cables) and delete; factory names refused", names.joinIntoString( ", " ) );
+
+            mm::UserPresets::setDirectory( {} );
+            dir.deleteRecursively();
+        }
+    }
+
+    //==============================================================================
     void testPadLayout( Results& R )
     {
         R.section( "Pad layouts (Push/Launchpad style)" );
@@ -1055,6 +1230,28 @@ namespace
                 osc.setProperty( "level", 0.5f, nullptr );
                 const auto restored = play( 60 );
                 R.check( muted < 0.002f && restored > 0.02f, "a module edit in the stored patch reaches the engine", f3( muted ) + " -> " + f3( restored ) );
+
+                {
+                    namespace mm = mt::modular;
+                    auto dir     = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kick_test_modular_presets_program" );
+                    dir.deleteRecursively();
+                    mm::UserPresets::setDirectory( dir );
+
+                    inst->loadPreset( 4 ); // Wobble Bass: macro 1 = LFO rate
+                    const auto macroName = inst->getParamName( mt::ModularEngine::kMacro1 );
+                    const auto saved     = inst->savePreset( "My Wobble" ) && !inst->savePreset( "Init" );
+                    const auto names     = inst->getPresetNames();
+                    inst->loadPreset( 0 );
+                    inst->loadPreset( names.indexOf( "My Wobble" ) );
+                    const auto back = inst->getPatchName();
+                    R.check( macroName == "Rate" && saved && names.size() == inst->getNumFactoryPresets() + 1 && names[names.size() - 1] == "My Wobble" && back == "My Wobble",
+                             "a program saves a user preset, lists it after the factory ones and loads it", macroName + ", " + back );
+                    const auto wobble = play( 48 );
+                    R.check( wobble > 0.02f, "the user preset plays", "peak " + f3( wobble ) );
+
+                    mm::UserPresets::setDirectory( {} );
+                    dir.deleteRecursively();
+                }
 
                 inst->setEngine( "Basic Synth" );
                 R.check( !inst->hasPatch() && !inst->getState().getChildWithName( mt::modular::PatchIDs::MODULAR_PATCH ).isValid(), "switching to another engine drops the patch" );
@@ -1452,6 +1649,7 @@ private:
         testBasicSynth( R );
         testModularEngine( R );
         testModularPatchEditing( R );
+        testModularCablesAndEffects( R );
         testPadLayout( R );
         testEngine( R, kitDir );
 

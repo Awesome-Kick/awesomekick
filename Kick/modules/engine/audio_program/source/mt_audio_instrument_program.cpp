@@ -136,20 +136,64 @@ namespace mt
         return getPatch();
     }
 
+    juce::StringArray MTInstrumentProgram::getPresetNames() const
+    {
+        auto names = presetNames;
+        if( hasUserPresets() )
+            for( const auto& n : modular::UserPresets::getNames() )
+                names.addIfNotAlreadyThere( n );
+        return names;
+    }
+
     void MTInstrumentProgram::loadPreset( int Index )
     {
         auto* e = object->getEngine();
-        if( !patchType.isValid() || !e || !juce::isPositiveAndBelow( Index, presetNames.size() ) )
+        if( !patchType.isValid() || !e || Index < 0 )
             return;
+        if( Index < presetNames.size() )
+            replacePatch( e->createPreset( Index ) );
+        else if( const auto names = getPresetNames(); Index < names.size() )
+            if( auto user = modular::UserPresets::load( names[Index] ); user.hasType( patchType ) )
+                replacePatch( user );
+    }
 
+    void MTInstrumentProgram::replacePatch( juce::ValueTree NewPatch )
+    {
         // Remove and add as one change for the engine (one rebuild, not two).
         {
             const juce::ScopedValueSetter<int> block( patchSendsBlocked, patchSendsBlocked + 1 );
             if( auto old = getPatch(); old.isValid() )
                 vTree.removeChild( old, um );
-            vTree.appendChild( e->createPreset( Index ), um );
+            vTree.appendChild( NewPatch, um );
         }
         sendPatch();
+    }
+
+    bool MTInstrumentProgram::savePreset( const juce::String& Name )
+    {
+        if( !hasUserPresets() )
+            return false;
+        auto patch = getOrCreatePatch();
+        if( !modular::UserPresets::save( patch, Name ) )
+            return false;
+        patch.setProperty( modular::PatchIDs::name, Name.trim(), um );
+        return true;
+    }
+
+    bool MTInstrumentProgram::deleteUserPreset( const juce::String& Name ) { return hasUserPresets() && modular::UserPresets::remove( Name ); }
+
+    juce::String MTInstrumentProgram::getParamName( int Index ) const
+    {
+        if( !juce::isPositiveAndBelow( Index, (int)params.size() ) )
+            return {};
+        if( hasUserPresets() && Index < ModularEngine::kLevel )
+        {
+            auto patch = getPatch();
+            if( !patch.isValid() )
+                patch = modular::createPreset( 0 );
+            return modular::PatchEditor( patch, nullptr ).macroLabel( Index - ModularEngine::kMacro1 );
+        }
+        return params[(size_t)Index].name;
     }
 
     juce::String MTInstrumentProgram::getEngineName() const

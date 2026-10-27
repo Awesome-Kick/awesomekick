@@ -413,7 +413,8 @@ namespace sim
                     if( m.hasProperty( "cutoff" ) )
                         d << " cutoff=" << juce::String( (float)m.getProperty( "cutoff" ), 1 );
                     for( const auto& r : m )
-                        d << " [" << r.getProperty( "param" ).toString() << "<" << read.sourceLabel( r.getProperty( "source" ) ) << " " << juce::String( (float)r.getProperty( "depth" ), 2 ) << "]";
+                        d << " [" << r.getProperty( "param" ).toString() << "<" << read.sourceLabel( r.getProperty( "source" ) ) << " "
+                          << juce::String( (float)r.getProperty( r.hasType( "CABLE" ) ? "amount" : "depth" ), 2 ) << "]";
                     parts.add( d );
                 }
                 log( When + ": " + ( patch.isValid() ? patch.getProperty( "name" ).toString() : juce::String( "(default)" ) ) + " | " + parts.joinIntoString( " | " ) );
@@ -509,6 +510,53 @@ namespace sim
         wait( 2 );
         describe( "after undo" );
         shot( "modular_editor_after_undo" );
+
+        // Milestone 3: an effect, a cable, and saving a user preset.
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 0, kick_ui::ModularEditor::effectRow ); } );
+        wait( 1 );
+        tapButton( "+ EFFECT" );
+        wait( 3 );
+        tapButton( "Reverb" );
+        wait( 3 );
+        s.push_back( [this] { qlinks[3]->turn( 30 ); } ); // P4 = mix
+        wait( 2 );
+        describe( "after adding a reverb" );
+        shot( "modular_editor_effect" );
+
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 2, 0 ); } );
+        tapButton( "+ MODULE" );
+        wait( 3 );
+        tapButton( "Oscillator" );
+        wait( 3 );
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 0, 0 ); } );
+        wait( 1 );
+        tapButton( "IN (0)" );
+        wait( 1 );
+        tapButton( "+ CABLE" );
+        wait( 3 );
+        tapButton( "Oscillator 2" );
+        wait( 3 );
+        s.push_back( [this] { qlinks[0]->turn( 20 ); } ); // amount 0.5 -> 0.9 (2% of -1..1 per detent)
+        wait( 2 );
+        describe( "after cabling Oscillator 2 into Oscillator 1" );
+        shot( "modular_editor_cable" );
+        click( DCC::EN_BANK_D );
+        for( int p = 0; p < 4; ++p )
+        {
+            s.push_back( [this, p] { pads.getPad( p ).hit( true, 100 ); } );
+            wait( 1 );
+            s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
+        }
+
+        tapButton( "SAVE" );
+        wait( 3 );
+        shot( "modular_editor_save" );
+        tapButton( "Apply" );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( "after SAVE: patch " + i->getPatchName() + ", presets: " + i->getPresetNames().joinIntoString( ", " ) + " | macro 1 = " + i->getParamName( 0 ) );
+        } );
 
         tapButton( "< BACK" );
         wait( 3 );

@@ -726,6 +726,26 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 | LFO | modulator | Shape (sine/triangle/saw/square/random), Rate 0.02–40 Hz, Retrigger, Polarity |
 | Random | modulator | A new value per note; Polarity |
 
+**Effects** (up to four, FX 1 → FX 4, after the voices are mixed; stereo):
+
+| Effect | Knobs |
+|---|---|
+| Stereo Delay | Time 10 ms–2 s, Feedback, Ping-Pong, Damping, Mix |
+| Chorus | Rate, Depth, Mix |
+| Reverb | Size, Damping, Width, Mix |
+| Saturator | Drive (to +30 dB), Tone, Level |
+
+Effects can be modulated only by sources that are the same for every voice: the macros, the mod wheel and pitch bend.
+
+**Cables.** A cable adds the audio of any oscillator, noise or processor to another module's input, scaled by an amount from −100% to +100%. Uses include:
+- FM between columns: an oscillator set to *Phase Mod* is modulated by whatever comes in;
+- mixing one column into another's filter;
+- feedback loops.
+
+A source to the left of (or above) its target arrives in the same 16-sample step; one to the right arrives a step later, which is what makes feedback stable. A column still goes to the mix, so a column used only as a cable source ends in a **VCA at 0** (the cable taps the module above it).
+
+**Macros** are named after what they modulate (e.g. *Cutoff*, *Cutoff +1*), or by a name you give them in the editor. The instrument page shows these names on the Q-links.
+
 **Presets** (what Macro 1 / Macro 2 do):
 
 | Preset | Sound | Macro 1 | Macro 2 |
@@ -737,7 +757,12 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 | Wobble Bass | saw and square bass, LFO on a resonant filter | LFO rate | cutoff |
 | Fold Lead | sine through a wavefolder moved by a slow LFO | fold | drive |
 | Noise Hat | high-passed noise, short envelope | cutoff | decay |
-| Random Pad | detuned saws, a random cutoff and pan per note | cutoff | shorter attack |
+| Random Pad | detuned saws, a random cutoff and pan per note; chorus and reverb | cutoff | shorter attack |
+| Cross FM | column 2 phase-modulates column 1 through a cable | FM amount | ratio |
+
+Pluck String (echo), FM Bell (reverb) and Random Pad (reverb) also put an effect's mix on **Macro 3**.
+
+**Your own presets** are saved from the editor (**SAVE**) and listed in the PRESET box after the factory ones. They live in `prefs/ModularPresets` as one XML file each, so you can copy them between machines. A factory preset's name cannot be reused.
 
 **How it behaves:**
 
@@ -745,14 +770,18 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 - Turning a knob or a depth changes the sound without interrupting it.
 - Adding, moving or removing a module rebuilds the patch while notes keep playing.
 - Unknown modules and broken modulations are skipped, not fatal.
-- Cost: eight voices of Basic Poly took about 7% of one desktop core in testing. The RK3588 hasn't been measured.
+- Cost: eight voices of Basic Poly took about 7–11% of one desktop core in testing (Debug build). The RK3588 hasn't been measured.
 
 **The patch editor.** On the instrument page, **EDIT PATCH** (shown for Modular) opens the patch over the whole page.
 
 ![Modular patch editor: the filter's modulations](img/modular_editor.png)
 
+![Patch editor: a cable from Oscillator 2 into Oscillator 1, and a reverb](img/modular_editor_cable.png)
+
 - **Grid (left):** 8 columns × 6 rows. Orange = sources, blue = processors, purple = modulators. Each cell shows the module's name and its main knob.
-  - A line runs down each column that carries audio.
+  - A line runs down each column that carries audio, into the effects.
+  - **Cables** are amber curves ending in a dot; a module with cables in has an amber dot in its corner.
+  - **FX 1–FX 4** (green) are the effect slots under the grid. Tap an empty slot twice (or **+ EFFECT**) to add one.
   - **~N** marks a module whose knobs have N modulations.
   - When a module is selected, the modules it modulates, or the ones modulating it, get a white outline.
 - **Add a module:** tap an empty cell, then tap it again or press **+ MODULE**, and pick a type.
@@ -761,19 +790,21 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
   - **PARAMS** shows its knobs, four per page, on Q-links **P1–P4**. Stepped knobs move one choice per detent; the rest move 1%.
   - **MODS (n)** switches to its modulations, one knob per modulation (depth −100% to +100%), titled e.g. *CUTOFF ← LFO 1*.
   - **+ MOD** asks which knob, then which source: velocity, note, gate, mod wheel, pitch bend, Macro 1–8, or any Envelope, LFO or Random in the patch.
-  - **REMOVE P*n*** removes the modulation you touched last. Its title is marked **>**.
+  - **IN (n)** (oscillators, noise and processors) shows the cables into it, one knob per cable (amount). **+ CABLE** picks the module to take audio from.
+  - **REMOVE P*n*** removes the modulation or cable you touched last. Its title is marked **>**.
   - **DELETE** removes the module and the modulations it fed.
-- **VOICES** sets the patch's polyphony (1–16). The **centre knob** walks the selection through the cells.
+- **VOICES** sets the patch's polyphony (1–16). The **centre knob** walks the selection through the cells, then the effect slots.
+- **SAVE** asks for a name on the on-screen keyboard and saves a user preset. **MACROS** renames a macro; an empty name goes back to the automatic one.
 - **< BACK** returns to the instrument page.
 - **Undo:** everything goes through undo. Turning one knob undoes as a single step.
 - **Edited presets:** the first change to a factory preset renames it, e.g. **Init \***, and that name shows in the PRESET box.
 - **Pads** keep playing the patch while you edit, so you hear every change.
 
-**Not yet (next milestone):**
+**Not yet:**
 
-- Patch cables (e.g. audio from one column into another, or FM between columns).
-- Saving your own presets and naming the macros.
-- A mono effects section after the voices.
+- Deleting a user preset from the device (remove its file from `prefs/ModularPresets` for now).
+- Moving an effect to another slot (delete and add it again).
+- Cable amounts and the voice count can't be modulated.
 
 **What else is covered:**
 
@@ -1319,7 +1350,7 @@ All of these run on Windows from the build folders.
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** about 152 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine, its presets and patch editing, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **What it covers:** about 165 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine (presets, patch editing, cables, effects, user presets, macro names), pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
@@ -1331,7 +1362,7 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 |---|---|
 | `1` | Presses every control type once |
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads. Then picks Modular and the FM Bell preset and turns Macro 1 |
-| `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads, undoes, goes back |
+| `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, saves a user preset (into the temporary prefs copy) and goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
 | `record` | Records pad hits into Trap Kit and checks the grid snap, the REC light and undo. Then arms, records and stops the Sampler from the panel. |

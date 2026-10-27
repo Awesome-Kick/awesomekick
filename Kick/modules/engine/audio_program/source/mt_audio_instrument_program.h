@@ -26,7 +26,9 @@ namespace mt
 
         /// Patch engines (e.g. Modular). Without one, the presets are empty and the patch invalid.
         bool              hasPatch() const { return patchType.isValid(); }
-        juce::StringArray getPresetNames() const { return presetNames; }
+        /// Factory presets, then (Modular) the user's saved ones.
+        juce::StringArray getPresetNames() const;
+        int               getNumFactoryPresets() const { return presetNames.size(); }
         /// The stored patch; invalid while the engine plays its default (preset 0).
         juce::ValueTree getPatch() const { return patchType.isValid() ? vTree.getChildWithName( patchType ) : juce::ValueTree{}; }
         /// The stored patch, storing the default (preset 0) first if there is none, so an
@@ -36,6 +38,14 @@ namespace mt
         juce::String getPatchName() const;
         /// Replaces the stored patch with a fresh copy of a preset (undoable).
         void loadPreset( int Index );
+        /// Saves the current patch as a user preset and names the patch after it.
+        /// False for an empty name or a factory preset's.
+        bool savePreset( const juce::String& Name );
+        bool deleteUserPreset( const juce::String& Name );
+
+        /// A parameter's display name; for Modular, macros are named by the patch
+        /// ("Cutoff", or what the user called them).
+        juce::String getParamName( int Index ) const;
 
         /// Adds all-notes-off / all-sound-off handling to MTIProgram's note handling:
         /// tracks send CC 123 on transport stop and program change, and the base class
@@ -72,6 +82,8 @@ namespace mt
         /// True for the patch child itself and anything inside it.
         bool isPatchTree( const juce::ValueTree& Tree ) const;
         void sendPatch();
+        bool hasUserPresets() const { return patchType == modular::PatchIDs::MODULAR_PATCH; }
+        void replacePatch( juce::ValueTree NewPatch );
 
         juce::String      loadedEngine;
         juce::Identifier  patchType;   // the engine's, or invalid

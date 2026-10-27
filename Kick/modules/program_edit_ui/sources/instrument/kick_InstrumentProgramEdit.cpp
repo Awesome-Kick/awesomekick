@@ -184,7 +184,7 @@ namespace kick_ui
             knob.setNormalisableRange( range );
             knob.setNumDecimalPlacesToDisplay( p.maxValue - p.minValue >= 100.f ? 0 : 2 );
             knob.setTextValueSuffix( p.label.isNotEmpty() ? " " + p.label : juce::String() );
-            knob.setTitle( "P" + juce::String( k + 1 ) + "  " + p.name.toUpperCase() );
+            knob.setTitle( "P" + juce::String( k + 1 ) + "  " + inst->getParamName( index ).toUpperCase() ); // Modular: the patch names its macros
             knob.setValue( inst->getParam( index ), juce::dontSendNotification );
             knob.onValueChanged = [this, index]( double Value ) {
                 if( auto* i = instrument() )
