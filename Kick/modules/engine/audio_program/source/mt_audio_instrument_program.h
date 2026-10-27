@@ -24,6 +24,11 @@ namespace mt
         float                               getParam( int Index ) const;
         void                                setParam( int Index, float Value );
 
+        /// Adds all-notes-off / all-sound-off handling to MTIProgram's note handling:
+        /// tracks send CC 123 on transport stop and program change, and the base class
+        /// only understands note on/off, which would leave instrument notes hanging.
+        void noteProcess( juce::Array<juce::MidiMessage>& Msgs ) override;
+
         // IMidiMsgProcessor (MTIProgram's defaults already gate: note-off releases).
         void noteOn( int Note, int Velocity ) override { object->noteOn( Note, Velocity ); }
         void noteOff( int Note ) override { object->noteOff( Note ); }
@@ -39,8 +44,13 @@ namespace mt
         const MTMeterData& readOutMeter() const override { return object->readOutMeter(); }
 
     private:
+        void valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property ) override;
+
         juce::ValueTree paramsTree();
         void            applyStoredParams();
+        void            loadEngine( const juce::String& Name );
+
+        juce::String loadedEngine;
 
         AudIO::DawEngine&            engine;
         InstrumentObject*            object{ nullptr };

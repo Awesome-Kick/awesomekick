@@ -14,7 +14,7 @@
   website:
   license:            AGPLv3
 
-  dependencies:       kick_ui_header, kick_ui_selectors, audio_program, kick_ui_header, project
+  dependencies:       kick_ui_header, kick_ui_selectors, audio_program, kick_ui_header, project, juce_audio_utils
 
  END_JUCE_MODULE_DECLARATION
 
@@ -28,6 +28,7 @@
 #include <kick_ui_selectors/kick_ui_selectors.h>
 #include <audio_program/audio_program.h>
 #include <project/project.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 
 // Module include files.
 //
@@ -78,8 +79,8 @@ namespace kick_ui
         kick_ui::KickModeHeader header{ "Preferences", "Icon_SettingsScreen" };
         juce::Rectangle<int>    bCont;
 
-        std::array<juce::String, 7>                     selectorStrings{ "Info", "Project Defaults", "Hardware", "MIDI", "CV", "Ethernet", "WiFi" };
-        std::array<ui::KickToggleButton, 7>             selectors;
+        std::array<juce::String, 8>                     selectorStrings{ "Info", "Project Defaults", "Hardware", "Audio", "MIDI", "CV", "Ethernet", "WiFi" };
+        std::array<ui::KickToggleButton, 8>             selectors;
         std::vector<std::unique_ptr<SettingsInterface>> pViews;
         SettingsInterface*                              pView{ nullptr };
 

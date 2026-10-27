@@ -194,20 +194,7 @@ namespace kick_ui
             std::vector<int> pads;
 
             padNo += bankOffset;
-            pads.push_back( padNo );
-
-            for( auto& it : pads )
-            {
-                juce::MidiMessage Msg;
-
-                if( padState == contracts::DeviceControlContracts::BTN_PRESSED )
-                    Msg = juce::MidiMessage::noteOn( 1, it, (juce::uint8)velocity );
-                else if( padState == contracts::DeviceControlContracts::BTN_RELEASED )
-                    Msg = juce::MidiMessage::noteOff( 1, it );
-
-                ae.addLiveMidiMsg( ae.getSelected(), Msg );
-            }
-            pads.clear();
+            kick_ui::PadNotes::handle( f_HwMsg ); // shared pad -> note mapping
         }
         else if( contracts::DclContractsHelper::isKnobMessage( f_HwMsg ) )
         {

@@ -23,13 +23,59 @@ namespace mt
         auto inserts = VT.getOrCreateChildWithName( IDs::INSERTS, nullptr );
         MTIInsertsInterface::setup( inserts, UM, object );
 
-        setEngine( getEngineName() );
+        // Load directly, without touching the tree: a project naming an engine this
+        // build lacks keeps its stored parameters (we fall back to the default engine).
+        loadEngine( getEngineName() );
+        if( !vTree.hasProperty( IDs::instrumentEngine ) )
+            vTree.setProperty( IDs::instrumentEngine, loadedEngine, nullptr );
     }
 
     MTInstrumentProgram::~MTInstrumentProgram()
     {
         if( object )
+        {
+            // The object itself may be deleted later on the audio thread; release the
+            // engine and the tree listeners here, on the message thread.
+            object->setEngine( nullptr );
+            object->setProgram( nullptr );
             engine.removeObject( object->getId() );
+        }
+    }
+
+    void MTInstrumentProgram::noteProcess( juce::Array<juce::MidiMessage>& Msgs )
+    {
+        const bool muted = isProgramEffectivelyMuted();
+        for( const auto& m : Msgs )
+        {
+            if( m.isAllNotesOff() || m.isAllSoundOff() || m.isResetAllControllers() )
+                object->allNotesOff();
+            else if( m.isPitchWheel() )
+                object->pitchBend( 2.f * ( m.getPitchWheelValue() - 8192 ) / 8192.f ); // +-2 semitones
+            else if( m.isControllerOfType( 1 ) )
+                object->modWheel( m.getControllerValue() / 127.f );
+            else if( muted && m.isNoteOff() )
+                object->noteOff( m.getNoteNumber() ); // the base class drops everything while muted
+        }
+
+        MTIProgram::noteProcess( Msgs );
+    }
+
+    void MTInstrumentProgram::valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property )
+    {
+        MTIProgram::valueTreePropertyChanged( Tree, Property );
+
+        // Keep the engine in step with its tree, including undo/redo of these properties.
+        if( Tree == vTree && Property == IDs::instrumentEngine )
+        {
+            if( getEngineName() != loadedEngine )
+                loadEngine( getEngineName() );
+        }
+        else if( Tree.hasType( IDs::INSTRUMENT_PARAMS ) && Tree.getParent() == vTree )
+        {
+            for( int i = 0; i < (int)params.size(); ++i )
+                if( Property.toString() == params[(size_t)i].id )
+                    object->setParam( i, (float)Tree.getProperty( Property, params[(size_t)i].defaultValue ) );
+        }
     }
 
     juce::String MTInstrumentProgram::getEngineName() const
@@ -45,18 +91,28 @@ namespace mt
 
     void MTInstrumentProgram::setEngine( const juce::String& Name )
     {
+        if( !InstrumentEngineRegistry::getNames().contains( Name ) )
+            return;
+
+        // Switching engines starts from that engine's defaults. Both changes go through
+        // the tree (and so the undo manager); valueTreePropertyChanged() loads the engine.
+        if( vTree.getProperty( IDs::instrumentEngine ).toString() != Name )
+        {
+            paramsTree().removeAllProperties( um );
+            vTree.setProperty( IDs::instrumentEngine, Name, um );
+        }
+        else
+            loadEngine( Name ); // same name: reload it fresh
+    }
+
+    void MTInstrumentProgram::loadEngine( const juce::String& Name )
+    {
         auto newEngine = InstrumentEngineRegistry::create( Name );
         if( !newEngine )
             return;
 
-        // Switching engines starts from that engine's defaults.
-        if( vTree.getProperty( IDs::instrumentEngine ).toString() != Name )
-        {
-            vTree.setProperty( IDs::instrumentEngine, Name, um );
-            paramsTree().removeAllProperties( um );
-        }
-
-        params = newEngine->getParams();
+        loadedEngine = Name;
+        params       = newEngine->getParams();
         object->setEngine( std::move( newEngine ) );
         applyStoredParams();
     }
@@ -87,7 +143,6 @@ namespace mt
             return;
         const auto& p = params[(size_t)Index];
         Value         = juce::jlimit( p.minValue, p.maxValue, Value );
-        paramsTree().setProperty( juce::Identifier( p.id ), Value, um );
-        object->setParam( Index, Value );
+        paramsTree().setProperty( juce::Identifier( p.id ), Value, um ); // -> valueTreePropertyChanged -> engine
     }
 } // namespace mt

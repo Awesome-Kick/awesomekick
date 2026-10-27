@@ -381,7 +381,11 @@ namespace mt
     int MTTrack::processIncomingMidiMessage( const juce::MidiMessage& Msg )
     {
         auto pProgram = program.load();
-        if( pProgram && !isTrackEffectivelyMuted() )
+
+        // While muted only releases get through: dropping them leaves gated notes
+        // (instruments, held keygroups) sounding forever once the track is unmuted.
+        const bool isRelease = Msg.isNoteOff() || Msg.isAllNotesOff() || Msg.isAllSoundOff();
+        if( pProgram && ( !isTrackEffectivelyMuted() || isRelease ) )
         {
             juce::Array<juce::MidiMessage> list;
 

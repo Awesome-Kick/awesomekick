@@ -25,20 +25,77 @@
 
 namespace kick_ui
 {
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-    ////////////////////////////  KickChannelMixer
-    ///////////////////////////////////////////////////////////////////////////////////////////////////////
-
     SettingsAudio::SettingsAudio()
-        : SettingsInterface( 3, 3, false )
+        : SettingsInterface( 1, 1, false )
     {
         ui::KickGrid::setBackgroundColour( juce::Colours::transparentBlack );
+
+        // The device selector is a stock JUCE component; give it a dark scheme that
+        // matches the Kick screens rather than the app's custom look and feel.
+        lookAndFeel.setColourScheme( juce::LookAndFeel_V4::getMidnightColourScheme() );
+        viewport.setScrollBarsShown( true, false );
+        addAndMakeVisible( viewport );
     }
 
-    void SettingsAudio::refresh() {}
+    SettingsAudio::~SettingsAudio()
+    {
+        if( deviceManager )
+            deviceManager->removeChangeListener( this );
+        viewport.setViewedComponent( nullptr, false );
+        selector = nullptr;
+    }
 
-    void SettingsAudio::setupHeader( kick_ui::KickModeHeader& Hdr ) {}
+    juce::File SettingsAudio::getStateFile() { return getAppDirs( MTPrefs ).getChildFile( "audio_device.xml" ); }
 
-    void SettingsAudio::handleCommand( CPktMgr::HWMsg_t& ) {}
-}
+    void SettingsAudio::attach()
+    {
+        // The engine opens its device asynchronously at startup, so create the
+        // selector the first time this page is shown rather than in the constructor.
+        if( selector )
+            return;
+
+        deviceManager = &mt::getAudioInterface().getAudioDeviceManager();
+        selector      = std::make_unique<juce::AudioDeviceSelectorComponent>( *deviceManager,
+                                                                         0, 2,     // inputs
+                                                                         2, 2,     // outputs
+                                                                         false,    // MIDI inputs: see the MIDI page
+                                                                         false,    // MIDI outputs
+                                                                         true,     // stereo pairs
+                                                                         false );  // show advanced options
+        selector->setLookAndFeel( &lookAndFeel );
+        viewport.setViewedComponent( selector.get(), false );
+        deviceManager->addChangeListener( this );
+        resized();
+    }
+
+    void SettingsAudio::changeListenerCallback( juce::ChangeBroadcaster* )
+    {
+        if( !deviceManager )
+            return;
+        if( auto xml = deviceManager->createStateXml() )
+        {
+            auto file = getStateFile();
+            file.getParentDirectory().createDirectory();
+            xml->writeTo( file );
+        }
+    }
+
+    void SettingsAudio::visibilityChanged()
+    {
+        if( isVisible() )
+            attach();
+    }
+
+    void SettingsAudio::paint( juce::Graphics& g )
+    {
+        g.setColour( ui::Theme::backgroundColour( 1 ) );
+        g.fillRoundedRectangle( getLocalBounds().toFloat(), 5.f );
+    }
+
+    void SettingsAudio::resized()
+    {
+        viewport.setBounds( getLocalBounds().reduced( 10 ) );
+        if( selector )
+            selector->setSize( viewport.getWidth() - viewport.getScrollBarThickness(), juce::jmax( 420, viewport.getHeight() ) );
+    }
+} // namespace kick_ui

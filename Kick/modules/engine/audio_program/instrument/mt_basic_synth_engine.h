@@ -38,6 +38,8 @@ namespace mt
         void noteOn( int Note, float Velocity ) override;
         void noteOff( int Note ) override;
         void allNotesOff() override;
+        void pitchBend( float Semitones ) override;
+        void modWheel( float Amount ) override; // opens the filter up to 3 octaves
         void process( float* const* Out, int NumChannels, int NumSamples ) override;
 
         const std::vector<InstrumentParam>& getParams() const override { return params; }
@@ -86,5 +88,9 @@ namespace mt
         uint64_t                 noteCounter{ 0 };
         double                   sampleRate{ 48000 };
         juce::SmoothedValue<float> smoothCutoff{ 2000.f };
+        juce::SmoothedValue<float> smoothLevel{ 0.7f };
+        std::vector<float>         cutoffBlock, levelBlock; // per-block scratch, sized in prepare()
+        float                      bendSemitones{ 0.f };
+        float                      modAmount{ 0.f };
     };
 } // namespace mt

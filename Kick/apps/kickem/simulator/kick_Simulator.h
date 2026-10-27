@@ -33,6 +33,8 @@ namespace sim
         void startSelfTest();
         /// KICKEM_SELFTEST=instrument: exercise an instrument program and its edit screen.
         void startInstrumentTest();
+        /// KICKEM_SELFTEST=audio: list audio device types and snapshot Settings > Audio.
+        void startAudioSettingsTest();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };

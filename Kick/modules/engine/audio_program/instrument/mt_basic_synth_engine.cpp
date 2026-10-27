@@ -90,11 +90,15 @@ namespace mt
             values[(size_t)i] = params[(size_t)i].defaultValue;
     }
 
-    void BasicSynthEngine::prepare( double SampleRate, int )
+    void BasicSynthEngine::prepare( double SampleRate, int MaxBlockSize )
     {
         sampleRate = SampleRate > 0 ? SampleRate : 48000.0;
         smoothCutoff.reset( sampleRate, 0.02 );
         smoothCutoff.setCurrentAndTargetValue( values[kCutoff] );
+        smoothLevel.reset( sampleRate, 0.02 );
+        smoothLevel.setCurrentAndTargetValue( values[kLevel] );
+        cutoffBlock.assign( (size_t)juce::jmax( 1, MaxBlockSize ), 0.f );
+        levelBlock.assign( (size_t)juce::jmax( 1, MaxBlockSize ), 0.f );
         reset();
     }
 
@@ -112,6 +116,8 @@ namespace mt
         values[(size_t)Index] = juce::jlimit( p.minValue, p.maxValue, Value );
         if( Index == kCutoff )
             smoothCutoff.setTargetValue( values[kCutoff] );
+        if( Index == kLevel )
+            smoothLevel.setTargetValue( values[kLevel] );
     }
 
     BasicSynthEngine::Voice* BasicSynthEngine::findVoiceFor( int Note )
@@ -164,12 +170,28 @@ namespace mt
         }
     }
 
+    void BasicSynthEngine::pitchBend( float Semitones ) { bendSemitones = juce::jlimit( -24.f, 24.f, Semitones ); }
+    void BasicSynthEngine::modWheel( float Amount ) { modAmount = juce::jlimit( 0.f, 1.f, Amount ); }
+
     void BasicSynthEngine::process( float* const* Out, int NumChannels, int NumSamples )
     {
         for( int ch = 0; ch < NumChannels; ++ch )
             juce::FloatVectorOperations::clear( Out[ch], NumSamples );
         if( NumChannels <= 0 )
             return;
+
+        // Per-block shared values: the smoothed cutoff (plus mod wheel) and level.
+        if( (int)cutoffBlock.size() < NumSamples )
+        {
+            cutoffBlock.resize( (size_t)NumSamples ); // only if a block exceeds prepare()'s size
+            levelBlock.resize( (size_t)NumSamples );
+        }
+        const auto modOctaves = 3.f * modAmount;
+        for( int i = 0; i < NumSamples; ++i )
+        {
+            cutoffBlock[(size_t)i] = smoothCutoff.getNextValue() * std::exp2( modOctaves );
+            levelBlock[(size_t)i]  = smoothLevel.getNextValue() * 0.25f; // headroom for 8 voices
+        }
 
         const auto sr        = (float)sampleRate;
         const auto wave      = values[kWave];
@@ -182,37 +204,39 @@ namespace mt
         const auto sustain   = values[kSustain];
         const auto releaseC  = decayCoef( values[kRelease], sampleRate );
         const auto fDecayC   = decayCoef( values[kFilterDecay], sampleRate );
-        const auto level     = values[kLevel] * 0.25f; // headroom for 8 voices
 
-        float* left  = Out[0];
-        float* right = NumChannels > 1 ? Out[1] : nullptr;
+        float* left = Out[0];
 
-        for( int i = 0; i < NumSamples; ++i )
+        for( auto& v : voices )
         {
-            const auto baseCutoff = smoothCutoff.getNextValue();
-            float      mix        = 0.f;
+            if( !v.amp.active() )
+                continue;
 
-            for( auto& v : voices )
+            // Pitch is constant within a block.
+            const double note  = v.note + bendSemitones;
+            const double dt1   = noteToHz( note - detune * 0.005 ) / sampleRate;
+            const double dt2   = noteToHz( note + detune * 0.005 ) / sampleRate;
+            const double dtSub = 0.5 * noteToHz( note ) / sampleRate;
+            const float  velAmp = 0.3f + 0.7f * v.velocity;
+            const float  velEnv = envOct * ( 0.5f + 0.5f * v.velocity );
+
+            for( int i = 0; i < NumSamples; ++i )
             {
-                if( !v.amp.active() )
-                    continue;
-
-                const double f1  = noteToHz( v.note - detune * 0.005 );
-                const double f2  = noteToHz( v.note + detune * 0.005 );
-                const double dt1 = f1 / sampleRate, dt2 = f2 / sampleRate, dtSub = 0.5 * f1 / sampleRate;
-
                 const float o1  = juce::jmap( wave, sawBlep( v.phase1, dt1 ), squareBlep( v.phase1, dt1 ) );
                 const float o2  = juce::jmap( wave, sawBlep( v.phase2, dt2 ), squareBlep( v.phase2, dt2 ) );
                 const float sub = (float)std::sin( juce::MathConstants<double>::twoPi * v.phaseSub );
-                v.phase1        = std::fmod( v.phase1 + dt1, 1.0 );
-                v.phase2        = std::fmod( v.phase2 + dt2, 1.0 );
-                v.phaseSub      = std::fmod( v.phaseSub + dtSub, 1.0 );
+                v.phase1 += dt1;
+                v.phase2 += dt2;
+                v.phaseSub += dtSub;
+                if( v.phase1 >= 1.0 ) v.phase1 -= 1.0;
+                if( v.phase2 >= 1.0 ) v.phase2 -= 1.0;
+                if( v.phaseSub >= 1.0 ) v.phaseSub -= 1.0;
 
                 const float x = 0.5f * ( o1 + o2 ) + subLevel * sub;
 
                 // Filter envelope: instant attack, decays to 0 (no sustain), scaled by velocity.
                 const float fEnv   = v.filter.next( 1.f, fDecayC, 0.f, fDecayC );
-                const float cutoff = juce::jlimit( 20.f, 0.45f * sr, baseCutoff * std::exp2( envOct * fEnv * ( 0.5f + 0.5f * v.velocity ) ) );
+                const float cutoff = juce::jlimit( 20.f, 0.45f * sr, cutoffBlock[(size_t)i] * std::exp2( velEnv * fEnv ) );
 
                 // TPT state-variable low-pass.
                 const float g  = std::tan( juce::MathConstants<float>::pi * cutoff / sr );
@@ -224,14 +248,15 @@ namespace mt
                 v.ic2          = 2.f * v2 - v.ic2;
 
                 const float amp = v.amp.next( attackInc, decayC, sustain, releaseC );
-                mix += v2 * amp * ( 0.3f + 0.7f * v.velocity );
-            }
+                left[i] += v2 * amp * velAmp * levelBlock[(size_t)i];
 
-            mix *= level;
-            left[i] = mix;
-            if( right )
-                right[i] = mix;
+                if( !v.amp.active() )
+                    break; // released to silence mid-block
+            }
         }
+
+        for( int ch = 1; ch < NumChannels; ++ch )
+            juce::FloatVectorOperations::copy( Out[ch], left, NumSamples );
     }
 
     //==============================================================================

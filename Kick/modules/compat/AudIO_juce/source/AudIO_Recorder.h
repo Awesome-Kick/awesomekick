@@ -181,6 +181,10 @@ namespace AudIO
     public:
         explicit Looper( Design& D );
 
+        /// The loop is always stereo (mono inputs are recorded to both sides), so this
+        /// hides Recorder::setLength, which sizes by the recording mode.
+        void setLength( double TimeInSeconds );
+
         void setRecord( bool Record ) noexcept;
         void setOverdub( bool Overdub ) noexcept override;
         void setPlay() noexcept;
@@ -202,13 +206,18 @@ namespace AudIO
 
     protected:
         void process( Buffer<float>& Buf ) override;
+        void prepareToPlay( uint32_t SampleRate, uint32_t BlockSize ) override;
 
     private:
         void takeUndoSnapshot();
+        void swapEmpty();
+        void applyInserts( Buffer<float>& Buf, int NumSamples );
 
-        juce::AudioBuffer<float> undoBuffer;
-        bool                     hasUndo{ false };
-        bool                     undone{ false };
+        juce::AudioBuffer<float>        undoBuffer;
+        bool                            hasUndo{ false };
+        bool                            undone{ false };
+        bool                            undoEmpty{ true };
+        std::unique_ptr<Buffer<float>> fxBuffer; // scratch for insert effects
         double                   progress{ 0 };
 
         std::atomic<bool> running{ false };

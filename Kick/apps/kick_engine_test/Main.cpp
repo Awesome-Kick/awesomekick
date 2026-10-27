@@ -340,6 +340,32 @@ namespace
         lp.stop();
         lp.setThreshold( 0.f );
 
+        // Undo of the very first take goes back to empty; redo brings it back.
+        lp.clear();
+        lp.setRecord( true );
+        lp.start( true, true );
+        recordLoop();
+        lp.stop();
+        lp.undo();
+        const bool emptyAfterUndo = lp.isEmpty();
+        lp.redo();
+        R.check( emptyAfterUndo && !lp.isEmpty(), "first take can be undone and redone" );
+
+        // Mono input + new length must still give a stereo loop (used to read past the buffer).
+        lp.clear();
+        lp.setRecordingMode( AudIO::Recorder::L_MONO );
+        lp.setLength( 0.5 * loopBlocks * testBlock / (double)testRate );
+        R.check( lp.getAudioBuffer().getNumChannels() == 2, "loop stays stereo with a mono input", juce::String( lp.getAudioBuffer().getNumChannels() ) + " ch" );
+        lp.setRecord( true );
+        lp.start( true, true );
+        recordLoop();
+        lp.setPlay();
+        auto [lm, rm] = playLoop();
+        R.check( lm > 0.1f && rm > 0.1f, "mono input plays on both sides", "L " + f3( lm ) + " R " + f3( rm ) );
+        lp.stop();
+        lp.setRecordingMode( AudIO::Recorder::LR_STEREO );
+        lp.setLength( loopBlocks * testBlock / (double)testRate );
+
         lp.setMonitorOn( true );
         lp.setMonitorGain( 0.5f );
         sine.fill( buf );
@@ -711,6 +737,181 @@ namespace
                 R.check( chord > 0.02f, "chord plays", "peak " + f3( chord ) );
                 measureOutput( meter, 1000 );
             }
+        }
+
+        //--------------------------------------------------------------------------
+        R.section( "Instrument hardening: notes never hang" );
+        {
+            const auto ip  = ai.createProgram( mt::MTProgramType::Plugin, "HardenSynth" );
+            auto*      ins = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( ip ) );
+            const auto ht  = ai.createTrack( seq );
+            ai.setProgramToTrack( ip, seq, ht );
+            ai.setSelectedSequenceAndTrack( seq, ht );
+
+            auto held = [&]() {
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 57, (juce::uint8)110 ) );
+                return measureOutput( meter, 300 );
+            };
+            auto settled = [&]() {
+                measureOutput( meter, 900 ); // default release 0.3 s
+                return measureOutput( meter, 300 );
+            };
+
+            // 1. Transport stop sends all-notes-off.
+            const auto playing = held();
+            ai.setSequencePlay( seq, true, true );
+            measureOutput( meter, 300 );
+            ai.setSequenceStop();
+            const auto afterStop = settled();
+            R.check( playing > 0.02f && afterStop < 0.005f, "transport stop releases a held note", "held " + f3( playing ) + " after " + f3( afterStop ) );
+
+            // 2. Changing the track's program releases the old program's notes.
+            held();
+            ai.setProgramToTrack( prog, seq, ht ); // drum kit
+            const auto afterProgChange = settled();
+            R.check( afterProgChange < 0.005f, "program change releases a held note", "after " + f3( afterProgChange ) );
+            ai.setProgramToTrack( ip, seq, ht );
+
+            // 3. Swapping the engine while a note is held.
+            held();
+            if( ins )
+                ins->setEngine( "Basic Synth" );
+            ins = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( ip ) );
+            const auto afterSwap = settled();
+            R.check( afterSwap < 0.005f, "engine swap with a held note stays clean", "after " + f3( afterSwap ) );
+
+            // 4. Transpose (semi) changed while a note is held: the note-off must still match.
+            held();
+            if( ins )
+                ins->getState().setProperty( mt::IDs::semi, 5, nullptr );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 57 ) );
+            const auto afterSemi = settled();
+            R.check( afterSemi < 0.005f, "semi change while held still releases", "after " + f3( afterSemi ) );
+            if( ins )
+                ins->getState().setProperty( mt::IDs::semi, 0, nullptr );
+
+            // 5. Muting the track while a note is held: the release must get through.
+            held();
+            ai.setTrackMute( seq, ht, true );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 57 ) );
+            ai.setTrackMute( seq, ht, false );
+            const auto afterMute = settled();
+            R.check( afterMute < 0.005f, "release while muted is not lost", "after " + f3( afterMute ) );
+
+            // 6. A note shorter than one block still sounds.
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 64, (juce::uint8)120 ) );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 64 ) );
+            const auto blip = measureOutput( meter, 300 );
+            R.check( blip > 0.005f, "very short note is audible", "peak " + f3( blip ) );
+            settled();
+
+            // 7. Tree changes reach the engine (this is what undo/redo do).
+            if( ins )
+            {
+                auto paramsVT = ins->getState().getOrCreateChildWithName( mt::IDs::INSTRUMENT_PARAMS, nullptr );
+                paramsVT.setProperty( "level", 0.f, nullptr );
+                measureOutput( meter, 100 ); // level is smoothed over 20 ms
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 60, (juce::uint8)120 ) );
+                const auto silent = measureOutput( meter, 300 );
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 60 ) );
+                settled();
+                paramsVT.setProperty( "level", 0.7f, nullptr );
+                measureOutput( meter, 100 );
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 60, (juce::uint8)120 ) );
+                const auto loud = measureOutput( meter, 300 );
+                ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 60 ) );
+                settled();
+                R.check( silent < 0.005f && loud > 0.02f, "parameter changes in the tree reach the engine (undo path)", "level 0 -> " + f3( silent ) + ", 0.7 -> " + f3( loud ) );
+            }
+
+            // 8. Pitch bend and mod wheel are accepted (no crash, still plays).
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::pitchWheel( 1, 12000 ) );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::controllerEvent( 1, 1, 100 ) );
+            const auto bent = held();
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 57 ) );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::pitchWheel( 1, 8192 ) );
+            ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::controllerEvent( 1, 1, 0 ) );
+            R.check( bent > 0.02f && settled() < 0.005f, "pitch bend and mod wheel", "peak " + f3( bent ) );
+
+            // 9. Unknown engine names fall back instead of leaving the program silent.
+            if( ins )
+            {
+                ins->getState().setProperty( mt::IDs::instrumentEngine, "No Such Engine", nullptr );
+                R.check( ins->getEngineName() == "Basic Synth", "unknown engine name falls back to the default", ins->getEngineName() );
+            }
+        }
+
+        //--------------------------------------------------------------------------
+        R.section( "Instrument save and reload" );
+        {
+            auto exeDir    = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto template1 = exeDir.getChildFile( "templates/Template 01/Template 01.kickPrj" );
+            auto tempDir   = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kick_engine_test_project" );
+            tempDir.deleteRecursively();
+            tempDir.createDirectory();
+            auto projFile = tempDir.getChildFile( "Roundtrip.kickPrj" );
+
+            if( R.check( template1.copyFileTo( projFile ) && ai.loadProject( projFile ), "load a copy of Template 01", projFile.getFullPathName() ) )
+            {
+                pump( 500 );
+                if( !ai.getNumSequences() )
+                    ai.createSequence();
+                const auto s2   = ai.getSelectedSequence();
+                const auto t2   = ai.createTrack( s2, "Synth" );
+                const auto p2   = ai.createProgram( mt::MTProgramType::Plugin, "Saved Synth" );
+                auto*      inst = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( p2 ) );
+                ai.setProgramToTrack( p2, s2, t2 );
+                if( inst )
+                {
+                    inst->setParam( mt::BasicSynthEngine::kCutoff, 777.f );
+                    inst->setParam( mt::BasicSynthEngine::kRelease, 1.5f );
+                    mt::PadLayout l;
+                    l.mode       = mt::PadLayout::Mode::Thirds;
+                    l.root       = 5;
+                    l.scaleIndex = 3;
+                    l.toTree( inst->getState().getOrCreateChildWithName( mt::IDs::PAD_LAYOUT, nullptr ) );
+                }
+
+                const auto saved = ai.saveProject();
+                ai.closeProject();
+                pump( 300 );
+                const auto reloaded = ai.loadProject( projFile );
+                pump( 800 );
+                R.check( saved && reloaded, "save, close and reload", juce::String( "saved " ) + ( saved ? "yes" : "no" ) + ", reloaded " + ( reloaded ? "yes" : "no" ) );
+
+                const auto pi = ai.getProgramIndexByName( "Saved Synth" );
+                auto*      re = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( pi ) );
+                if( R.check( re != nullptr, "instrument program comes back as an instrument", "index " + juce::String( pi ) ) )
+                {
+                    R.check( re->getEngineName() == "Basic Synth", "engine restored", re->getEngineName() );
+                    R.check( std::abs( re->getParam( mt::BasicSynthEngine::kCutoff ) - 777.f ) < 0.01f && std::abs( re->getParam( mt::BasicSynthEngine::kRelease ) - 1.5f ) < 0.001f,
+                             "parameters restored", f3( re->getParam( mt::BasicSynthEngine::kCutoff ) ) + " Hz, release " + f3( re->getParam( mt::BasicSynthEngine::kRelease ) ) );
+                    const auto l = mt::PadLayout::fromTree( re->getState().getChildWithName( mt::IDs::PAD_LAYOUT ) );
+                    R.check( l.mode == mt::PadLayout::Mode::Thirds && l.root == 5 && l.scaleIndex == 3, "pad layout restored" );
+
+                    ai.addLiveMidiNote( pi, 60, 110 );
+                    const auto sound = measureOutput( meter, 400 );
+                    ai.stopLiveMidiNote( pi, 60 );
+                    R.check( sound > 0.02f, "reloaded instrument plays", "peak " + f3( sound ) );
+                    measureOutput( meter, 1800 );
+
+                    // Undo through the project's undo manager reverts the parameter, and the
+                    // engine follows (valueTreePropertyChanged).
+                    ai.getUndoManager().beginNewTransaction();
+                    re->setParam( mt::BasicSynthEngine::kLevel, 0.f );
+                    ai.getUndoManager().beginNewTransaction();
+                    ai.performUndo();
+                    measureOutput( meter, 100 );
+                    ai.addLiveMidiNote( pi, 60, 110 );
+                    const auto afterUndo = measureOutput( meter, 400 );
+                    ai.stopLiveMidiNote( pi, 60 );
+                    R.check( re->getParam( mt::BasicSynthEngine::kLevel ) > 0.5f && afterUndo > 0.02f, "undo restores the parameter and the sound", "level " + f3( re->getParam( mt::BasicSynthEngine::kLevel ) ) + ", peak " + f3( afterUndo ) );
+                    measureOutput( meter, 1800 );
+                }
+                ai.closeProject();
+                pump( 300 );
+            }
+            tempDir.deleteRecursively();
         }
 
         //--------------------------------------------------------------------------

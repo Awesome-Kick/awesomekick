@@ -28,6 +28,8 @@ namespace mt
         {
             const juce::SpinLock::ScopedLockType lock( engineLock );
             std::swap( engine, Engine );
+            sounding.fill( -1 ); // the new engine has no notes
+            numDeferredOffs = 0;
         }
         // `Engine` now holds the old one and is destroyed here, off the audio thread.
     }
@@ -50,40 +52,84 @@ namespace mt
     void InstrumentObject::noteOff( int Note ) { push( { Event::Type::NoteOff, Note, 0.f } ); }
     void InstrumentObject::allNotesOff() { push( { Event::Type::AllNotesOff, 0, 0.f } ); }
     void InstrumentObject::setParam( int Index, float Value ) { push( { Event::Type::Param, Index, Value } ); }
+    void InstrumentObject::pitchBend( float Semitones ) { push( { Event::Type::PitchBend, 0, Semitones } ); }
+    void InstrumentObject::modWheel( float Amount ) { push( { Event::Type::ModWheel, 0, Amount } ); }
 
     void InstrumentObject::prepareToPlay( uint32_t SampleRate, uint32_t BlockSize )
     {
         AudIO::Object::prepareToPlay( SampleRate, BlockSize );
         AudIO::DawInserts::prepareToPlay( SampleRate, BlockSize );
 
+        gainL.reset( SampleRate, 0.02 );
+        gainR.reset( SampleRate, 0.02 );
+        gainL.setCurrentAndTargetValue( master.gainL.load() );
+        gainR.setCurrentAndTargetValue( master.gainR.load() );
+
         const juce::SpinLock::ScopedLockType lock( engineLock );
         if( engine )
             engine->prepare( SampleRate, (int)BlockSize );
-        prepared = true;
+        sounding.fill( -1 );
+        numDeferredOffs = 0;
+        prepared        = true;
+    }
+
+    void InstrumentObject::releaseNote( int InputNote )
+    {
+        auto& sent = sounding[(size_t)InputNote];
+        if( sent >= 0 )
+            engine->noteOff( sent );
+        sent = -1;
     }
 
     void InstrumentObject::applyEvents()
     {
+        // Note-offs held back from the previous block (see below) go first.
+        for( int i = 0; i < numDeferredOffs; ++i )
+            releaseNote( deferredOffs[(size_t)i] );
+        numDeferredOffs = 0;
+
+        std::array<bool, 128> startedThisBlock{};
+
         const auto scope = fifo.read( fifo.getNumReady() );
-        auto       apply = [this]( const Event& e ) {
+        auto       apply = [&]( const Event& e ) {
             switch( e.type )
             {
                 case Event::Type::NoteOn:
                 {
+                    if( !juce::isPositiveAndBelow( e.index, 128 ) )
+                        break;
+                    releaseNote( e.index ); // retrigger
+                    // Remember the note actually sent, so the note-off matches even if the
+                    // program's transpose changes while it is held.
                     const auto note = e.index + master.semi();
                     if( juce::isPositiveAndBelow( note, 128 ) )
+                    {
                         engine->noteOn( note, e.value );
+                        sounding[(size_t)e.index]         = note;
+                        startedThisBlock[(size_t)e.index] = true;
+                    }
                     break;
                 }
                 case Event::Type::NoteOff:
                 {
-                    const auto note = e.index + master.semi();
-                    if( juce::isPositiveAndBelow( note, 128 ) )
-                        engine->noteOff( note );
+                    if( !juce::isPositiveAndBelow( e.index, 128 ) )
+                        break;
+                    // A note shorter than one block would start and stop before rendering a
+                    // sample; keep it for this block and release it at the next.
+                    if( startedThisBlock[(size_t)e.index] && numDeferredOffs < (int)deferredOffs.size() )
+                        deferredOffs[(size_t)numDeferredOffs++] = e.index;
+                    else
+                        releaseNote( e.index );
                     break;
                 }
-                case Event::Type::AllNotesOff: engine->allNotesOff(); break;
+                case Event::Type::AllNotesOff:
+                    engine->allNotesOff();
+                    sounding.fill( -1 );
+                    numDeferredOffs = 0;
+                    break;
                 case Event::Type::Param: engine->setParam( e.index, e.value ); break;
+                case Event::Type::PitchBend: engine->pitchBend( e.value ); break;
+                case Event::Type::ModWheel: engine->modWheel( e.value ); break;
             }
         };
         for( int i = 0; i < scope.blockSize1; ++i )
@@ -105,14 +151,20 @@ namespace mt
             return;
         }
 
+        // Decaying filters and envelopes otherwise end in denormals (slow on x86, and
+        // engines ported from elsewhere may not guard against them).
+        const juce::ScopedNoDenormals noDenormals;
+
         applyEvents();
 
         float* outs[2] = { outL, outR };
         engine->process( outs, 2, numSamples );
 
-        // Program gain, pan and mute (same law as the drum voices).
-        juce::FloatVectorOperations::multiply( outL, master.gainL.load(), numSamples );
-        juce::FloatVectorOperations::multiply( outR, master.gainR.load(), numSamples );
+        // Program gain, pan and mute (same law as the drum voices), ramped to avoid zipper noise.
+        gainL.setTargetValue( master.gainL.load() );
+        gainR.setTargetValue( master.gainR.load() );
+        gainL.applyGain( outL, numSamples );
+        gainR.applyGain( outR, numSamples );
 
         AudIO::DawInserts::process( Buffer );
         meter.process( Buffer );

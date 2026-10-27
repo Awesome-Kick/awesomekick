@@ -105,6 +105,11 @@ namespace sim
             startInstrumentTest();
             return;
         }
+        if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "audio" )
+        {
+            startAudioSettingsTest();
+            return;
+        }
 
         wait( 4 );
         note( "jog ENTER (load selected project)" );
@@ -181,10 +186,18 @@ namespace sim
         };
 
         wait( 4 );
-        s.push_back( [log] { log( "jog ENTER (load selected project)" ); } );
-        s.push_back( [this] { mainControl.getJog().pushCentre( true ); } );
-        s.push_back( [this] { mainControl.getJog().pushCentre( false ); } );
-        wait( 12 );
+        // Work on a throwaway copy of a template: the app saves the open project on exit,
+        // so loading the first project in the list would modify the user's own projects.
+        s.push_back( [log] {
+            auto exeDir  = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+            auto source  = exeDir.getChildFile( "templates/Template 01/Template 01.kickPrj" );
+            auto scratch = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_selftest/SelfTest.kickPrj" );
+            scratch.getParentDirectory().deleteRecursively();
+            scratch.getParentDirectory().createDirectory();
+            const bool ok = source.copyFileTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            log( "loaded scratch project " + scratch.getFullPathName() + ( ok ? "" : " (FAILED)" ) );
+        } );
+        wait( 8 );
 
         s.push_back( [log] {
             auto& ae = mt::getAudioInterface();
@@ -232,6 +245,64 @@ namespace sim
             wait( 1 );
             s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
         }
+        s.push_back( [log] { log( "done" ); } );
+        wait( 2 );
+        s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
+
+        startTimer( 400 );
+    }
+
+    void SimulatorBoard::startAudioSettingsTest()
+    {
+        // KICKEM_SELFTEST=audio: list device types, open Settings > Audio, snapshot, quit.
+        auto& s   = selfTestSteps;
+        auto  log = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+
+        wait( 6 ); // the engine opens its device asynchronously
+        s.push_back( [log] {
+            auto& dm = mt::getAudioInterface().getAudioDeviceManager();
+            for( auto* type : dm.getAvailableDeviceTypes() )
+            {
+                type->scanForDevices();
+                log( "device type " + type->getTypeName() + ": " + type->getDeviceNames().joinIntoString( " | " ) );
+            }
+            auto* dev = dm.getCurrentAudioDevice();
+            log( "current: " + dm.getCurrentAudioDeviceType() + " / " + ( dev ? dev->getName() + " @ " + juce::String( dev->getCurrentSampleRate() ) + " Hz, " + juce::String( dev->getCurrentBufferSizeSamples() ) : juce::String( "none" ) ) );
+        } );
+        s.push_back( [] { kick_ui::signals::sigScreenClose( kick_ui::Screen::HomePreferencesView ); } );
+        wait( 3 );
+        s.push_back( [this, log] {
+            // Click the "Audio" tab the way a user would.
+            std::function<juce::Button*( juce::Component& )> find = [&find]( juce::Component& c ) -> juce::Button* {
+                if( auto* b = dynamic_cast<juce::Button*>( &c ); b && b->getName() == "Audio" )
+                    return b;
+                for( auto* child : c.getChildren() )
+                    if( auto* hit = find( *child ) )
+                        return hit;
+                return nullptr;
+            };
+            if( auto* tab = find( screen ) )
+            {
+                tab->triggerClick();
+                log( "clicked Audio tab" );
+            }
+            else
+                log( "Audio tab not found" );
+        } );
+        wait( 4 );
+        s.push_back( [this, log] {
+            const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+            if( dir.isEmpty() )
+                return;
+            auto file = juce::File( dir ).getChildFile( "settings_audio.png" );
+            file.deleteFile();
+            if( auto out = file.createOutputStream() )
+            {
+                juce::PNGImageFormat().writeImageToStream( screen.createComponentSnapshot( screen.getLocalBounds() ), *out );
+                log( "snapshot " + file.getFullPathName() );
+            }
+        } );
         s.push_back( [log] { log( "done" ); } );
         wait( 2 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );

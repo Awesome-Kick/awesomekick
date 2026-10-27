@@ -109,6 +109,34 @@ namespace mt
 
     void AudioDevice::audioDeviceIOCallbackWithContext( const float* const* Inputs, int NumInputs, float* const* Outputs, int NumOutputs, int NumSamples, const juce::AudioIODeviceCallbackContext& )
     {
+        // Covers the whole engine: decaying filters and reverbs otherwise produce denormals.
+        const juce::ScopedNoDenormals noDenormals;
+
+        // Direct path: the device delivers exactly one engine block, so the FIFO would
+        // only add a block of latency.
+        if( fifoPos == 0 && NumSamples == (int)blockSize )
+        {
+            for( int ch = 0; ch < (int)numIns; ++ch )
+            {
+                auto* dst = inFifo.getWritePointer( ch );
+                if( ch < NumInputs && Inputs[ch] )
+                    juce::FloatVectorOperations::copy( dst, Inputs[ch], NumSamples );
+                else
+                    juce::FloatVectorOperations::clear( dst, NumSamples );
+            }
+            runBlock();
+            for( int ch = 0; ch < NumOutputs; ++ch )
+                if( Outputs[ch] )
+                {
+                    if( ch < (int)numOuts )
+                        juce::FloatVectorOperations::copy( Outputs[ch], outFifo.getReadPointer( ch ), NumSamples );
+                    else
+                        juce::FloatVectorOperations::clear( Outputs[ch], NumSamples );
+                }
+            outFifo.clear(); // already played: don't replay it if the FIFO path takes over
+            return;
+        }
+
         int done = 0;
         while( done < NumSamples )
         {

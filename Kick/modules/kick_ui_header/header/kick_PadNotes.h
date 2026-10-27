@@ -5,9 +5,9 @@
  * 4ths/3rds/sequential) with the bank buttons selecting the octave. Other
  * programs keep the original mapping: pad + bank offset.
  *
- * The note each pad started is remembered, so a release always stops the note
- * its press started, even if the bank or layout changed in between, or the
- * press and release are handled by different screens.
+ * Each pad remembers the note it started and the track it went to, so a release
+ * always stops exactly that note: even if the bank, layout or selected track
+ * changed in between, or the press and release are handled by different screens.
  *
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
@@ -21,36 +21,45 @@ namespace kick_ui
         /// Returns the note played or released, or -1 if none.
         static int handle( CPktMgr::HWMsg_t& Msg )
         {
-            auto&      ae       = mt::getAudioInterface();
-            const auto pad      = contracts::DclContractsHelper::getPadNumber( Msg );
-            const auto state    = contracts::DclContractsHelper::getPadState( Msg );
-            const auto velocity = contracts::DclContractsHelper::getPadVelocity( Msg );
-            auto&      held     = heldNotes();
-
-            if( !juce::isPositiveAndBelow( pad, (int)held.size() ) )
-                return -1;
+            const auto pad   = contracts::DclContractsHelper::getPadNumber( Msg );
+            const auto state = contracts::DclContractsHelper::getPadState( Msg );
 
             if( state == contracts::DeviceControlContracts::BTN_PRESSED )
-            {
-                const auto note = noteForPad( pad );
-                if( note < 0 )
-                    return -1;
-                if( held[(size_t)pad] >= 0 ) // re-press without a release
-                    ae.addLiveMidiMsg( ae.getSelected(), juce::MidiMessage::noteOff( 1, held[(size_t)pad] ) );
-                held[(size_t)pad] = note;
-                ae.addLiveMidiMsg( ae.getSelected(), juce::MidiMessage::noteOn( 1, note, (juce::uint8)velocity ) );
-                return note;
-            }
-
+                return press( pad, contracts::DclContractsHelper::getPadVelocity( Msg ) );
             if( state == contracts::DeviceControlContracts::BTN_RELEASED )
-            {
-                const auto note   = held[(size_t)pad] >= 0 ? held[(size_t)pad] : noteForPad( pad );
-                held[(size_t)pad] = -1;
-                if( note >= 0 )
-                    ae.addLiveMidiMsg( ae.getSelected(), juce::MidiMessage::noteOff( 1, note ) );
-                return note;
-            }
+                return release( pad );
             return -1;
+        }
+
+        static int press( int Pad, int Velocity )
+        {
+            auto& held = heldNotes();
+            if( !juce::isPositiveAndBelow( Pad, (int)held.size() ) )
+                return -1;
+
+            const auto note = noteForPad( Pad );
+            if( note < 0 )
+                return -1;
+
+            release( Pad ); // re-press without a release
+            auto& ae  = mt::getAudioInterface();
+            held[(size_t)Pad] = { note, ae.getSelected() };
+            ae.addLiveMidiMsg( ae.getSelected(), juce::MidiMessage::noteOn( 1, note, (juce::uint8)juce::jlimit( 1, 127, Velocity ) ) );
+            return note;
+        }
+
+        static int release( int Pad )
+        {
+            auto& held = heldNotes();
+            if( !juce::isPositiveAndBelow( Pad, (int)held.size() ) )
+                return -1;
+
+            auto h            = held[(size_t)Pad];
+            held[(size_t)Pad] = {};
+            if( h.note < 0 )
+                return -1;
+            mt::getAudioInterface().addLiveMidiMsg( h.target, juce::MidiMessage::noteOff( 1, h.note ) );
+            return h.note;
         }
 
         /// The note a pad plays right now for the selected track, or -1.
@@ -71,13 +80,15 @@ namespace kick_ui
         }
 
     private:
-        static std::array<int, 16>& heldNotes()
+        struct Held
         {
-            static std::array<int, 16> notes = []() {
-                std::array<int, 16> a{};
-                a.fill( -1 );
-                return a;
-            }();
+            int             note{ -1 };
+            mt::MTSelected  target{};
+        };
+
+        static std::array<Held, 16>& heldNotes()
+        {
+            static std::array<Held, 16> notes{};
             return notes;
         }
     };

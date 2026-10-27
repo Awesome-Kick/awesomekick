@@ -100,7 +100,6 @@ target_compile_definitions(${TargetName}
         JUCE_USE_CURL=0
         JUCER_ENABLE_GPL_MODE=0
         JUCE_REPORT_APP_USAGE=0
-        JUCE_ASIO=0
         JUCE_ENABLE_REPAINT_DEBUGGING=0
 
         JUCE_MODAL_LOOPS_PERMITTED=0
@@ -186,3 +185,6 @@ install(
     DIRECTORY "${CMAKE_SOURCE_DIR}/demos" DESTINATION "."
     PATTERN "${CMAKE_SOURCE_DIR}/demos/*"
 )
+
+# ASIO devices when KICK_ASIO_SDK_DIR is set (see Kick/CMakeLists.txt).
+kick_enable_asio( ${TargetName} )

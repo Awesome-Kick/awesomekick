@@ -50,7 +50,7 @@ namespace MIDI
     static constexpr int   NUMERIC_MAX{ 128 }; // exclusive bound for note / pad loops
     static constexpr int   STEP{ 1 };
     static constexpr int   DEFAULT{ 0 };         // used for randomisation amounts, so 0
-    static constexpr int   LEVEL_DEFAULT{ 100 }; // guess
+    static constexpr int   LEVEL_DEFAULT{ 127 }; // also the max of Q-link level/semi/fine ranges (kick_KnobGrid)
     static constexpr int   MIDDLE_C{ 60 };
     static constexpr int   NOTE_DEFAULT{ 0 }; // pads are note numbers 0..127 (8 banks x 16), so pad A1
     static constexpr float SCALER{ 1.0f / 127.0f };

@@ -24,6 +24,27 @@ option( KICK_VST_PLUGIN "KICK VST Plugin" OFF )
 option( KICK_SIMULATOR "KICK Simulator" OFF )
 option( KICK_PLAYBACK "KICK Audio Playback App" OFF )
 option( KICK_ENGINE_TEST "Headless audio engine test runner" OFF )
+
+# ASIO (Windows): point this at a local Steinberg ASIO SDK (the folder containing
+# common/iasiodrv.h) to enable ASIO devices on Settings > Audio. The SDK is under
+# Steinberg's own licence: never commit it, and don't distribute ASIO-enabled builds.
+set( KICK_ASIO_SDK_DIR "" CACHE PATH "Steinberg ASIO SDK folder (Windows only)" )
+set( KICK_JUCE_ASIO 0 )
+if( WIN32 AND KICK_ASIO_SDK_DIR )
+    if( EXISTS "${KICK_ASIO_SDK_DIR}/common/iasiodrv.h" )
+        set( KICK_JUCE_ASIO 1 )
+        message( STATUS "ASIO enabled, SDK: ${KICK_ASIO_SDK_DIR}" )
+    else()
+        message( WARNING "KICK_ASIO_SDK_DIR has no common/iasiodrv.h; ASIO disabled" )
+    endif()
+endif()
+
+function( kick_enable_asio Target )
+    target_compile_definitions( ${Target} PRIVATE JUCE_ASIO=${KICK_JUCE_ASIO} )
+    if( KICK_JUCE_ASIO )
+        target_include_directories( ${Target} PRIVATE "${KICK_ASIO_SDK_DIR}/common" )
+    endif()
+endfunction()
 option( KICK_PROGRAM_BUILDER "Headless tool that builds drum projects from a sample library" OFF )
 option( KICK_MULTITOUCH "KICK Multitouch demo App" OFF )
 option( DEBUG_TOUCH "Enable mouse cursor" OFF )

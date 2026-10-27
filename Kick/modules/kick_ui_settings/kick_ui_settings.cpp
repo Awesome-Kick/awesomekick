@@ -90,7 +90,7 @@ namespace kick_ui
         pViews.emplace_back( std::make_unique<SettingsInfo>() );
         pViews.emplace_back( std::make_unique<SettingsPDefault>() );
         pViews.emplace_back( std::make_unique<SettingsHardware>() );
-        // pViews.emplace_back( new SettingsAudio );
+        pViews.emplace_back( std::make_unique<SettingsAudio>() );
         pViews.emplace_back( std::make_unique<SettingsMidiSync>() );
         pViews.emplace_back( std::make_unique<SettingsCV>() );
         pViews.emplace_back( std::make_unique<SettingsEthernet>() );

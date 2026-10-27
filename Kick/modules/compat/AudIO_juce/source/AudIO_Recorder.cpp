@@ -212,9 +212,9 @@ namespace AudIO
             const juce::SpinLock::ScopedLockType lock( bufferLock );
             const int from = juce::jlimit( 0, buffer.getNumSamples(), recordedFrom.load() );
             const int to   = juce::jlimit( from, buffer.getNumSamples(), recordedTo.load() );
-            if( from > 0 )
+            if( from > 0 ) // source and destination overlap: memmove, not copyFrom
                 for( int ch = 0; ch < buffer.getNumChannels(); ++ch )
-                    buffer.copyFrom( ch, 0, buffer, ch, from, to - from );
+                    std::memmove( buffer.getWritePointer( ch ), buffer.getReadPointer( ch, from ), sizeof( float ) * (size_t)( to - from ) );
             buffer.setSize( buffer.getNumChannels(), to - from, true, true, false );
             recordedFrom.store( 0 );
             recordedTo.store( to - from );
@@ -397,21 +397,41 @@ namespace AudIO
 
     void Looper::takeUndoSnapshot()
     {
-        undoBuffer.makeCopyOf( buffer );
-        hasUndo = !isEmpty();
-        undone  = false;
+        undoBuffer.makeCopyOf( buffer, true ); // pre-sized in setLength: no allocation here
+        undoEmpty = isEmpty();                 // so the first take can be undone back to empty
+        hasUndo   = true;
+        undone    = false;
+    }
+
+    void Looper::setLength( double TimeInSeconds )
+    {
+        TimeInSeconds        = juce::jmax( 0.0, TimeInSeconds );
+        const auto numFrames = (int)std::ceil( TimeInSeconds * getSampleRate() );
+
+        // Allocate outside the lock; swap in under it so the audio thread never waits on an allocation.
+        juce::AudioBuffer<float> resized( 2, numFrames );
+        resized.clear();
+        undoBuffer.setSize( 2, numFrames, false, false, true );
+        {
+            const juce::SpinLock::ScopedLockType lock( bufferLock );
+            for( int ch = 0; ch < juce::jmin( 2, buffer.getNumChannels() ); ++ch )
+                resized.copyFrom( ch, 0, buffer, ch, 0, juce::jmin( numFrames, buffer.getNumSamples() ) );
+            std::swap( buffer, resized );
+            lengthInSeconds = TimeInSeconds;
+            pos.store( juce::jmin( pos.load(), juce::jmax( 0, numFrames - 1 ) ) );
+        }
+        hasUndo = undone = false;
     }
 
     void Looper::start( bool FromBeginning, bool SkipThresholdDetection )
     {
+        // Ensure a stereo loop of the current length (Looper::setLength allocates it).
+        const auto numFrames = (int)std::ceil( lengthInSeconds * getSampleRate() );
+        if( buffer.getNumChannels() != 2 || buffer.getNumSamples() != numFrames )
+            setLength( lengthInSeconds );
+
         {
             const juce::SpinLock::ScopedLockType lock( bufferLock );
-
-            // The loop is always stereo; mono modes are duplicated to both sides.
-            const auto numFrames = (int)std::ceil( lengthInSeconds * getSampleRate() );
-            if( buffer.getNumChannels() != 2 || buffer.getNumSamples() != numFrames )
-                buffer.setSize( 2, numFrames, true, true, false );
-
             takeUndoSnapshot();
             if( FromBeginning )
                 pos.store( 0 );
@@ -455,6 +475,7 @@ namespace AudIO
             return;
         const juce::SpinLock::ScopedLockType lock( bufferLock );
         std::swap( buffer, undoBuffer );
+        swapEmpty();
         undone = true;
     }
 
@@ -464,7 +485,15 @@ namespace AudIO
             return;
         const juce::SpinLock::ScopedLockType lock( bufferLock );
         std::swap( buffer, undoBuffer );
+        swapEmpty();
         undone = false;
+    }
+
+    void Looper::swapEmpty()
+    {
+        const bool was = empty.load();
+        empty.store( undoEmpty );
+        undoEmpty = was;
     }
 
     void Looper::save( const juce::String& FilePath ) { saveToFile( juce::File( FilePath ) ); }
@@ -493,7 +522,7 @@ namespace AudIO
         writeMonitor( Buf, numSamples );
 
         const juce::SpinLock::ScopedTryLockType lock( bufferLock );
-        const int                                len = lock.isLocked() ? buffer.getNumSamples() : 0;
+        const int len = ( lock.isLocked() && buffer.getNumChannels() >= 2 ) ? buffer.getNumSamples() : 0;
 
         if( running.load() && 0 < len )
         {
@@ -538,6 +567,41 @@ namespace AudIO
             pos.store( ( p % len + len ) % len );
         }
 
+        applyInserts( Buf, numSamples );
         metering.process( Buf );
+    }
+
+    void Looper::prepareToPlay( uint32_t SampleRate, uint32_t BlockSize )
+    {
+        Recorder::prepareToPlay( SampleRate, BlockSize );
+        if( !fxBuffer )
+            fxBuffer = std::make_unique<Buffer<float>>( 2, true, 2, true );
+    }
+
+    void Looper::applyInserts( Buffer<float>& Buf, int NumSamples )
+    {
+        // Insert effects read inputs and write outputs, so run them on a scratch buffer
+        // fed with the looper's output (the real inputs belong to upstream objects).
+        bool anyActive = false;
+        for( unsigned int i = 0; i < (unsigned int)DawInserts::MAX_INSERTS; ++i )
+            anyActive = anyActive || !isEffectBypassed( i );
+        if( !anyActive || isAllEffectsBypassed() || !fxBuffer )
+            return;
+
+        for( uint32_t ch = 0; ch < 2; ++ch )
+        {
+            auto* src = Buf.getOutputBuffer( ch );
+            auto* dst = fxBuffer->getInputBuffer( ch );
+            if( src && dst )
+                juce::FloatVectorOperations::copy( dst, src, NumSamples );
+        }
+        DawInserts::process( *fxBuffer );
+        for( uint32_t ch = 0; ch < 2; ++ch )
+        {
+            auto* src = fxBuffer->getOutputBuffer( ch );
+            auto* dst = Buf.getOutputBuffer( ch );
+            if( src && dst )
+                juce::FloatVectorOperations::copy( dst, src, NumSamples );
+        }
     }
 } // namespace AudIO

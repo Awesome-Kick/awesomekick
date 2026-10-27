@@ -37,6 +37,8 @@ namespace mt
         void noteOff( int Note );
         void allNotesOff();
         void setParam( int Index, float Value );
+        void pitchBend( float Semitones );
+        void modWheel( float Amount ); // 0..1
 
         MTMeterData& readOutMeter() { return meter.getMeter( outMeterData ); }
 
@@ -51,7 +53,9 @@ namespace mt
                 NoteOn,
                 NoteOff,
                 AllNotesOff,
-                Param
+                Param,
+                PitchBend,
+                ModWheel
             } type;
             int   index;
             float value;
@@ -59,6 +63,13 @@ namespace mt
 
         void push( const Event& E );
         void applyEvents();
+        void releaseNote( int InputNote );
+
+        // Audio thread only.
+        std::array<int, 128> sounding = []() { std::array<int, 128> a{}; a.fill( -1 ); return a; }(); // input note -> note sent
+        std::array<int, 64>  deferredOffs{};
+        int                  numDeferredOffs{ 0 };
+        juce::LinearSmoothedValue<float> gainL{ 1.f }, gainR{ 1.f };
 
         static constexpr int  queueSize = 1024;
         juce::AbstractFifo    fifo{ queueSize };

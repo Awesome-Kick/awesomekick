@@ -18,25 +18,41 @@
  *
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
-
 #pragma once
 
 // Module include files.
+
 namespace kick_ui
 {
-    class SettingsAudio : public SettingsInterface
+    /// Audio device selection: device type (ASIO, Windows Audio, ALSA, ...), device,
+    /// channels, sample rate and buffer size. Changes are saved to the prefs folder
+    /// and reopened by the engine at startup.
+    class SettingsAudio
+        : public SettingsInterface
+        , private juce::ChangeListener
     {
     public:
         SettingsAudio();
+        ~SettingsAudio() override;
 
         // Virtual functions
-        void refresh() override;
-        void setupHeader( kick_ui::KickModeHeader& Hdr ) override;
-        void handleCommand( CPktMgr::HWMsg_t& ) override;
+        void refresh() override {}
+        void setupHeader( kick_ui::KickModeHeader& ) override {}
+
+        /// Where the device state is stored (shared with the engine's startup code).
+        static juce::File getStateFile();
 
     private:
-    private:
-        ui::KickListBox sampleRate{ ui::KickListBox::withTitleBar, "Thresold", { "1", "2", "3", "4", "5", "6", "7", "8" }, 4 };
-        ui::KickListBox bitDepth{ ui::KickListBox::withTitleBar, "Sensitivity", { "1", "2", "3", "4", "5", "6", "7", "8" }, 4 };
+        void changeListenerCallback( juce::ChangeBroadcaster* ) override;
+        void resized() override;
+        void paint( juce::Graphics& g ) override;
+        void visibilityChanged() override;
+
+        void attach();
+
+        juce::AudioDeviceManager*                             deviceManager{ nullptr };
+        std::unique_ptr<juce::AudioDeviceSelectorComponent>   selector;
+        juce::Viewport                                        viewport;
+        juce::LookAndFeel_V4                                  lookAndFeel;
     };
-}
+} // namespace kick_ui
