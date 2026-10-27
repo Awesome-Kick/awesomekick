@@ -31,6 +31,8 @@ namespace mt
         /// the previous engine is destroyed on this thread.
         void setEngine( std::unique_ptr<IInstrumentEngine> Engine );
         bool hasEngine() const { return engine != nullptr; }
+        /// Message thread only (the thread that swaps engines): patch and preset calls.
+        IInstrumentEngine* getEngine() const { return engine.get(); }
 
         // Any thread.
         void noteOn( int Note, int Velocity );

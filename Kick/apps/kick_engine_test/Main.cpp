@@ -567,6 +567,165 @@ namespace
     }
 
     //==============================================================================
+    void testModularEngine( Results& R )
+    {
+        R.section( "Instrument engine: Modular" );
+        using B = mt::modular::PatchBuilder;
+
+        mt::ModularEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        bool               finite  = true;
+        auto               render  = [&]( int Blocks ) {
+            float peak = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( size_t i = 0; i < l.size(); ++i )
+                {
+                    finite = finite && std::isfinite( l[i] ) && std::isfinite( r[i] );
+                    peak   = juce::jmax( peak, std::abs( l[i] ), std::abs( r[i] ) );
+                }
+            }
+            return peak;
+        };
+        auto blocksFor = []( double Seconds ) { return (int)( Seconds * testRate / testBlock ); };
+
+        R.check( synth.getParams().size() == mt::ModularEngine::kNumParams, "exposes eight macros and a level", juce::String( (int)synth.getParams().size() ) + " params" );
+        R.check( render( 10 ) == 0.f, "silent with no notes" );
+
+        // Every factory preset plays, stays in range and frees its voices after release.
+        const auto names = synth.getPresetNames();
+        R.check( names.size() >= 8, "factory presets", names.joinIntoString( ", " ) );
+        for( int p = 0; p < names.size(); ++p )
+        {
+            synth.reset();
+            synth.setPatch( synth.createPreset( p ) );
+            synth.noteOn( 60, 0.9f );
+            synth.noteOn( 67, 0.7f );
+            const auto held = render( blocksFor( 1.0 ) );
+            synth.noteOff( 60 );
+            synth.noteOff( 67 );
+            render( blocksFor( 5.0 ) );
+            const auto tail = render( blocksFor( 0.1 ) );
+            R.check( finite && held > 0.01f && held < 1.5f && tail < 1.0e-4f && synth.getNumActiveVoices() == 0, "preset \"" + names[p] + "\" plays and releases",
+                     "peak " + f3( held ) + ", tail " + juce::String( tail, 6 ) + ", voices left " + juce::String( synth.getNumActiveVoices() ) );
+        }
+
+        // Pitch: a bare sine at A4 is 440 Hz, and with no envelope the note ends at note-off.
+        {
+            B b( "Sine" );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            synth.setPatch( b.tree );
+            synth.noteOn( 69, 1.f );
+            render( 4 );
+            int   crossings = 0;
+            float prev      = 0;
+            for( int blk = 0; blk < blocksFor( 1.0 ); ++blk )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( auto v : l )
+                {
+                    crossings += prev < 0.f && v >= 0.f ? 1 : 0;
+                    prev = v;
+                }
+            }
+            R.check( std::abs( crossings - 440 ) <= 1, "A4 sine is 440 Hz", juce::String( crossings ) + " Hz" );
+            synth.noteOff( 69 );
+            render( 4 );
+            R.check( synth.getNumActiveVoices() == 0 && render( 2 ) == 0.f, "a patch without envelopes ends at note-off" );
+        }
+
+        // Knob edits change values in place; structural edits rebuild and keep held notes.
+        {
+            B          b( "Edit" );
+            const auto osc = b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            synth.setPatch( b.tree );
+            const auto builds = synth.getBuildCount();
+            synth.noteOn( 60, 1.f );
+            const auto loud = render( 20 );
+            b.tree.getChildWithProperty( mt::modular::PatchIDs::id, osc ).setProperty( "level", 0.25f, nullptr );
+            synth.setPatch( b.tree );
+            render( 2 );
+            const auto quiet = render( 20 );
+            R.check( synth.getBuildCount() == builds && std::abs( quiet / loud - 0.25f ) < 0.02f, "a knob edit applies without a rebuild",
+                     "level ratio " + f3( quiet / loud ) + ", rebuilds " + juce::String( synth.getBuildCount() - builds ) );
+
+            b.add( "drive", 0, 1, { { "drive", 0.5f } } );
+            synth.setPatch( b.tree );
+            const auto after = render( 20 );
+            R.check( synth.getBuildCount() == builds + 1 && after > 0.02f && synth.getNumActiveVoices() == 1, "adding a module rebuilds and keeps the held note",
+                     "peak " + f3( after ) + ", voices " + juce::String( synth.getNumActiveVoices() ) );
+            synth.allNotesOff();
+            render( 10 );
+        }
+
+        // Modulation: a macro opens a VCA.
+        {
+            B b( "Macro" );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            const auto vca = b.add( "vca", 0, 1, { { "gain", 0 } } );
+            b.mod( vca, "gain", "macro1", 1.f );
+            synth.setPatch( b.tree );
+            synth.noteOn( 60, 1.f );
+            const auto closed = render( 10 );
+            synth.setParam( mt::ModularEngine::kMacro1, 1.f );
+            render( 2 );
+            const auto open = render( 10 );
+            R.check( closed < 1.0e-4f && open > 0.05f, "a macro modulates a knob", f3( closed ) + " -> " + f3( open ) );
+            synth.setParam( mt::ModularEngine::kMacro1, 0.f );
+            synth.allNotesOff();
+            render( 10 );
+        }
+
+        // Bad input is skipped, not fatal.
+        {
+            synth.setPatch( juce::ValueTree( mt::modular::PatchIDs::MODULAR_PATCH ) );
+            synth.noteOn( 60, 1.f );
+            const auto empty = render( 10 );
+            synth.allNotesOff();
+            render( 4 );
+
+            B          b( "Bad" );
+            const auto osc = b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            b.mod( osc, "level", "module:99", 1.f ).mod( osc, "nope", "velocity", 1.f ).mod( osc, "level", "nope", 1.f );
+            juce::ValueTree unknown( mt::modular::PatchIDs::MODULE );
+            unknown.setProperty( mt::modular::PatchIDs::type, "nope", nullptr );
+            b.tree.appendChild( unknown, nullptr );
+            synth.setPatch( b.tree );
+            synth.noteOn( 60, 1.f );
+            const auto bad = render( 10 );
+            synth.allNotesOff();
+            render( 4 );
+            R.check( finite && empty == 0.f && bad > 0.05f, "empty patch is silent; unknown modules and modulations are skipped", f3( empty ) + " / " + f3( bad ) );
+        }
+
+        // Twenty notes on eight voices: stealing stays sane.
+        synth.setPatch( synth.createPreset( 1 ) );
+        for( int n = 0; n < 20; ++n )
+            synth.noteOn( 40 + n, 0.8f );
+        const auto chord = render( 40 );
+        R.check( finite && chord > 0.02f && chord < 2.f && synth.getNumActiveVoices() == 8, "twenty notes on eight voices steal sanely",
+                 "peak " + f3( chord ) + ", voices " + juce::String( synth.getNumActiveVoices() ) );
+        synth.allNotesOff();
+        render( blocksFor( 3.0 ) );
+
+        // CPU: eight held voices of Basic Poly (five audio modules and two envelopes each).
+        {
+            for( int n = 0; n < 8; ++n )
+                synth.noteOn( 48 + n * 3, 0.8f );
+            const auto seconds = 4.0;
+            const auto t0      = juce::Time::getMillisecondCounterHiRes();
+            render( blocksFor( seconds ) );
+            const auto load = ( juce::Time::getMillisecondCounterHiRes() - t0 ) / ( seconds * 1000.0 );
+            R.check( load < 1.0, "eight voices of Basic Poly render in real time", juce::String( load * 100.0, 1 ) + "% of one core in this build" );
+            synth.allNotesOff();
+        }
+    }
+
+    //==============================================================================
     void testPadLayout( Results& R )
     {
         R.section( "Pad layouts (Push/Launchpad style)" );
@@ -768,6 +927,46 @@ namespace
         }
 
         //--------------------------------------------------------------------------
+        R.section( "Modular engine through a program" );
+        {
+            const auto mp   = ai.createProgram( mt::MTProgramType::Plugin, "TestModular" );
+            auto*      inst = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( mp ) );
+            if( R.check( inst != nullptr, "Plugin program for the Modular engine", "index " + juce::String( mp ) ) )
+            {
+                auto play = [&]( int Note ) {
+                    ai.addLiveMidiNote( mp, Note, 110 );
+                    const auto peak = measureOutput( meter, 400 );
+                    ai.stopLiveMidiNote( mp, Note );
+                    measureOutput( meter, 1200 );
+                    return peak;
+                };
+
+                inst->setEngine( "Modular" );
+                R.check( inst->getEngineName() == "Modular" && inst->hasPatch() && !inst->getPatch().isValid() && inst->getPatchName() == "Init",
+                         "a new Modular program plays preset 0 until a patch is stored", inst->getPatchName() );
+                const auto init = play( 60 );
+                R.check( init > 0.02f, "default patch plays", "peak " + f3( init ) );
+
+                inst->loadPreset( 3 );
+                const auto bell = play( 72 );
+                measureOutput( meter, 2500 ); // the bell rings on
+                R.check( inst->getPatchName() == "FM Bell" && inst->getPatch().isValid() && bell > 0.02f, "a preset is stored in the program and plays",
+                         inst->getPatchName() + ", peak " + f3( bell ) );
+
+                inst->loadPreset( 0 );
+                auto osc = inst->getPatch().getChildWithProperty( mt::modular::PatchIDs::type, "osc" );
+                osc.setProperty( "level", 0.f, nullptr );
+                const auto muted = play( 60 );
+                osc.setProperty( "level", 0.5f, nullptr );
+                const auto restored = play( 60 );
+                R.check( muted < 0.002f && restored > 0.02f, "a module edit in the stored patch reaches the engine", f3( muted ) + " -> " + f3( restored ) );
+
+                inst->setEngine( "Basic Synth" );
+                R.check( !inst->hasPatch() && !inst->getState().getChildWithName( mt::modular::PatchIDs::MODULAR_PATCH ).isValid(), "switching to another engine drops the patch" );
+            }
+        }
+
+        //--------------------------------------------------------------------------
         R.section( "Instrument hardening: notes never hang" );
         {
             const auto ip  = ai.createProgram( mt::MTProgramType::Plugin, "HardenSynth" );
@@ -899,6 +1098,12 @@ namespace
                     l.scaleIndex = 3;
                     l.toTree( inst->getState().getOrCreateChildWithName( mt::IDs::PAD_LAYOUT, nullptr ) );
                 }
+                if( auto* mod = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( ai.createProgram( mt::MTProgramType::Plugin, "Saved Modular" ) ) ) )
+                {
+                    mod->setEngine( "Modular" );
+                    mod->loadPreset( 4 );
+                    mod->getPatch().getChildWithProperty( mt::modular::PatchIDs::type, "filter" ).setProperty( "cutoff", 500.f, nullptr );
+                }
 
                 const auto saved = ai.saveProject();
                 ai.closeProject();
@@ -936,6 +1141,37 @@ namespace
                     R.check( re->getParam( mt::BasicSynthEngine::kLevel ) > 0.5f && afterUndo > 0.02f, "undo restores the parameter and the sound", "level " + f3( re->getParam( mt::BasicSynthEngine::kLevel ) ) + ", peak " + f3( afterUndo ) );
                     measureOutput( meter, 1800 );
                 }
+
+                const auto mi = ai.getProgramIndexByName( "Saved Modular" );
+                if( auto* rm = dynamic_cast<mt::MTInstrumentProgram*>( ai.getProgram( mi ) ) )
+                {
+                    const float cutoff = rm->getPatch().getChildWithProperty( mt::modular::PatchIDs::type, "filter" ).getProperty( "cutoff" );
+                    R.check( rm->getEngineName() == "Modular" && rm->getPatchName() == "Wobble Bass" && std::abs( cutoff - 500.f ) < 0.01f, "Modular patch restored with its edits",
+                             rm->getEngineName() + " / " + rm->getPatchName() + ", cutoff " + f3( cutoff ) );
+                    ai.addLiveMidiNote( mi, 48, 110 );
+                    const auto sound = measureOutput( meter, 400 );
+                    ai.stopLiveMidiNote( mi, 48 );
+                    R.check( sound > 0.02f, "reloaded Modular patch plays", "peak " + f3( sound ) );
+                    measureOutput( meter, 600 );
+
+                    // A loaded project has an undo manager: a preset load undoes to the edited patch.
+                    auto& um = ai.getUndoManager();
+                    um.beginNewTransaction();
+                    rm->loadPreset( 3 );
+                    const auto loaded = rm->getPatchName();
+                    um.beginNewTransaction();
+                    ai.performUndo();
+                    const float back = rm->getPatch().getChildWithProperty( mt::modular::PatchIDs::type, "filter" ).getProperty( "cutoff" );
+                    R.check( loaded == "FM Bell" && rm->getPatchName() == "Wobble Bass" && std::abs( back - 500.f ) < 0.01f, "undoing a preset load restores the edited patch",
+                             loaded + " -> " + rm->getPatchName() + ", cutoff " + f3( back ) );
+                    ai.addLiveMidiNote( mi, 48, 110 );
+                    const auto undone = measureOutput( meter, 400 );
+                    ai.stopLiveMidiNote( mi, 48 );
+                    R.check( undone > 0.02f, "and the engine plays it", "peak " + f3( undone ) );
+                    measureOutput( meter, 600 );
+                }
+                else
+                    R.check( false, "Modular program comes back", "index " + juce::String( mi ) );
                 ai.closeProject();
                 pump( 300 );
             }
@@ -1119,6 +1355,7 @@ private:
         testFilter( R );
         testADSR( R );
         testBasicSynth( R );
+        testModularEngine( R );
         testPadLayout( R );
         testEngine( R, kitDir );
 

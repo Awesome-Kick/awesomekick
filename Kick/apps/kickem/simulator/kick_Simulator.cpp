@@ -271,6 +271,69 @@ namespace sim
             wait( 1 );
             s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
         }
+
+        // Modular: pick it in the ENGINE box and a preset in the PRESET box, as a user would.
+        auto listWith = [this]( juce::String Option ) -> ui::KickListBox* {
+            std::function<ui::KickListBox*( juce::Component& )> find = [&find, &Option]( juce::Component& c ) -> ui::KickListBox* {
+                if( auto* lb = dynamic_cast<ui::KickListBox*>( &c ); lb && lb->isShowing() )
+                {
+                    const auto options = lb->getListOptions();
+                    if( std::find( options.begin(), options.end(), Option ) != options.end() )
+                        return lb;
+                }
+                for( auto* child : c.getChildren() )
+                    if( auto* hit = find( *child ) )
+                        return hit;
+                return nullptr;
+            };
+            return find( screen );
+        };
+        auto choose = [&s, listWith, log]( juce::String Option ) {
+            s.push_back( [listWith, log, Option] {
+                if( auto* lb = listWith( Option ) )
+                {
+                    lb->setSelected( Option, juce::sendNotification );
+                    log( "chose " + Option );
+                }
+                else
+                    log( "no list box offers " + Option );
+            } );
+        };
+        auto report = [&s, log, instrument]() {
+            s.push_back( [log, instrument] {
+                if( auto* i = instrument() )
+                    log( "engine " + i->getEngineName() + ", patch " + i->getPatchName() + ( i->getPatch().isValid() ? " (stored)" : " (default)" ) + ", " +
+                         juce::String( (int)i->getParams().size() ) + " params, presets: " + i->getPresetNames().joinIntoString( ", " ) );
+            } );
+        };
+        auto playPads = [&s, this, wait]() {
+            for( int p = 0; p < 4; ++p )
+            {
+                s.push_back( [this, p] { pads.getPad( p ).hit( true, 100 ); } );
+                wait( 1 );
+                s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
+            }
+        };
+
+        choose( "Modular" );
+        wait( 3 );
+        report();
+        shot( "modular_edit_init" );
+        playPads();
+        choose( "FM Bell" );
+        wait( 3 );
+        report();
+        shot( "modular_edit_fm_bell" );
+        playPads();
+        s.push_back( [log] { log( "Q-link P1 +40 (Macro 1)" ); } );
+        s.push_back( [this] { qlinks[0]->turn( 40 ); } );
+        wait( 2 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( i->getParams()[0].name + "=" + juce::String( i->getParam( 0 ), 3 ) );
+        } );
+        playPads();
+        shot( "modular_edit_macro" );
         s.push_back( [log] { log( "done" ); } );
         wait( 2 );
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );

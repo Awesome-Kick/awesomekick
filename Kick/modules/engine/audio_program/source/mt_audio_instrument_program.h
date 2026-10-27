@@ -24,6 +24,16 @@ namespace mt
         float                               getParam( int Index ) const;
         void                                setParam( int Index, float Value );
 
+        /// Patch engines (e.g. Modular). Without one, the presets are empty and the patch invalid.
+        bool              hasPatch() const { return patchType.isValid(); }
+        juce::StringArray getPresetNames() const { return presetNames; }
+        /// The stored patch; invalid while the engine plays its default (preset 0).
+        juce::ValueTree getPatch() const { return patchType.isValid() ? vTree.getChildWithName( patchType ) : juce::ValueTree{}; }
+        /// The patch's name, or preset 0's when none is stored.
+        juce::String getPatchName() const;
+        /// Replaces the stored patch with a fresh copy of a preset (undoable).
+        void loadPreset( int Index );
+
         /// Adds all-notes-off / all-sound-off handling to MTIProgram's note handling:
         /// tracks send CC 123 on transport stop and program change, and the base class
         /// only understands note on/off, which would leave instrument notes hanging.
@@ -48,12 +58,22 @@ namespace mt
 
     private:
         void valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property ) override;
+        void valueTreeChildAdded( juce::ValueTree& Parent, juce::ValueTree& Child ) override;
+        void valueTreeChildRemoved( juce::ValueTree& Parent, juce::ValueTree& Child, int Index ) override;
+        void valueTreeChildOrderChanged( juce::ValueTree& Parent, int, int ) override;
 
         juce::ValueTree paramsTree();
         void            applyStoredParams();
         void            loadEngine( const juce::String& Name );
 
-        juce::String loadedEngine;
+        /// True for the patch child itself and anything inside it.
+        bool isPatchTree( const juce::ValueTree& Tree ) const;
+        void sendPatch();
+
+        juce::String      loadedEngine;
+        juce::Identifier  patchType;   // the engine's, or invalid
+        juce::StringArray presetNames; // copied from the engine, like `params`
+        int               patchSendsBlocked{ 0 };
 
         AudIO::DawEngine&            engine;
         InstrumentObject*            object{ nullptr };

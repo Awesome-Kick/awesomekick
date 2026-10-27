@@ -266,6 +266,7 @@ namespace mt
         {
             static std::map<juce::String, InstrumentEngineRegistry::Factory> engines = {
                 { "Basic Synth", []() { return std::make_unique<BasicSynthEngine>(); } },
+                { "Modular", []() { return std::make_unique<ModularEngine>(); } },
             };
             return engines;
         }

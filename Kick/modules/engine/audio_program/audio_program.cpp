@@ -43,6 +43,9 @@
 #include "synth/DrumProgram.cpp"
 #include "synth/KeygroupProgram.cpp"
 #include "instrument/mt_basic_synth_engine.cpp"
+#include "instrument/modular/mt_modular_modules.cpp"
+#include "instrument/modular/mt_modular_patch.cpp"
+#include "instrument/modular/mt_modular_engine.cpp"
 #include "instrument/mt_instrument_object.cpp"
 
 #include "source/mt_audio_iprogram.cpp"

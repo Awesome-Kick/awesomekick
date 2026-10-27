@@ -1,6 +1,7 @@
 /*
  * Program edit screen for instrument (Plugin) programs:
- *  - top row: engine, pad layout (4ths/3rds/sequential), key mode, root, scale
+ *  - top row: engine, preset (patch engines only), pad layout (4ths/3rds/sequential),
+ *    key mode, root, scale
  *  - bottom: the engine's parameters, four per page, mapped to Q-link knobs P1..P4
  *
  * SPDX-License-Identifier: AGPL-3.0-or-later
@@ -24,6 +25,7 @@ namespace kick_ui
         mt::MTInstrumentProgram* instrument();
         juce::ValueTree          layoutTree();
         void                     storeLayout();
+        void                     refreshPresets();
         void                     showPage( int Page );
         int                      numPages() const;
 
@@ -31,6 +33,7 @@ namespace kick_ui
         void resized() override;
 
         ui::KickListBox engine{ ui::KickListBox::BoxType::withTitleBar, "ENGINE", {}, 0, 1 };
+        ui::KickListBox preset{ ui::KickListBox::BoxType::withTitleBar, "PRESET", {}, 0, 1 };
         ui::KickListBox layout{ ui::KickListBox::BoxType::withTitleBar, "PAD LAYOUT", { "4ths", "3rds", "Sequential" }, 0, 1 };
         ui::KickListBox keyMode{ ui::KickListBox::BoxType::withTitleBar, "NOTES", { "In Key", "Chromatic" }, 0, 1 };
         ui::KickListBox root{ ui::KickListBox::BoxType::withTitleBar, "ROOT", mt::Note::sharpNames, 0, 3 };

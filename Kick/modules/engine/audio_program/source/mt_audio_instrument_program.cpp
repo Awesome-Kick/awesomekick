@@ -76,6 +76,70 @@ namespace mt
                 if( Property.toString() == params[(size_t)i].id )
                     object->setParam( i, (float)Tree.getProperty( Property, params[(size_t)i].defaultValue ) );
         }
+        else if( isPatchTree( Tree ) )
+            sendPatch();
+    }
+
+    // Patch edits, presets and their undo/redo all arrive as tree changes.
+    void MTInstrumentProgram::valueTreeChildAdded( juce::ValueTree& Parent, juce::ValueTree& Child )
+    {
+        if( isPatchTree( Parent ) || isPatchTree( Child ) )
+            sendPatch();
+    }
+
+    void MTInstrumentProgram::valueTreeChildRemoved( juce::ValueTree& Parent, juce::ValueTree& Child, int )
+    {
+        // A removed patch is no longer attached, so test its type rather than its parent.
+        if( isPatchTree( Parent ) || ( Parent == vTree && patchType.isValid() && Child.hasType( patchType ) ) )
+            sendPatch();
+    }
+
+    void MTInstrumentProgram::valueTreeChildOrderChanged( juce::ValueTree& Parent, int, int )
+    {
+        if( isPatchTree( Parent ) )
+            sendPatch();
+    }
+
+    bool MTInstrumentProgram::isPatchTree( const juce::ValueTree& Tree ) const
+    {
+        if( !patchType.isValid() )
+            return false;
+        for( auto t = Tree; t.isValid(); t = t.getParent() )
+            if( t.hasType( patchType ) && t.getParent() == vTree )
+                return true;
+        return false;
+    }
+
+    void MTInstrumentProgram::sendPatch()
+    {
+        if( patchSendsBlocked > 0 || !patchType.isValid() )
+            return;
+        if( auto* e = object->getEngine() )
+            e->setPatch( getPatch() );
+    }
+
+    juce::String MTInstrumentProgram::getPatchName() const
+    {
+        const auto patch = getPatch();
+        if( patch.isValid() )
+            return patch.getProperty( "name" ).toString();
+        return presetNames.isEmpty() ? juce::String() : presetNames[0];
+    }
+
+    void MTInstrumentProgram::loadPreset( int Index )
+    {
+        auto* e = object->getEngine();
+        if( !patchType.isValid() || !e || !juce::isPositiveAndBelow( Index, presetNames.size() ) )
+            return;
+
+        // Remove and add as one change for the engine (one rebuild, not two).
+        {
+            const juce::ScopedValueSetter<int> block( patchSendsBlocked, patchSendsBlocked + 1 );
+            if( auto old = getPatch(); old.isValid() )
+                vTree.removeChild( old, um );
+            vTree.appendChild( e->createPreset( Index ), um );
+        }
+        sendPatch();
     }
 
     juce::String MTInstrumentProgram::getEngineName() const
@@ -99,6 +163,8 @@ namespace mt
         if( vTree.getProperty( IDs::instrumentEngine ).toString() != Name )
         {
             paramsTree().removeAllProperties( um );
+            if( auto patch = getPatch(); patch.isValid() )
+                vTree.removeChild( patch, um );
             vTree.setProperty( IDs::instrumentEngine, Name, um );
         }
         else
@@ -113,6 +179,10 @@ namespace mt
 
         loadedEngine = Name;
         params       = newEngine->getParams();
+        patchType    = newEngine->getPatchType();
+        presetNames  = newEngine->getPresetNames();
+        if( patchType.isValid() )
+            newEngine->setPatch( getPatch() ); // before it goes live: nothing to interrupt
         object->setEngine( std::move( newEngine ) );
         applyStoredParams();
     }

@@ -26,7 +26,7 @@ namespace kick_ui
             engineNames.push_back( n );
         engine.setListOptions( engineNames, 0 );
 
-        mt::utils::addAndMakeVisible( this, engine, layout, keyMode, root, scale, prevPage, nextPage, pageLabel );
+        mt::utils::addAndMakeVisible( this, engine, preset, layout, keyMode, root, scale, prevPage, nextPage, pageLabel );
 
         for( size_t i = 0; i < knobs.size(); ++i )
         {
@@ -44,8 +44,19 @@ namespace kick_ui
             if( auto* inst = instrument(); inst && inst->getEngineName() != Name )
             {
                 inst->setEngine( Name );
-                showPage( 0 );
+                page = 0;
+                refresh();
             }
+        };
+
+        // By name: the list may start with the current (edited) patch, and a refresh
+        // re-announces the current entry, which must not reload it.
+        preset.onSelectionChanged = [this]( int, const juce::String& Name ) {
+            auto* inst = instrument();
+            if( !inst || Name == inst->getPatchName() )
+                return;
+            if( const auto index = inst->getPresetNames().indexOf( Name ); index >= 0 )
+                inst->loadPreset( index );
         };
 
         // Any layout control: write the whole layout back and relight the pads.
@@ -89,6 +100,7 @@ namespace kick_ui
             return;
 
         engine.setSelected( inst->getEngineName(), juce::dontSendNotification );
+        refreshPresets();
 
         const auto l = mt::PadLayout::fromTree( pIProg->getState().getChildWithName( mt::IDs::PAD_LAYOUT ) );
         layout.setSelected( layoutIndex( l.mode ), juce::dontSendNotification );
@@ -98,6 +110,24 @@ namespace kick_ui
         scale.setEnabled( l.inKey );
 
         showPage( page );
+    }
+
+    void InstrumentProgramEdit::refreshPresets()
+    {
+        auto*      inst  = instrument();
+        const auto names = inst ? inst->getPresetNames() : juce::StringArray{};
+        preset.setVisible( !names.isEmpty() );
+        if( names.isEmpty() )
+            return;
+
+        std::vector<juce::String> options( names.begin(), names.end() );
+        // An edited or renamed patch is not one of the presets; list it on top.
+        const auto current = inst->getPatchName();
+        if( !names.contains( current ) )
+            options.insert( options.begin(), current );
+        const auto selected = std::find( options.begin(), options.end(), current ) - options.begin();
+        preset.setListOptions( options, (int)selected );
+        resized();
     }
 
     int InstrumentProgramEdit::numPages() const
@@ -183,10 +213,13 @@ namespace kick_ui
     {
         auto b = getLocalBounds().reduced( 20 );
 
-        // Top row: five selectors.
+        // Top row: five selectors, six with a preset box.
         auto top = b.removeFromTop( juce::roundToInt( b.getHeight() * 0.36f ) );
-        const auto w = top.getWidth() / 5;
-        for( auto* c : std::initializer_list<juce::Component*>{ &engine, &layout, &keyMode, &root, &scale } )
+        std::vector<juce::Component*> row{ &engine, &preset, &layout, &keyMode, &root, &scale };
+        if( !preset.isVisible() )
+            row.erase( row.begin() + 1 );
+        const auto w = top.getWidth() / (int)row.size();
+        for( auto* c : row )
             c->setBounds( top.removeFromLeft( w ).reduced( 6 ) );
 
         b.removeFromTop( 10 );

@@ -666,6 +666,7 @@ New in this build: an instrument program plays a built-in synth engine instead o
 **Top row:**
 
 - **ENGINE:** which synth engine plays. Switching engines resets the parameters to that engine's defaults.
+- **PRESET:** only for engines with presets (Modular). Loads a factory patch; undo puts the previous patch back.
 - **PAD LAYOUT:** 4ths, 3rds or Sequential (section 6).
 - **NOTES:** In Key or Chromatic.
 - **ROOT:** C to B.
@@ -697,6 +698,59 @@ New in this build: an instrument program plays a built-in synth engine instead o
 | Sustain | 0–1 | 0.6 |
 | Release | 5 ms–6 s | 0.3 s |
 | Level | 0–1 | 0.7 |
+
+#### Built-in engine: Modular ✅ (milestone 1: no patch editor yet)
+
+Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or Bitwig's grid devices.
+
+![Modular engine with the FM Bell preset](img/modular_edit.png)
+
+- **Audio runs down each column.** A source (oscillator, noise) adds to what comes from above, and a processor (filter, VCA, drive...) changes it. The columns are mixed together.
+- **Modulators don't touch the audio.** Envelopes, LFOs and Random sit anywhere on the grid, and their output modulates any knob in the patch. A depth is a share of the knob's travel, so it means the same thing on any knob.
+- **Other modulation sources:** velocity, note, gate, mod wheel, pitch bend and the eight macros.
+- **Voices:** 8 by default (1–16 per patch). A note ends once its gate is off and all its envelopes have finished. A patch with no envelope stops at note-off with a 5 ms fade.
+- **Parameters on the Q-links:** **Macro 1–8** and **Level**. Each preset maps the macros to its own knobs.
+
+| Module | Kind | Knobs |
+|---|---|---|
+| Oscillator | source | Wave (sine/triangle/saw/square), Tune ±48 st, Fine ±100 ct, Pulse Width, Level, Input (Add / Phase Mod / Replace), PM Depth |
+| Noise | source | Colour (white → dark), Level |
+| Filter | processor | Mode (LP/BP/HP/Notch), Cutoff 20 Hz–20 kHz, Resonance, Key Track |
+| VCA | processor | Gain |
+| Drive | processor | Drive (to +36 dB), Fold (tanh → sine folder), Bias, Level |
+| Delay | processor | Time 0.1 ms–1 s, Key Track (tunes the delay to the note: strings and resonators), Tune, Feedback, Damping, Mix |
+| Crusher | processor | Bits 1–16, Downsample 1–32, Mix |
+| Math | processor | Gain ±4, Offset, Shape (Linear/Rectify/Clip) |
+| Pan | processor | Pan (places its column) |
+| Envelope | modulator | Attack, Decay, Sustain, Release, Velocity |
+| LFO | modulator | Shape (sine/triangle/saw/square/random), Rate 0.02–40 Hz, Retrigger, Polarity |
+| Random | modulator | A new value per note; Polarity |
+
+**Presets** (what Macro 1 / Macro 2 do):
+
+| Preset | Sound | Macro 1 | Macro 2 |
+|---|---|---|---|
+| Init | saw → filter → VCA | cutoff | resonance |
+| Basic Poly | Basic Synth's default sound, rebuilt from modules | cutoff | filter decay |
+| Pluck String | Karplus-Strong: a noise burst rings a tuned delay | darker | softer pick |
+| FM Bell | two-operator FM, ratio 3.5 | brightness | ratio (up to an octave) |
+| Wobble Bass | saw and square bass, LFO on a resonant filter | LFO rate | cutoff |
+| Fold Lead | sine through a wavefolder moved by a slow LFO | fold | drive |
+| Noise Hat | high-passed noise, short envelope | cutoff | decay |
+| Random Pad | detuned saws, a random cutoff and pan per note | cutoff | shorter attack |
+
+**How it behaves:**
+
+- The patch is saved in the project, and undo/redo cover it.
+- Turning a knob or a depth changes the sound without interrupting it.
+- Adding, moving or removing a module rebuilds the patch while notes keep playing.
+- Unknown modules and broken modulations are skipped, not fatal.
+- Cost: eight voices of Basic Poly took about 7% of one desktop core in testing. The RK3588 hasn't been measured.
+
+**Not yet (next milestones):**
+
+- The grid editor screen (placing modules, editing their knobs, assigning modulation). Until then, patches come from the presets.
+- Patch cables, saving your own presets, macro names, and a mono effects section after the voices.
 
 **What else is covered:**
 
@@ -1242,7 +1296,7 @@ All of these run on Windows from the build folders.
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** about 112 headless checks: the recorder, looper, filter, envelopes, Basic Synth, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **What it covers:** about 142 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine and its presets, pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
