@@ -60,6 +60,42 @@ juce::File getAppDirs( DirType T )
         return juce::File( "./logs/" );
     else if( T == MTPrefs )
         return juce::File( "./prefs" );
+#elif ( defined( LINUX ) || defined( __linux__ ) ) && defined( SIM_BUILD ) && SIM_BUILD
+    // Simulator on a Linux desktop/server: never touch the hardware paths
+    // (/app, /data, /home/Kick). Read-only data (assets, demos, templates) is
+    // found next to the executable (or a parent folder), or in KICKEM_DATA_DIR.
+    // Everything the simulator writes goes to ~/.local/share/KickEM.
+    auto findDataRoot = []() -> juce::File
+    {
+        if( auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_DATA_DIR", {} ); dir.isNotEmpty() )
+            return juce::File( dir );
+        auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+        auto d      = exeDir;
+        for( int i = 0; i < 6 && d.exists(); ++i, d = d.getParentDirectory() )
+            if( d.getChildFile( "assets" ).isDirectory() )
+                return d;
+        return exeDir;
+    };
+    auto userRoot = []( const juce::String& sub ) -> juce::File
+    {
+        auto f = juce::File::getSpecialLocation( juce::File::userHomeDirectory ).getChildFile( ".local/share/KickEM" ).getChildFile( sub );
+        f.createDirectory();
+        return f;
+    };
+    if( T == MTAssets )
+        return findDataRoot().getChildFile( "assets" );
+    else if( T == MTSamples )
+        return userRoot( "samples" );
+    else if( T == MTDemos )
+        return juce::File( findDataRoot().getChildFile( "demos" ).getFullPathName() + seprator );
+    else if( T == MTTemp )
+        return juce::File( findDataRoot().getChildFile( "templates" ).getFullPathName() + seprator );
+    else if( T == MTProjects )
+        return juce::File( userRoot( "projects" ).getFullPathName() + seprator );
+    else if( T == MTLog )
+        return juce::File( userRoot( "logs" ).getFullPathName() + seprator );
+    else if( T == MTPrefs )
+        return userRoot( "prefs" );
 #elif defined( LINUX ) || defined( __linux__ )
     if( T == MTAssets )
         return juce::File( "/app/assets" );

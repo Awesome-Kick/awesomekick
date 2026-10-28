@@ -163,7 +163,7 @@ namespace Controls
         void changeListenerCallback( juce::ChangeBroadcaster* source ) override
         {
             if( !input ) return;
-            const auto available = juce::jmin<juce::int64>(input->getTotalLength(), 4096);
+            const auto available = std::min<juce::int64>(input->getTotalLength(), 4096);
             if( available <= 0 ) return;
             juce::MemoryBlock serialData((size_t)available);
             const auto count = input->read(serialData.getData(), (int)available);

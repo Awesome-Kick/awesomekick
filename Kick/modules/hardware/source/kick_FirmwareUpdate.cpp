@@ -177,7 +177,7 @@ namespace mt
                 boSwUpdateStartUpCheck = true;
                 //DBG( "First Time" );
                 parser.AddPath( McuFilePath );
-                fileSize = juce::jmax<juce::int64>(1, parser.getSize() / hexRecSize);
+                fileSize = std::max<juce::int64>(1, parser.getSize() / hexRecSize);
                 //DBG("FileSize" << fileSize);
                 if( fileSize == 0 )
                     jassertfalse;

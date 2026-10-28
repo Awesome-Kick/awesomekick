@@ -70,6 +70,7 @@ target_sources(${TargetName}
         simulator/kick_SimulatorMainControl.cpp
         simulator/kick_SimulatorInterfaceImpl.h
         simulator/kick_SimulatorInterfaceImpl.cpp
+        simulator/kick_SimSandbox.cpp
 )
 
 target_compile_definitions(${TargetName}
@@ -101,6 +102,13 @@ target_compile_definitions(${TargetName}
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(${TargetName} PRIVATE "-latomic")
+    # Sandbox: the firmware calls shell commands that reconfigure the host
+    # (network, timezone, reboot...). Intercept them, see kick_SimSandbox.cpp.
+    target_link_options(${TargetName} PRIVATE
+        "LINKER:--wrap=system" "LINKER:--wrap=popen"
+        "LINKER:--wrap=execve" "LINKER:--wrap=execv" "LINKER:--wrap=execvp" "LINKER:--wrap=execvpe"
+        "LINKER:--wrap=execl" "LINKER:--wrap=execlp" "LINKER:--wrap=execle"
+        "LINKER:--wrap=posix_spawn" "LINKER:--wrap=posix_spawnp")
 endif()
 
 target_link_libraries(${TargetName}
