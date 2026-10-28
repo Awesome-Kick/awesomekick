@@ -21,6 +21,10 @@ jobs:
   macos:
     runs-on: macos-15-intel   # Apple Silicon runners are often out of capacity; the build is universal anyway
     timeout-minutes: 120
+    env:
+      # JUCE 7 uses CGWindowListCreateImage, which the macOS 15 SDK only allows for older targets.
+      # The variable also reaches JUCE's own helper build (juceaide), which ignores CMAKE_OSX_DEPLOYMENT_TARGET.
+      MACOSX_DEPLOYMENT_TARGET: "12.0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -32,7 +36,7 @@ jobs:
       - name: Configure
         run: >
           cmake -S Kick -B Kick/build/sim -G Ninja -DCMAKE_BUILD_TYPE=Release
-          -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+          -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
       - name: Build
         run: cmake --build Kick/build/sim --target KT_KickEM -j "$(sysctl -n hw.ncpu)"
       - name: Package
