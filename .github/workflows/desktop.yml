@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   macos:
-    runs-on: macos-14
+    runs-on: macos-15-intel   # Apple Silicon runners are often out of capacity; the build is universal anyway
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
