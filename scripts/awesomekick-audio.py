@@ -60,11 +60,13 @@ def run_ffmpeg():
                "-ac", str(CHANNELS), "-ar", str(RATE), "-f", "s16le", "-flush_packets", "1", "pipe:1"]
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
         run_ffmpeg.proc = proc
+        run_ffmpeg.last_data = time.monotonic()
         log("capturing from JACK as", CAPTURE_CLIENT)
         while True:
             data = proc.stdout.read(CHUNK)
             if not data:
                 break
+            run_ffmpeg.last_data = time.monotonic()
             with clients_lock:
                 for c in clients:
                     if len(c.queue) >= MAX_QUEUED:
@@ -77,6 +79,18 @@ def run_ffmpeg():
 
 
 run_ffmpeg.proc = None
+run_ffmpeg.last_data = 0.0
+
+
+def watchdog():
+    """JACK can drop ffmpeg's client (e.g. a slow start); ffmpeg then hangs without exiting. Restart it."""
+    while True:
+        time.sleep(1)
+        proc = run_ffmpeg.proc
+        if proc and proc.poll() is None and time.monotonic() - run_ffmpeg.last_data > 3:
+            log("no audio from ffmpeg for 3 s, restarting it")
+            proc.terminate()
+            run_ffmpeg.last_data = time.monotonic()
 
 
 def keep_connected(source):
@@ -171,6 +185,7 @@ def main():
 
     threading.Thread(target=run_ffmpeg, daemon=True).start()
     threading.Thread(target=keep_connected, args=(args.source,), daemon=True).start()
+    threading.Thread(target=watchdog, daemon=True).start()
     log("WebSocket on port", args.port)
     Server(("", args.port), Handler).serve_forever()
 

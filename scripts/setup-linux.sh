@@ -140,7 +140,8 @@ LOG="$DEV_DIR/logs"; mkdir -p "\$LOG"
 old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT" || pgrep -u "\$USER" -f "^jackd --no-realtime" || pgrep -u "\$USER" -f "^python3 -I .*awesomekick-audio.py"; }
 for i in \$(seq 1 40); do old_running >/dev/null || break; sleep 0.25; done
 if old_running >/dev/null; then
-  pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM; sleep 0.5
+  pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM
+  pkill -KILL -u "\$USER" -f "^jackd --no-realtime"; pkill -KILL -u "\$USER" -f "^ffmpeg .* awesomekick_stream"; sleep 0.5
 fi
 setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1600x1600x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.25; done
@@ -149,6 +150,8 @@ xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual displa
 xsetroot -display :$DISPLAY_NUM -cursor_name left_ptr 2>/dev/null
 # Sound: a JACK server without hardware (dummy driver, no root or audio group needed). The simulator
 # plays into it, awesomekick-audio.py captures it and streams it to the browser page.
+# Leftovers of a JACK server or client that was killed make the next server hang on start-up.
+pgrep -u "\$USER" -x jackd >/dev/null || rm -rf /dev/shm/jack_sem.\$(id -u)_* /dev/shm/jack_db-\$(id -u)
 setsid nohup jackd --no-realtime -t 2000 -d dummy -r 48000 -p 512 >"\$LOG/jackd.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do jack_lsp >/dev/null 2>&1 && break; sleep 0.25; done
 jack_lsp >/dev/null 2>&1 || echo "WARNING: JACK did not start – no sound in the browser (see \$LOG/jackd.log)"
@@ -177,13 +180,14 @@ EOF
 cat > "$DEV_DIR/kickem-stop.sh" <<EOF
 #!/usr/bin/env bash
 # Stop the simulator and, in headless mode, the virtual display and browser sharing.
+# JACK goes first: stopping its clients first makes it wait ~20 s for each of them.
+pkill -u "\$USER" -f "^jackd --no-realtime" 2>/dev/null
 pkill -u "\$USER" -f "websockify --web .* $WEB_PORT" 2>/dev/null
 pkill -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" 2>/dev/null
 pkill -u "\$USER" -x KT_KickEM 2>/dev/null
 pkill -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" 2>/dev/null
 pkill -u "\$USER" -f "^python3 -I .*awesomekick-audio.py" 2>/dev/null
 pkill -u "\$USER" -f "^ffmpeg .* awesomekick_stream" 2>/dev/null
-pkill -u "\$USER" -f "^jackd --no-realtime" 2>/dev/null
 echo "AwesomeKick simulator stopped."
 EOF
 
