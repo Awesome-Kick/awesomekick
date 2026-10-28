@@ -50,6 +50,9 @@ namespace sim
         /// KICKEM_SELFTEST=modular: open the Modular patch editor, add/move/modulate modules
         /// through its controls and the Q-links, undo, and snapshot each step.
         void startModularTest();
+        /// KICKEM_SELFTEST=makedemo: synthesize a small drum kit, build the playable project
+        /// "KickEM Groove" (sequence, drum program, 2-bar pattern), save it and quit.
+        void startMakeDemo();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;
         size_t                             selfTestIndex { 0 };
