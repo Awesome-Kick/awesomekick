@@ -6,6 +6,24 @@
 
 Source code for the Behringer KICK.
 
+> [!NOTE]
+> **About this fork: a community build, not an official Behringer / MUSIC Tribe release.**
+>
+> The `desktop-build` branch builds and runs the KICK firmware on Windows. It adds a hardware simulator (`KT_KickEM`), so you can play it with no KICK at all. On top of the original code it adds:
+> - **Instrument programs**, with a **Modular synth engine**:
+>   - a grid patch editor, cables, effects and an arpeggiator;
+>   - Mono/Legato with glide, and pad pressure;
+>   - 22 presets, and saving your own.
+> - **Recording pads** into sequences, and REC on the Sampler.
+> - **Real CPU and RAM meters**, plus many crash and UI fixes.
+>
+> - **Try it:** download the simulator zip from [Releases](https://github.com/chillbeast/0700-AAM/releases) (Windows x64). Unzip it anywhere and run `KT_KickEM.exe`.
+> - **Manual:** [Kick/docs/manual/USER_MANUAL.md](Kick/docs/manual/USER_MANUAL.md) covers the panel, the screens and the Modular engine.
+> - **Build it:** with Visual Studio 2022 and CMake, from `Kick/`:
+>   `cmake -S . -B build/sim -G "Visual Studio 17 2022" -A x64 -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF`, then
+>   `cmake --build build/sim --config Release --target KT_KickEM`
+> - **Licence:** AGPL-3.0, the same as upstream. The original code lives at [MusicTribeOpenSource/0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM).
+
 <p align="center">
   <img src="docs/images/kick-front.webp" alt="Behringer KICK" width="720">
 </p>
