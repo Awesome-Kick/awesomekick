@@ -36,7 +36,15 @@ namespace mt
     {
     public:
         explicit MTTrack( MTAudioManager& M, MTSequence& Seq, juce::UndoManager* UM, juce::ValueTree& VT );
-        ~MTTrack() { programDeletionConnection.disconnect(); vTree.removeListener( this ); trackPlayhead.clear(); };
+        ~MTTrack()
+        {
+            // handleAsyncUpdate() lives here, not in MTNoteList: cancel before this part is gone, or a
+            // pending update delivered meanwhile calls a pure virtual (tracks are torn down on the loader thread)
+            cancelPendingUpdate();
+            programDeletionConnection.disconnect();
+            vTree.removeListener( this );
+            trackPlayhead.clear();
+        };
 
         juce::ValueTree& getVT() { return vTree; };
         juce::ValueTree& getState() { return vTree; };

@@ -479,11 +479,14 @@ namespace ui
                         loadAnimation.stopAnimation();
                     }
                 };
-                if( tempList.size() )
-                    loadAnimation.startAnimation();
-
+                // Only animate when load() runs: it ends the animation via sizeCalculationEnd.
+                // On first launch nothing is loaded, so the spinner would never stop.
                 if( !onFirstLaunch )
+                {
+                    if( tempList.size() )
+                        loadAnimation.startAnimation();
                     load( row[Row] );
+                }
                 else
                     onFirstLaunch = false;
             }
