@@ -7,7 +7,7 @@ on:
   push:
     branches: [ linux ]
     tags: [ "v*" ]
-    paths: [ "Kick/**", "AudIO/**", "ComProtocol/**", "scripts/**", ".github/workflows/desktop.yml" ]
+    paths: [ "Kick/**", "AudIO/**", "ComProtocol/**", "scripts/package-*", ".github/workflows/desktop.yml" ]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ permissions:
 
 concurrency:
   group: desktop-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false   # let a started build finish (macOS runners can take a while to start)
 
 jobs:
   macos:
