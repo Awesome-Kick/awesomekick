@@ -106,9 +106,34 @@
     box.classList.remove('on'); btn.textContent = '🔊 Sound on'; status.textContent = 'sound off';
   }
 
+  // Sound is on by default. Browsers only let audio play after a click or key press, so if the page
+  // may not start it right away, the first click or key anywhere – also inside the simulator view
+  // (same origin, so its document is reachable) – unlocks it. "Sound off" is remembered.
+  const PREF = 'awesomekick.sound';
+  const remember = (on) => { try { localStorage.setItem(PREF, on ? 'on' : 'off'); } catch (e) {} };
+  const wanted = () => { try { return localStorage.getItem(PREF) !== 'off'; } catch (e) { return true; } };
+
+  function unlock() {
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+  }
+  function listenForGesture(doc) {
+    for (const type of ['pointerdown', 'keydown', 'touchstart'])
+      doc.addEventListener(type, unlock, { capture: true });
+  }
+  listenForGesture(document);
+  const vnc = document.getElementById('vnc');
+  const hookFrame = () => { try { listenForGesture(vnc.contentWindow.document); } catch (e) {} };
+  vnc.addEventListener('load', hookFrame);
+  hookFrame();
+
+  if (wanted()) {
+    start();
+    if (ctx.state === 'suspended') status.textContent = 'sound on · click anywhere to hear it';
+  }
+
   btn.addEventListener('click', () => {
-    ctx ? stop() : start();
-    document.getElementById('vnc').focus();   // keep keyboard input in the simulator
+    if (ctx) { stop(); remember(false); } else { start(); remember(true); }
+    vnc.focus();   // keep keyboard input in the simulator
   });
 })();
 </script>

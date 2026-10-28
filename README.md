@@ -68,13 +68,14 @@ a virtual display and is shared to your browser. At the end the script prints th
 AwesomeKick simulator is running.
   Open in a browser: http://<server-ip>:6080/
   Password:          none (use --password to set one)
-  Sound:             click "Sound on" at the top right of the page
+  Sound:             on by default – your first click on the page turns it on
 ```
 
 The simulator still runs on the server. The page shows its picture, sends your clicks and plays its
-sound after you click **Sound on** (streamed on port 6081 – open it in your firewall, e.g.
-`sudo ufw allow from 192.168.0.0/16 to any port 6081 proto tcp`). Expect about 0.1 s delay: fine for
-listening, for playing the pads use the native app.
+sound – on by default; browsers start audio with your first click or key press on the page (the
+**Sound off** button at the top right mutes it). The sound is streamed on port 6081 – open it in your
+firewall, e.g. `sudo ufw allow from 192.168.0.0/16 to any port 6081 proto tcp`. Expect about 0.1 s
+delay: fine for listening, for playing the pads use the native app.
 
 The browser view has no password, so anyone in your network can open it. Add `--password` to protect it.
 Force a mode with `bash scripts/setup-linux.sh --desktop` or `--headless`.

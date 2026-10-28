@@ -171,7 +171,7 @@ echo
 echo "AwesomeKick simulator is running."
 echo "  Open in a browser: http://\$IP:$WEB_PORT/"
 echo "  Password:          $PASSWORD_INFO"
-echo "  Sound:             click \"Sound on\" at the top right of the page"
+echo "  Sound:             on by default – your first click on the page turns it on"
 echo "  Stop:              $DEV_DIR/kickem-stop.sh"
 echo "  Logs:              \$LOG/"
 echo "  Blocked commands:  grep sandbox \$LOG/kickem.log"
