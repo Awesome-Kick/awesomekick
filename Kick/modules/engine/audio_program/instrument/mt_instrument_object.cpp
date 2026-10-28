@@ -54,6 +54,9 @@ namespace mt
     void InstrumentObject::setParam( int Index, float Value ) { push( { Event::Type::Param, Index, Value } ); }
     void InstrumentObject::pitchBend( float Semitones ) { push( { Event::Type::PitchBend, 0, Semitones } ); }
     void InstrumentObject::modWheel( float Amount ) { push( { Event::Type::ModWheel, 0, Amount } ); }
+    void InstrumentObject::aftertouch( int Note, int Value ) { push( { Event::Type::Aftertouch, Note, juce::jlimit( 0.f, 1.f, Value / 127.f ) } ); }
+    void InstrumentObject::channelPressure( int Value ) { push( { Event::Type::ChannelPressure, 0, juce::jlimit( 0.f, 1.f, Value / 127.f ) } ); }
+    void InstrumentObject::setTempo( double Bpm ) { push( { Event::Type::Tempo, 0, (float)Bpm } ); }
 
     void InstrumentObject::prepareToPlay( uint32_t SampleRate, uint32_t BlockSize )
     {
@@ -130,6 +133,13 @@ namespace mt
                 case Event::Type::Param: engine->setParam( e.index, e.value ); break;
                 case Event::Type::PitchBend: engine->pitchBend( e.value ); break;
                 case Event::Type::ModWheel: engine->modWheel( e.value ); break;
+                case Event::Type::Aftertouch:
+                    // To the note actually sounding for that input note (see NoteOn).
+                    if( juce::isPositiveAndBelow( e.index, 128 ) && sounding[(size_t)e.index] >= 0 )
+                        engine->aftertouch( sounding[(size_t)e.index], e.value );
+                    break;
+                case Event::Type::ChannelPressure: engine->channelPressure( e.value ); break;
+                case Event::Type::Tempo: engine->setTempo( e.value ); break;
             }
         };
         for( int i = 0; i < scope.blockSize1; ++i )

@@ -609,7 +609,12 @@ namespace
             synth.noteOff( 60 );
             synth.noteOff( 67 );
             render( blocksFor( 5.0 ) );
-            const auto tail = render( blocksFor( 0.1 ) );
+            auto tail = render( blocksFor( 0.1 ) );
+            for( int extra = 0; extra < 7 && tail >= 1.0e-4f; ++extra ) // long reverb and delay tails (Drone)
+            {
+                render( blocksFor( 0.9 ) );
+                tail = render( blocksFor( 0.1 ) );
+            }
             R.check( finite && held > 0.01f && held < 1.5f && tail < 1.0e-4f && synth.getNumActiveVoices() == 0, "preset \"" + names[p] + "\" plays and releases",
                      "peak " + f3( held ) + ", tail " + juce::String( tail, 6 ) + ", voices left " + juce::String( synth.getNumActiveVoices() ) );
         }
@@ -755,7 +760,7 @@ namespace
         juce::StringArray names;
         for( const auto& src : sources )
             names.add( src.second );
-        R.check( sources.size() == 15 && names[13] == "Envelope 1" && names[14] == "LFO 1" && ed.sourceLabel( mm::PatchBuilder::module( lfo ) ) == "LFO 1",
+        R.check( sources.size() == 16 && names[14] == "Envelope 1" && names[15] == "LFO 1" && ed.sourceLabel( mm::PatchBuilder::module( lfo ) ) == "LFO 1",
                  "modulation sources listed and named", names.joinIntoString( ", " ) );
 
         um.beginNewTransaction();
@@ -992,6 +997,370 @@ namespace
 
             mm::UserPresets::setDirectory( {} );
             dir.deleteRecursively();
+        }
+    }
+
+    //==============================================================================
+    void testModularPlayModes( Results& R )
+    {
+        R.section( "Modular: mono/legato, glide, pressure, unison, ladder, activity" );
+        namespace mm = mt::modular;
+        using B      = mm::PatchBuilder;
+
+        mt::ModularEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        bool               finite  = true;
+        auto render = [&]( int Blocks ) {
+            float peak = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( size_t i = 0; i < l.size(); ++i )
+                {
+                    finite = finite && std::isfinite( l[i] ) && std::isfinite( r[i] );
+                    peak   = juce::jmax( peak, std::abs( l[i] ), std::abs( r[i] ) );
+                }
+            }
+            return peak;
+        };
+        // Frequency from rising zero crossings over Blocks.
+        auto hz = [&]( int Blocks ) {
+            int   crossings = 0;
+            float prev      = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( auto v : l )
+                {
+                    crossings += prev < 0.f && v >= 0.f ? 1 : 0;
+                    prev = v;
+                }
+            }
+            return crossings * (double)testRate / ( Blocks * (double)testBlock );
+        };
+        auto blocksFor = []( double Seconds ) { return (int)( Seconds * testRate / testBlock ); };
+
+        // A bare sine, so the pitch can be read back.
+        auto sine = []( int Mode, float Glide ) {
+            B b( "Sine", 8 );
+            b.tree.setProperty( mm::PatchIDs::playMode, Mode, nullptr ).setProperty( mm::PatchIDs::glide, Glide, nullptr );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            return b.tree;
+        };
+
+        // Mono: the last note wins, letting it go returns to the one still held.
+        synth.setPatch( sine( mm::Mono, 0.f ) );
+        synth.noteOn( 57, 1.f ); // A3 220 Hz
+        render( 4 );
+        synth.noteOn( 69, 1.f ); // A4 440 Hz
+        render( 4 );
+        const auto top    = hz( blocksFor( 0.5 ) );
+        const auto voices = synth.getNumActiveVoices();
+        synth.noteOff( 69 );
+        render( 4 );
+        const auto back = hz( blocksFor( 0.5 ) );
+        synth.noteOff( 57 );
+        render( 10 );
+        R.check( std::abs( top - 440 ) < 3 && voices == 1 && std::abs( back - 220 ) < 3 && synth.getNumActiveVoices() == 0, "mono: last note wins, release returns to the held note",
+                 juce::String( top, 1 ) + " Hz, voices " + juce::String( voices ) + ", back to " + juce::String( back, 1 ) + " Hz" );
+
+        // Glide: 200 ms from A3 to A4.
+        synth.setPatch( sine( mm::Legato, 0.2f ) );
+        synth.noteOn( 57, 1.f );
+        render( 10 );
+        synth.noteOn( 69, 1.f );
+        const auto early = hz( blocksFor( 0.04 ) );
+        render( blocksFor( 0.4 ) );
+        const auto settled = hz( blocksFor( 0.5 ) );
+        synth.allNotesOff();
+        render( 10 );
+        R.check( early > 225 && early < 400 && std::abs( settled - 440 ) < 3, "legato glide slides to the new note", juce::String( early, 1 ) + " Hz early, " + juce::String( settled, 1 ) + " Hz settled" );
+
+        // Mono restarts the envelope on each note (a pluck jumps back to full level);
+        // legato keeps it where it is (at the sustain level).
+        auto secondNote = [&]( int Mode ) {
+            B b( "Env", 8 );
+            b.tree.setProperty( mm::PatchIDs::playMode, Mode, nullptr );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            const auto vca = b.add( "vca", 0, 1, { { "gain", 0 } } );
+            const auto env = b.add( "adsr", 1, 0, { { "attack", 0.001f }, { "decay", 0.1f }, { "sustain", 0.2f }, { "velocity", 0 } } );
+            b.mod( vca, "gain", B::module( env ), 1 );
+            synth.setPatch( b.tree );
+            synth.noteOn( 60, 1.f );
+            render( blocksFor( 0.5 ) ); // decayed to the sustain level
+            synth.noteOn( 64, 1.f );
+            const auto after = render( blocksFor( 0.05 ) );
+            synth.allNotesOff();
+            render( blocksFor( 1.0 ) );
+            return after;
+        };
+        const auto legatoLevel = secondNote( mm::Legato ), monoLevel = secondNote( mm::Mono );
+        R.check( monoLevel > 0.1f && legatoLevel < monoLevel * 0.4f, "mono retriggers the envelope, legato keeps it going", "mono " + f3( monoLevel ) + ", legato " + f3( legatoLevel ) );
+
+        // Pressure: a VCA opened only by aftertouch.
+        {
+            B b( "Pressure" );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            const auto vca = b.add( "vca", 0, 1, { { "gain", 0 } } );
+            b.mod( vca, "gain", "pressure", 1 );
+            synth.setPatch( b.tree );
+            synth.noteOn( 60, 1.f );
+            const auto none = render( 10 );
+            synth.aftertouch( 60, 1.f );
+            render( 2 );
+            const auto poly = render( 10 );
+            synth.aftertouch( 60, 0.f );
+            render( 4 );
+            synth.channelPressure( 0.5f );
+            render( 2 );
+            const auto channel = render( 10 );
+            synth.allNotesOff();
+            render( 10 );
+            R.check( none < 1.0e-4f && poly > 0.1f && channel > 0.03f && channel < poly, "poly aftertouch and channel pressure modulate", f3( none ) + " / " + f3( poly ) + " / " + f3( channel ) );
+        }
+
+        // Unison: seven detuned saws beat against each other (the level moves), one does not.
+        auto levelSpread = [&]( int Unison ) {
+            B b( "Unison" );
+            b.add( "osc", 0, 0, { { "wave", 2 }, { "unison", (float)Unison }, { "spread", 30 }, { "level", 1 } } );
+            synth.setPatch( b.tree );
+            synth.noteOn( 48, 1.f );
+            render( 10 );
+            float lo = 1e9f, hi = 0;
+            for( int blk = 0; blk < 60; ++blk )
+            {
+                const auto p = render( 4 );
+                lo           = juce::jmin( lo, p );
+                hi           = juce::jmax( hi, p );
+            }
+            synth.allNotesOff();
+            render( 10 );
+            return std::make_pair( lo, hi );
+        };
+        const auto one = levelSpread( 1 ), seven = levelSpread( 7 );
+        R.check( finite && ( one.second - one.first ) < 0.02f && ( seven.second - seven.first ) > 0.03f && seven.second < 1.5f, "unison detunes copies (they beat), at a similar level",
+                 "1: " + f3( one.first ) + ".." + f3( one.second ) + ", 7: " + f3( seven.first ) + ".." + f3( seven.second ) );
+
+        // Ladder: darker at a low cutoff, and sane at full resonance.
+        {
+            B          b( "Ladder" );
+            b.add( "osc", 0, 0, { { "wave", 2 }, { "level", 1 } } );
+            const auto flt = b.add( "filter", 0, 1, { { "mode", 4 }, { "cutoff", 300 }, { "reso", 1 } } );
+            synth.setPatch( b.tree );
+            synth.noteOn( 48, 1.f );
+            const auto loud = render( blocksFor( 1.0 ) );
+            synth.allNotesOff();
+            render( 10 );
+            R.check( finite && loud > 0.01f && loud < 2.f, "ladder filter at full resonance stays finite", "peak " + f3( loud ) );
+            juce::ignoreUnused( flt );
+        }
+
+        // Activity: an LFO's value moves and an oscillator's level shows while a note plays.
+        {
+            B          b( "Activity" );
+            const auto osc = b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            const auto lfo = b.add( "lfo", 1, 0, { { "rate", 4 } } );
+            const auto verb = b.addEffect( "reverb", 0 );
+            synth.setPatch( b.tree );
+            const auto idle = synth.getActivity( osc );
+            synth.noteOn( 60, 1.f );
+            float lo = 1, hi = -1;
+            for( int i = 0; i < 40; ++i )
+            {
+                render( 4 );
+                lo = juce::jmin( lo, synth.getActivity( lfo ) );
+                hi = juce::jmax( hi, synth.getActivity( lfo ) );
+            }
+            const auto level = synth.getActivity( osc ), fx = synth.getActivity( verb );
+            synth.allNotesOff();
+            render( 10 );
+            R.check( idle == 0.f && level > 0.5f && fx > 0.01f && hi - lo > 1.f && synth.getActivity( 999 ) == 0.f, "activity: audio peaks and modulator values for the editor",
+                     "osc " + f3( level ) + ", fx " + f3( fx ) + ", lfo " + f3( lo ) + ".." + f3( hi ) );
+        }
+
+        // Effects swap slots.
+        {
+            auto            patch = mm::createPreset( 7 ); // Random Pad: chorus 0, reverb 1
+            mm::PatchEditor ed( patch, nullptr );
+            const auto      chorus = (int)ed.effectAt( 0 ).getProperty( mm::PatchIDs::id );
+            ed.moveEffect( chorus, 1 );
+            R.check( ed.effectAt( 1 ).getProperty( mm::PatchIDs::type ).toString() == "chorus" && ed.effectAt( 0 ).getProperty( mm::PatchIDs::type ).toString() == "reverb",
+                     "moving an effect onto another swaps them" );
+        }
+    }
+
+    //==============================================================================
+    void testModularTempoArpAndModules( Results& R )
+    {
+        R.section( "Modular: tempo sync, arpeggiator, Formant, Ring Mod" );
+        namespace mm = mt::modular;
+        using B      = mm::PatchBuilder;
+
+        mt::ModularEngine synth;
+        synth.prepare( testRate, (int)testBlock );
+        std::vector<float> l( testBlock ), r( testBlock );
+        float*             outs[2] = { l.data(), r.data() };
+        bool               finite  = true;
+        auto render = [&]( int Blocks, double* Hf = nullptr ) {
+            float  peak = 0;
+            double hf   = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( size_t i = 0; i < l.size(); ++i )
+                {
+                    finite = finite && std::isfinite( l[i] ) && std::isfinite( r[i] );
+                    peak   = juce::jmax( peak, std::abs( l[i] ), std::abs( r[i] ) );
+                    if( i > 0 )
+                        hf += ( l[i] - l[i - 1] ) * ( l[i] - l[i - 1] );
+                }
+            }
+            if( Hf )
+                *Hf = hf;
+            return peak;
+        };
+        auto hz = [&]( int Blocks ) {
+            int   crossings = 0;
+            float prev      = 0;
+            for( int b = 0; b < Blocks; ++b )
+            {
+                synth.process( outs, 2, (int)testBlock );
+                for( auto v : l )
+                {
+                    crossings += prev < 0.f && v >= 0.f ? 1 : 0;
+                    prev = v;
+                }
+            }
+            return crossings * (double)testRate / ( Blocks * (double)testBlock );
+        };
+        auto blocksFor = []( double Seconds ) { return (int)std::round( Seconds * testRate / testBlock ); };
+
+        // A synced LFO: 1/4 notes = 2 Hz at 120 BPM, 1 Hz at 60.
+        {
+            B          b( "Sync" );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            const auto lfo = b.add( "lfo", 1, 0, { { "sync", 5 }, { "rate", 7 } } ); // the free rate is ignored
+            synth.setPatch( b.tree );
+            auto cycles = [&]( double Bpm ) {
+                synth.setTempo( Bpm );
+                synth.noteOn( 60, 1.f );
+                int   rises = 0;
+                float prev  = synth.getActivity( lfo );
+                for( int i = 0; i < blocksFor( 4.0 ); ++i )
+                {
+                    render( 1 );
+                    const auto v = synth.getActivity( lfo );
+                    rises += prev < 0.f && v >= 0.f ? 1 : 0;
+                    prev = v;
+                }
+                synth.allNotesOff();
+                render( 10 );
+                return rises / 4.0;
+            };
+            const auto at120 = cycles( 120 ), at60 = cycles( 60 );
+            R.check( std::abs( at120 - 2.0 ) < 0.3 && std::abs( at60 - 1.0 ) < 0.3, "a synced LFO follows the tempo", juce::String( at120, 2 ) + " Hz at 120, " + juce::String( at60, 2 ) + " Hz at 60" );
+        }
+
+        // A synced delay: a 1/4 echo comes 500 ms after the note at 120 BPM.
+        {
+            B          b( "Echo" );
+            const auto vca = b.add( "vca", 0, 1, { { "gain", 0 } } );
+            const auto env = b.add( "adsr", 1, 0, { { "attack", 0.001f }, { "decay", 0.03f }, { "sustain", 0 }, { "release", 0.03f } } );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            b.mod( vca, "gain", B::module( env ), 1.f );
+            b.addEffect( "fxdelay", 0, { { "sync", 5 }, { "feedback", 0 }, { "pingpong", 0 }, { "mix", 0.5f } } );
+            synth.setPatch( b.tree );
+            synth.setTempo( 120 );
+            synth.reset();
+            synth.noteOn( 69, 1.f );
+            render( blocksFor( 0.05 ) );
+            synth.noteOff( 69 );
+            render( blocksFor( 0.3 ) );                       // to 350 ms: nothing yet
+            const auto before = render( blocksFor( 0.1 ) );   // 350..450 ms
+            const auto echo   = render( blocksFor( 0.15 ) );  // 450..600 ms
+            render( blocksFor( 1.0 ) );
+            R.check( before < 1.0e-3f && echo > 0.02f, "a synced delay repeats on the beat (1/4 = 500 ms at 120 BPM)", f3( before ) + " then " + f3( echo ) );
+        }
+
+        // Arpeggiator: hold C-E-G; 1/16 at 120 BPM = a step every 125 ms.
+        auto arpPitches = [&]( int Mode, int Octaves, std::initializer_list<int> Notes, int Steps ) {
+            B b( "Arp", 4 );
+            b.tree.setProperty( mm::PatchIDs::arp, Mode, nullptr ).setProperty( mm::PatchIDs::arpRate, 2, nullptr ).setProperty( mm::PatchIDs::arpOctaves, Octaves, nullptr ).setProperty( mm::PatchIDs::arpGate, 1.f, nullptr );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            synth.setPatch( b.tree );
+            synth.setTempo( 120 );
+            synth.reset();
+            for( auto n : Notes )
+                synth.noteOn( n, 1.f );
+            juce::StringArray seq;
+            const auto        step = blocksFor( 0.125 ); // 46.875 blocks: measure inside each step
+            for( int i = 0; i < Steps; ++i )
+            {
+                render( 4 );
+                const auto f = hz( (int)step - 8 );
+                render( (int)std::round( 0.125 * testRate / testBlock * ( i + 1 ) ) - (int)std::round( 0.125 * testRate / testBlock * i ) - ( (int)step - 4 ) );
+                seq.add( juce::String( juce::roundToInt( 12.0 * std::log2( f / 440.0 ) + 69.0 ) ) );
+            }
+            for( auto n : Notes )
+                synth.noteOff( n );
+            render( blocksFor( 0.3 ) );
+            return seq.joinIntoString( " " );
+        };
+        const auto up     = arpPitches( mm::ArpUp, 2, { 67, 60, 64 }, 7 );
+        const auto down   = arpPitches( mm::ArpDown, 1, { 60, 64, 67 }, 4 );
+        const auto upDown = arpPitches( mm::ArpUpDown, 1, { 60, 64, 67 }, 6 );
+        const auto played = arpPitches( mm::ArpAsPlayed, 1, { 67, 60, 64 }, 4 );
+        R.check( up == "60 64 67 72 76 79 60", "arpeggio Up over two octaves, on the 1/16 grid", up );
+        R.check( down == "67 64 60 67" && upDown == "60 64 67 64 60 64" && played == "67 60 64 67", "Down, Up-Down and As Played orders", down + " | " + upDown + " | " + played );
+        R.check( synth.getNumActiveVoices() == 0, "letting go stops the arpeggio" );
+
+        // Formant: the vowel changes the spectrum (I is brighter than U).
+        auto formantHf = [&]( float Vowel ) {
+            B b( "Vowel" );
+            b.add( "osc", 0, 0, { { "wave", 2 }, { "level", 1 } } );
+            b.add( "formant", 0, 1, { { "vowel", Vowel }, { "reso", 0.6f } } );
+            synth.setPatch( b.tree );
+            synth.reset();
+            synth.noteOn( 48, 1.f );
+            render( 10 );
+            double hf   = 0;
+            const auto peak = render( 40, &hf );
+            synth.allNotesOff();
+            render( 10 );
+            return std::make_pair( hf, peak );
+        };
+        const auto vowelI = formantHf( 2 ), vowelU = formantHf( 4 );
+        R.check( finite && vowelI.first > vowelU.first * 3.0 && vowelI.second > 0.01f && vowelU.second > 0.01f, "the formant filter's vowel shapes the sound (I brighter than U)",
+                 "hf I " + juce::String( vowelI.first, 3 ) + ", U " + juce::String( vowelU.first, 3 ) );
+
+        // Ring Mod: mixing it in changes the timbre, and stays in range.
+        auto ringHf = [&]( float Mix ) {
+            B b( "Ring" );
+            b.add( "osc", 0, 0, { { "wave", 0 }, { "level", 1 } } );
+            b.add( "ring", 0, 1, { { "tune", 7.4f }, { "mix", Mix } } );
+            synth.setPatch( b.tree );
+            synth.reset();
+            synth.noteOn( 60, 1.f );
+            render( 10 );
+            double     hf   = 0;
+            const auto peak = render( 40, &hf );
+            synth.allNotesOff();
+            render( 10 );
+            return std::make_pair( hf, peak );
+        };
+        const auto dry = ringHf( 0.f ), ringed = ringHf( 1.f );
+        R.check( finite && ringed.first > dry.first * 1.5 && ringed.second < 1.f, "ring modulation adds sidebands", "hf " + juce::String( dry.first, 3 ) + " -> " + juce::String( ringed.first, 3 ) );
+
+        // Any named patch is marked once when edited (user presets too).
+        {
+            B b( "My Bass" );
+            const auto osc = b.add( "osc", 0, 0 );
+            mm::PatchEditor ed( b.tree, nullptr );
+            ed.setValue( osc, "level", 0.2f );
+            ed.setValue( osc, "level", 0.3f );
+            R.check( b.tree.getProperty( mm::PatchIDs::name ).toString() == "My Bass *", "editing a user preset marks it once", b.tree.getProperty( mm::PatchIDs::name ).toString() );
         }
     }
 
@@ -1251,6 +1620,34 @@ namespace
 
                     mm::UserPresets::setDirectory( {} );
                     dir.deleteRecursively();
+                }
+
+                {
+                    namespace mm = mt::modular;
+                    inst->loadPreset( 0 );
+                    auto patch = inst->getOrCreatePatch();
+                    mm::PatchEditor ed( patch, nullptr );
+                    const auto      vca = (int)ed.moduleAt( 0, 2 ).getProperty( mm::PatchIDs::id );
+                    ed.removeMod( ed.module( vca ).getChild( 0 ) ); // no envelope: only pressure opens it
+                    ed.addMod( vca, "gain", "pressure", 1.f );
+
+                    const auto pt = ai.createTrack( seq );
+                    ai.setProgramToTrack( mp, seq, pt );
+                    ai.setSelectedSequenceAndTrack( seq, pt );
+                    ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOn( 1, 60, (juce::uint8)110 ) );
+                    const auto before = measureOutput( meter, 300 );
+                    ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::aftertouchChange( 1, 60, 127 ) );
+                    const auto pressed = measureOutput( meter, 300 );
+                    ai.addLiveMidiMsg( ai.getSelected(), juce::MidiMessage::noteOff( 1, 60 ) );
+                    measureOutput( meter, 300 );
+                    R.check( before < 0.005f && pressed > 0.02f, "pad aftertouch reaches a Modular voice through the track", f3( before ) + " -> " + f3( pressed ) );
+                }
+
+                {
+                    measureOutput( meter, 400 ); // the program's tempo timer ticks, the engine applies it
+                    auto* modular = dynamic_cast<mt::ModularEngine*>( inst->getAudioObject()->getEngine() );
+                    R.check( modular && std::abs( modular->getTempo() - ai.getMasterBPM() ) < 0.01, "the project tempo reaches the Modular engine",
+                             juce::String( modular ? modular->getTempo() : 0.0 ) + " vs " + juce::String( ai.getMasterBPM() ) );
                 }
 
                 inst->setEngine( "Basic Synth" );
@@ -1650,6 +2047,8 @@ private:
         testModularEngine( R );
         testModularPatchEditing( R );
         testModularCablesAndEffects( R );
+        testModularPlayModes( R );
+        testModularTempoArpAndModules( R );
         testPadLayout( R );
         testEngine( R, kitDir );
 

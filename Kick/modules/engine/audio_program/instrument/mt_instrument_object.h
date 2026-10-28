@@ -41,6 +41,9 @@ namespace mt
         void setParam( int Index, float Value );
         void pitchBend( float Semitones );
         void modWheel( float Amount ); // 0..1
+        void aftertouch( int Note, int Value ); // MIDI 0..127, input note (before transpose)
+        void channelPressure( int Value );     // MIDI 0..127
+        void setTempo( double Bpm );
 
         MTMeterData& readOutMeter() { return meter.getMeter( outMeterData ); }
 
@@ -57,7 +60,10 @@ namespace mt
                 AllNotesOff,
                 Param,
                 PitchBend,
-                ModWheel
+                ModWheel,
+                Aftertouch,
+                ChannelPressure,
+                Tempo
             } type;
             int   index;
             float value;

@@ -9,9 +9,15 @@
 
 namespace mt
 {
-    class MTInstrumentProgram : public MTIProgram
+    class MTInstrumentProgram
+        : public MTIProgram
+        , private juce::Timer
     {
     public:
+        /// Where programs read the project tempo (set by the audio interface; this
+        /// module cannot see it). Message thread. Engines get changes within ~250 ms.
+        static inline std::function<double()> tempoSource;
+
         explicit MTInstrumentProgram( AudIO::DawEngine& Engine, juce::ValueTree& VT, juce::UndoManager* UM = nullptr );
         ~MTInstrumentProgram() override;
 
@@ -66,11 +72,20 @@ namespace mt
         void               enableOutputMetering( bool ) override {}
         const MTMeterData& readOutMeter() const override { return object->readOutMeter(); }
 
+        /// A recent output of one part of the patch, for the editor's meters.
+        float getActivity( int PartId ) const
+        {
+            auto* e = object->getEngine();
+            return e ? e->getActivity( PartId ) : 0.f;
+        }
+
         /// The program's audio object (routing and diagnostics).
         const InstrumentObject* getAudioObject() const noexcept { return object; }
 
     private:
         void valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property ) override;
+        void timerCallback() override; // passes tempo changes to the engine
+        double sentTempo{ 0 };
         void valueTreeChildAdded( juce::ValueTree& Parent, juce::ValueTree& Child ) override;
         void valueTreeChildRemoved( juce::ValueTree& Parent, juce::ValueTree& Child, int Index ) override;
         void valueTreeChildOrderChanged( juce::ValueTree& Parent, int, int ) override;

@@ -144,14 +144,17 @@ namespace sim
         void setLit( bool lit, juce::Colour colour );
         /// Hit / release exactly as a mouse click does.
         void hit( bool isDown, int velocity = 100 );
+        /// Pressure on a held pad, 0..127 (what dragging upwards does).
+        void press( int pressure );
         void paint( juce::Graphics& g ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
+        void mouseDrag( const juce::MouseEvent& e ) override;
         void mouseUp( const juce::MouseEvent& e ) override;
 
     private:
         int          index;
         bool         lit { false }, down { false };
-        int          lastVelocity { 0 };
+        int          lastVelocity { 0 }, lastPressure { 0 };
         juce::Colour colour { juce::Colours::grey };
     };
 

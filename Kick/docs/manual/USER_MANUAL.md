@@ -707,15 +707,31 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 
 - **Audio runs down each column.** A source (oscillator, noise) adds to what comes from above, and a processor (filter, VCA, drive...) changes it. The columns are mixed together.
 - **Modulators don't touch the audio.** Envelopes, LFOs and Random sit anywhere on the grid, and their output modulates any knob in the patch. A depth is a share of the knob's travel, so it means the same thing on any knob.
-- **Other modulation sources:** velocity, note, gate, mod wheel, pitch bend and the eight macros.
+- **Other modulation sources:** velocity, note, gate, mod wheel, pitch bend, **pressure** and the eight macros.
+  - **Pressure** is the note's aftertouch: poly aftertouch from a MIDI keyboard, or channel pressure, which applies to every note.
+  - The pads send pressure too: held-pad messages that carry a pressure value. In the simulator, hold a pad and drag upwards.
+  - This hasn't been tried on hardware yet; the panel's exact pressure messages still need checking.
 - **Voices:** 8 by default (1–16 per patch). A note ends once its gate is off and all its envelopes have finished. A patch with no envelope stops at note-off with a 5 ms fade.
+- **Play modes:**
+  - **Poly** (1–16 voices).
+  - **Mono:** one voice, the last note held wins, and letting it go returns to the note still held. Envelopes restart on every note.
+  - **Legato:** like Mono, but the envelopes keep running while notes overlap.
+  - In Mono and Legato, **glide** (0–800 ms) slides the pitch between notes.
+- **Arpeggiator:** hold notes and it plays them one at a time, in step with the project tempo.
+  - **Patterns:** Up, Down, Up-Down, Random or As Played.
+  - **Settings:** a rate (1/4 to 1/32, or triplets), 1–4 octaves, and a gate (25–100% of a step).
+  - Its notes go through the play mode, so **Legato with glide and a 100% gate** slides from note to note.
+  - The clock starts with the first note you press. It doesn't follow the song position yet.
+- **Tempo sync:** LFOs and the Stereo Delay have a **Sync** knob. Its choices are Free, 4 bars down to 1/32, triplets (T) and dotted (D). The project tempo reaches the instrument within a quarter of a second of a change.
 - **Parameters on the Q-links:** **Macro 1–8** and **Level**. Each preset maps the macros to its own knobs.
 
 | Module | Kind | Knobs |
 |---|---|---|
-| Oscillator | source | Wave (sine/triangle/saw/square), Tune ±48 st, Fine ±100 ct, Pulse Width, Level, Input (Add / Phase Mod / Replace), PM Depth |
+| Oscillator | source | Wave (sine/triangle/saw/square), Tune ±48 st, Fine ±100 ct, Pulse Width, Level, Input (Add / Phase Mod / Replace), PM Depth, **Unison** 1–7 copies, **Spread** ±0–100 ct (supersaw) |
 | Noise | source | Colour (white → dark), Level |
-| Filter | processor | Mode (LP/BP/HP/Notch), Cutoff 20 Hz–20 kHz, Resonance, Key Track |
+| Filter | processor | Mode (LP/BP/HP/Notch, or **Ladder LP**, a 24 dB/oct Moog-style low-pass that self-oscillates near full resonance), Cutoff 20 Hz–20 kHz, Resonance, Key Track |
+| Formant | processor | Vowel (A, E, I, O, U; in between morphs), Shift ±12 st, Resonance, Mix: three resonant bands at the formants of a sung vowel |
+| Ring Mod | processor | Key Track (the carrier follows the note), Tune −24..+48 st, Freq (when not tracking), Mix: metallic, bell-like sidebands |
 | VCA | processor | Gain |
 | Drive | processor | Drive (to +36 dB), Fold (tanh → sine folder), Bias, Level |
 | Delay | processor | Time 0.1 ms–1 s, Key Track (tunes the delay to the note: strings and resonators), Tune, Feedback, Damping, Mix |
@@ -723,14 +739,14 @@ Modular plays a **patch**: modules placed on a grid, in the spirit of Drambo or 
 | Math | processor | Gain ±4, Offset, Shape (Linear/Rectify/Clip) |
 | Pan | processor | Pan (places its column) |
 | Envelope | modulator | Attack, Decay, Sustain, Release, Velocity |
-| LFO | modulator | Shape (sine/triangle/saw/square/random), Rate 0.02–40 Hz, Retrigger, Polarity |
+| LFO | modulator | Shape (sine/triangle/saw/square/random), Rate 0.02–40 Hz, Retrigger, Polarity, **Amount** (modulate it to fade the LFO in, e.g. vibrato from pressure), **Sync** (to the tempo; Free uses Rate) |
 | Random | modulator | A new value per note; Polarity |
 
 **Effects** (up to four, FX 1 → FX 4, after the voices are mixed; stereo):
 
 | Effect | Knobs |
 |---|---|
-| Stereo Delay | Time 10 ms–2 s, Feedback, Ping-Pong, Damping, Mix |
+| Stereo Delay | Time 10 ms–2 s, Feedback, Ping-Pong, Damping, Mix, **Sync** (to the tempo, up to 2 s; Free uses Time) |
 | Chorus | Rate, Depth, Mix |
 | Reverb | Size, Damping, Width, Mix |
 | Saturator | Drive (to +30 dB), Tone, Level |
@@ -759,6 +775,19 @@ A source to the left of (or above) its target arrives in the same 16-sample step
 | Noise Hat | high-passed noise, short envelope | cutoff | decay |
 | Random Pad | detuned saws, a random cutoff and pan per note; chorus and reverb | cutoff | shorter attack |
 | Cross FM | column 2 phase-modulates column 1 through a cable | FM amount | ratio |
+| Supersaw Lead | seven-voice unison saw into a ladder filter, legato with 80 ms glide; pressure opens the filter | cutoff | spread |
+| Pressure Pad | slow pad; pressure opens the filter, raises the level and brings in vibrato | cutoff | (none) |
+| Acid Bass | 303-style: one voice, ladder filter with a snappy envelope, slides when notes overlap; dotted-eighth echo | cutoff | resonance |
+| Arp Sparkle | hold a chord: it plays 1/16 notes up two octaves, with a ping-pong echo | cutoff | (none) |
+| Vowel Lead | a one-bar LFO walks the formant filter through A-E-I-O-U; legato with glide | vowel | formant shift |
+| Metal Bell | a sine ring-modulated a fifth up, long decay and reverb | ring tune | purity |
+| Sub Bass | mono sine and a soft octave, light drive | drive | (none) |
+| Strings | five-voice unison saws, slow attack, chorus and reverb | cutoff | attack |
+| Kick Drum | 808-style: a sine whose pitch drops fast (plays two octaves below the pad) | punch | drive |
+| Snare | band-passed noise and a pitched tone body | snappy | body |
+| Organ | sine drawbars (fundamental, octave, twelfth, two octaves) with a fast chorus | drawbar | (none) |
+| Lo-Fi Keys | an FM electric piano through a bit crusher and chorus | lo-fi | bark |
+| Drone | detuned saws, a two-bar LFO on the filter, synced echo, huge reverb | cutoff | (none) |
 
 Pluck String (echo), FM Bell (reverb) and Random Pad (reverb) also put an effect's mix on **Macro 3**.
 
@@ -770,7 +799,7 @@ Pluck String (echo), FM Bell (reverb) and Random Pad (reverb) also put an effect
 - Turning a knob or a depth changes the sound without interrupting it.
 - Adding, moving or removing a module rebuilds the patch while notes keep playing.
 - Unknown modules and broken modulations are skipped, not fatal.
-- Cost: eight voices of Basic Poly took about 7–11% of one desktop core in testing (Debug build). The RK3588 hasn't been measured.
+- Cost: eight voices of Basic Poly took about 7–16% of one desktop core in testing, depending on the build (Debug or ASan). The RK3588 hasn't been measured.
 
 **The patch editor.** On the instrument page, **EDIT PATCH** (shown for Modular) opens the patch over the whole page.
 
@@ -781,7 +810,10 @@ Pluck String (echo), FM Bell (reverb) and Random Pad (reverb) also put an effect
 - **Grid (left):** 8 columns × 6 rows. Orange = sources, blue = processors, purple = modulators. Each cell shows the module's name and its main knob.
   - A line runs down each column that carries audio, into the effects.
   - **Cables** are amber curves ending in a dot; a module with cables in has an amber dot in its corner.
-  - **FX 1–FX 4** (green) are the effect slots under the grid. Tap an empty slot twice (or **+ EFFECT**) to add one.
+  - **FX 1–FX 4** (green) are the effect slots under the grid. Tap an empty slot twice (or **+ EFFECT**) to add one, and drag one onto another slot to move it (or swap the two).
+  - **Activity:** while notes play, a thin bar at the bottom of each cell moves. Modulators show their value (centred: left negative, right positive); oscillators, processors and effects show their level.
+
+![Live activity while a pad is held (Legato, 100 ms glide)](img/modular_editor_activity.png)
   - **~N** marks a module whose knobs have N modulations.
   - When a module is selected, the modules it modulates, or the ones modulating it, get a white outline.
 - **Add a module:** tap an empty cell, then tap it again or press **+ MODULE**, and pick a type.
@@ -793,18 +825,23 @@ Pluck String (echo), FM Bell (reverb) and Random Pad (reverb) also put an effect
   - **IN (n)** (oscillators, noise and processors) shows the cables into it, one knob per cable (amount). **+ CABLE** picks the module to take audio from.
   - **REMOVE P*n*** removes the modulation or cable you touched last. Its title is marked **>**.
   - **DELETE** removes the module and the modulations it fed.
-- **VOICES** sets the patch's polyphony (1–16). The **centre knob** walks the selection through the cells, then the effect slots.
-- **SAVE** asks for a name on the on-screen keyboard and saves a user preset. **MACROS** renames a macro; an empty name goes back to the automatic one.
+- **The play-mode button** (top right, e.g. **POLY 8** or **LEGATO 100MS**) picks Mono, Legato or Poly 1–16. After Mono or Legato it asks for a glide time.
+- **The ARP button** (e.g. **ARP OFF**, **ARP UP 1/16**) asks for a pattern, then the rate, octaves and gate.
+
+![The arpeggiator on, and a Formant module added](img/modular_editor_arp.png)
+- The **centre knob** walks the selection through the cells, then the effect slots.
+- **SAVE** asks for a name on the on-screen keyboard and saves a user preset. Once you have user presets, it first asks whether to save or **delete** one.
+- **MACROS** renames a macro; an empty name goes back to the automatic one.
 - **< BACK** returns to the instrument page.
 - **Undo:** everything goes through undo. Turning one knob undoes as a single step.
-- **Edited presets:** the first change to a factory preset renames it, e.g. **Init \***, and that name shows in the PRESET box.
+- **Edited presets:** the first change to a preset (factory or your own) renames it, e.g. **Init \***, and that name shows in the PRESET box.
 - **Pads** keep playing the patch while you edit, so you hear every change.
 
 **Not yet:**
 
-- Deleting a user preset from the device (remove its file from `prefs/ModularPresets` for now).
-- Moving an effect to another slot (delete and add it again).
 - Cable amounts and the voice count can't be modulated.
+- The arpeggiator's clock is free-running. It doesn't line up with the song position or the sequencer's bars yet.
+- Pad pressure hasn't been checked on real hardware.
 
 **What else is covered:**
 
@@ -1350,7 +1387,7 @@ All of these run on Windows from the build folders.
 build/win/KickEngineTest.exe
 ```
 
-- **What it covers:** about 165 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine (presets, patch editing, cables, effects, user presets, macro names), pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
+- **What it covers:** about 196 headless checks: the recorder, looper, filter, envelopes, Basic Synth, the Modular engine (presets, patch editing, cables, effects, user presets, macro names, mono/legato/glide, pressure, unison, ladder, activity, tempo sync, arpeggiator, Formant, Ring Mod; every preset plays and releases), pad layouts, and end-to-end engine runs (pads, velocity, sequencer, instrument programs, save/reload/undo, sampler, looper).
 - **Output:** results go to `engine_test_results.txt`. The exit code is the number of failures.
 - **Reload stress mode:** with `KICK_TEST_RELOAD_CYCLES=<n>` set, only the stress test runs. It closes and reloads one project *n* times and plays an instrument after each load. On a silent cycle it reports the program's own meter and where its output is connected.
 
@@ -1362,7 +1399,7 @@ Set `KICKEM_SELFTEST` before you launch `build/sim/KT_KickEM.exe`. The self-test
 |---|---|
 | `1` | Presses every control type once |
 | `instrument` | Creates an instrument program, opens its editor, turns Q-links, plays pads. Then picks Modular and the FM Bell preset and turns Macro 1 |
-| `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, saves a user preset (into the temporary prefs copy) and goes back |
+| `modular` | Opens the Modular patch editor and, through its own buttons, lists and Q-links: edits the filter, adds an LFO, modulates the cutoff from it, moves it, plays pads and undoes. Then adds a reverb, cables a new oscillator into the first, and saves a user preset (into the temporary prefs copy). Then switches to Legato with glide, moves the reverb, holds a pad with pressure while logging every module's activity, and deletes the preset. Then adds a Formant module, sets the arpeggiator up through ARP, holds a three-pad chord and goes back |
 | `audio` | Lists the audio devices, opens PREFS → Audio |
 | `tour` | Loads a kit, presses every button and its SHIFT function, then turns the Q-links and jog and hits a pad on each screen |
 | `record` | Records pad hits into Trap Kit and checks the grid snap, the REC light and undo. Then arms, records and stops the Sampler from the panel. |

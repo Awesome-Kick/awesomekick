@@ -164,7 +164,9 @@ namespace mt
         : manager( std::make_unique<MTAudioManager>( Name, Manufacturer, Version ) )
         , MTLooperInterface( manager )
 
-    {}
+    {
+        MTInstrumentProgram::tempoSource = [this]() { return manager ? (double)manager->getBPM() : 0.0; };
+    }
 
     MTAudioInterface::~MTAudioInterface()
     {
@@ -175,6 +177,8 @@ namespace mt
     {
         if( !manager )
             return;
+
+        MTInstrumentProgram::tempoSource = nullptr;
 
         // Nothing in the UI may be notified from here on. Detach again even if the app
         // already did: UI teardown (visibility changes) can re-register listeners.

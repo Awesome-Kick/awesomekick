@@ -28,10 +28,24 @@ namespace mt
         loadEngine( getEngineName() );
         if( !vTree.hasProperty( IDs::instrumentEngine ) )
             vTree.setProperty( IDs::instrumentEngine, loadedEngine, nullptr );
+
+        timerCallback();
+        startTimer( 250 );
+    }
+
+    void MTInstrumentProgram::timerCallback()
+    {
+        const auto bpm = tempoSource ? tempoSource() : 0.0;
+        if( bpm > 0.0 && bpm != sentTempo )
+        {
+            sentTempo = bpm;
+            object->setTempo( bpm );
+        }
     }
 
     MTInstrumentProgram::~MTInstrumentProgram()
     {
+        stopTimer();
         if( object )
         {
             // The object itself may be deleted later on the audio thread; release the
@@ -53,6 +67,10 @@ namespace mt
                 object->pitchBend( 2.f * ( m.getPitchWheelValue() - 8192 ) / 8192.f ); // +-2 semitones
             else if( m.isControllerOfType( 1 ) )
                 object->modWheel( m.getControllerValue() / 127.f );
+            else if( m.isAftertouch() )
+                object->aftertouch( m.getNoteNumber(), m.getAfterTouchValue() );
+            else if( m.isChannelPressure() )
+                object->channelPressure( m.getChannelPressureValue() );
             else if( muted && m.isNoteOff() )
                 object->noteOff( m.getNoteNumber() ); // the base class drops everything while muted
         }
@@ -238,6 +256,7 @@ namespace mt
         if( patchType.isValid() )
             newEngine->setPatch( getPatch() ); // before it goes live: nothing to interrupt
         object->setEngine( std::move( newEngine ) );
+        sentTempo = 0.0; // the next timer tick tells the new engine the tempo
         applyStoredParams();
     }
 

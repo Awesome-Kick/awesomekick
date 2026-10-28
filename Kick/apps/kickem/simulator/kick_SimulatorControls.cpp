@@ -380,7 +380,8 @@ namespace sim
         g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
         g.drawText( "PAD " + juce::String( index + 1 ), b.reduced( 8.0f ), juce::Justification::topLeft );
         if( down )
-            g.drawText( "vel " + juce::String( lastVelocity ), b.reduced( 8.0f ), juce::Justification::bottomRight );
+            g.drawText( "vel " + juce::String( lastVelocity ) + ( lastPressure ? "  prs " + juce::String( lastPressure ) : juce::String() ), b.reduced( 8.0f ),
+                        juce::Justification::bottomRight );
     }
 
     void SimPad::mouseDown( const juce::MouseEvent& e )
@@ -392,6 +393,23 @@ namespace sim
 
     void SimPad::mouseUp( const juce::MouseEvent& ) { hit( false ); }
 
+    void SimPad::mouseDrag( const juce::MouseEvent& e )
+    {
+        // Dragging up while held presses harder: a pad's height = full pressure.
+        const auto up = (float)-e.getDistanceFromDragStartY() / (float)juce::jmax( 1, getHeight() );
+        press( juce::jlimit( 0, 127, (int)std::round( up * 127.0f ) ) );
+    }
+
+    void SimPad::press( int pressure )
+    {
+        if( !down || pressure == lastPressure )
+            return;
+        lastPressure = pressure;
+        repaint();
+        // The panel's pad packet with the pressure byte set; neither a press nor a release.
+        hw::send( hw::padMessage( index, DCC::BTN_LONGPRESSED, lastVelocity, pressure ) );
+    }
+
     void SimPad::hit( bool isDown, int velocity )
     {
         if( down == isDown )
@@ -399,6 +417,7 @@ namespace sim
         down = isDown;
         if( isDown )
             lastVelocity = velocity;
+        lastPressure = 0;
         repaint();
         hw::send( hw::padMessage( index, isDown ? DCC::BTN_PRESSED : DCC::BTN_RELEASED, isDown ? velocity : 0 ) );
     }

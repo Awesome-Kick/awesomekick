@@ -26,6 +26,13 @@ namespace kick_ui
 
         juce::String formatValue( const mm::ParamSpec& P, double V )
         {
+            if( P.id == "vowel" ) // A, E, I, O, U, or between two of them
+            {
+                static const juce::StringArray vowels{ "A", "E", "I", "O", "U" };
+                const auto i = juce::jlimit( 0, 4, (int)V );
+                const auto t = V - i;
+                return t < 0.05 || i == 4 ? vowels[i] : t > 0.95 ? vowels[i + 1] : vowels[i] + "-" + vowels[i + 1];
+            }
             if( !P.choices.empty() )
                 return P.choices[(size_t)juce::jlimit( 0, (int)P.choices.size() - 1, juce::roundToInt( V - P.minValue ) )];
             // Note: juce::String( double, 0 ) means full precision, so whole numbers are rounded here.
@@ -49,7 +56,7 @@ namespace kick_ui
                 { "osc", "wave" },     { "noise", "color" },     { "filter", "cutoff" }, { "vca", "gain" },     { "adsr", "decay" },
                 { "lfo", "rate" },     { "random", "polarity" }, { "math", "gain" },     { "drive", "drive" },  { "delay", "time" },
                 { "crush", "bits" },   { "pan", "pan" },         { "fxdelay", "time" },  { "chorus", "rate" },  { "reverb", "size" },
-                { "fxdrive", "drive" },
+                { "fxdrive", "drive" },    { "formant", "vowel" },   { "ring", "tune" },
             };
             const auto it = key.find( Type );
             return it != key.end() ? it->second : juce::String();
@@ -172,7 +179,7 @@ namespace kick_ui
                     if( const auto* spec = mm::PatchEditor::specOf( m ) )
                     {
                         g.setOpacity( 0.8f );
-                        drawModule( g, m, *spec, cellBounds( 0, 0 ).reduced( 3.f ).withCentre( dragPos ), false );
+                        drawModule( g, m, *spec, cellBounds( 0, dragFx ? effectRow : 0 ).reduced( 3.f ).withCentre( dragPos ), false );
                         g.setOpacity( 1.f );
                     }
         }
@@ -186,9 +193,9 @@ namespace kick_ui
                 return;
             wasSelected = c == editor.selCol && r == editor.selRow;
             editor.selectCell( c, r );
-            if( r != effectRow )
-                if( auto m = editor.reader().moduleAt( c, r ); m.isValid() )
-                    dragId = m.getProperty( PatchIDs::id );
+            dragFx = r == effectRow;
+            if( auto m = dragFx ? editor.reader().effectAt( c ) : editor.reader().moduleAt( c, r ); m.isValid() )
+                dragId = m.getProperty( PatchIDs::id );
         }
 
         void mouseDrag( const juce::MouseEvent& e ) override
@@ -208,7 +215,10 @@ namespace kick_ui
             if( dragging )
             {
                 dragging = false;
-                if( inside && r != effectRow )
+                // Modules move within the grid, effects between the effect slots.
+                if( inside && dragFx && r == effectRow )
+                    editor.moveEffect( c );
+                else if( inside && !dragFx && r != effectRow )
                     editor.moveModule( c, r );
                 repaint();
             }
@@ -249,6 +259,26 @@ namespace kick_ui
                 g.setColour( juce::Colours::white.withAlpha( 0.75f ) );
                 g.setFont( juce::Font( 12.f ) );
                 g.drawFittedText( value, text.toNearestInt(), juce::Justification::centredTop, 1, 0.8f );
+            }
+
+            // Activity: a modulator's value (centred bar), or an audio module's level.
+            {
+                const auto value = editor.activityOf( id );
+                auto       bar   = Cell.reduced( 6.f, 0.f ).removeFromBottom( 4.f ).translated( 0.f, -3.f );
+                g.setColour( juce::Colours::black.withAlpha( 0.35f ) );
+                g.fillRect( bar );
+                g.setColour( colour.brighter( 0.8f ) );
+                if( Spec.role == mm::Role::Modulator )
+                {
+                    const auto v    = juce::jlimit( -1.f, 1.f, value );
+                    const auto half = bar.getWidth() * 0.5f;
+                    g.fillRect( v >= 0.f ? bar.withX( bar.getCentreX() ).withWidth( half * v ) : bar.withX( bar.getCentreX() + half * v ).withWidth( -half * v ) );
+                }
+                else if( value > 0.f )
+                {
+                    const auto db = juce::Decibels::gainToDecibels( value, -48.f );
+                    g.fillRect( bar.withWidth( bar.getWidth() * juce::jlimit( 0.f, 1.f, ( db + 48.f ) / 48.f ) ) );
+                }
             }
 
             // ~N = modulated knobs, a dot = cables in.
@@ -296,7 +326,7 @@ namespace kick_ui
 
         ModularEditor&     editor;
         int                dragId{ 0 };
-        bool               dragging{ false }, wasSelected{ false };
+        bool               dragging{ false }, wasSelected{ false }, dragFx{ false };
         juce::Point<float> dragPos;
     };
 
@@ -305,7 +335,7 @@ namespace kick_ui
         : grid( std::make_unique<Grid>( *this ) )
     {
         addAndMakeVisible( *grid );
-        mt::utils::addAndMakeVisible( this, back, title, macros, save, voices, moduleTitle, hint, paramsTab, modsTab, inputsTab, addButton, deleteButton, linkButton, removeButton,
+        mt::utils::addAndMakeVisible( this, back, title, macros, save, voices, arp, moduleTitle, hint, paramsTab, modsTab, inputsTab, addButton, deleteButton, linkButton, removeButton,
                                       prevPage, nextPage, pageLabel );
 
         for( auto* l : { &title, &moduleTitle, &pageLabel } )
@@ -334,8 +364,9 @@ namespace kick_ui
 
         back.onClick         = [this]() { if( onClose ) onClose(); };
         voices.onClick       = [this]() { pickVoices(); };
+        arp.onClick          = [this]() { pickArp(); };
         macros.onClick       = [this]() { pickMacro(); };
-        save.onClick         = [this]() { savePreset(); };
+        save.onClick         = [this]() { pickSaveOrDelete(); };
         paramsTab.onClick    = [this]() { showMode( Mode::Params ); };
         modsTab.onClick      = [this]() { showMode( Mode::Mods ); };
         inputsTab.onClick    = [this]() { showMode( Mode::Inputs ); };
@@ -456,6 +487,15 @@ namespace kick_ui
         }
     }
 
+    void ModularEditor::moveEffect( int Slot )
+    {
+        if( auto e = selectedModule(); e.isValid() && effectSelected() )
+        {
+            edit().moveEffect( e.getProperty( PatchIDs::id ), Slot );
+            selCol = juce::jlimit( 0, mm::effectSlots - 1, Slot );
+        }
+    }
+
     void ModularEditor::addModulation( const juce::String& Param, const juce::String& Source, float Depth )
     {
         auto m = selectedModule();
@@ -563,10 +603,108 @@ namespace kick_ui
     {
         if( !program )
             return;
-        juce::StringArray options;
+        // "Mono" and "Legato" first, then the poly voice counts.
+        juce::StringArray options{ "Mono", "Legato" };
         for( int v = 1; v <= mm::maxVoices; ++v )
-            options.add( juce::String( v ) );
-        pick( "VOICES", options, [this]( int Index ) { edit().setVoices( Index + 1 ); } );
+            options.add( "Poly " + juce::String( v ) );
+        pick( "VOICES", options, [this]( int Index ) {
+            if( Index < 2 )
+            {
+                edit().setPlayMode( Index == 0 ? mm::Mono : mm::Legato );
+                juce::MessageManager::callAsync( [this]() { pickGlide(); } );
+            }
+            else
+            {
+                auto ed = edit();
+                ed.setPlayMode( mm::Poly );
+                ed.setVoices( Index - 1 );
+            }
+        } );
+    }
+
+    void ModularEditor::pickGlide()
+    {
+        static const std::array<float, 7> times{ 0.f, 0.02f, 0.05f, 0.1f, 0.2f, 0.4f, 0.8f };
+        juce::StringArray                  options;
+        for( auto t : times )
+            options.add( t == 0.f ? juce::String( "No glide" ) : juce::String( juce::roundToInt( t * 1000.f ) ) + " ms" );
+        pick( "GLIDE", options, [this]( int Index ) { edit( "glide" ).setGlide( times[(size_t)Index] ); } );
+    }
+
+    void ModularEditor::pickArp()
+    {
+        if( !program )
+            return;
+        // Pattern, then (unless off) rate, octaves and gate, one list after another.
+        pick( "ARPEGGIATOR", mm::arpModeNames(), [this]( int Mode ) {
+            edit( "arp" ).setArp( Mode );
+            if( Mode == mm::ArpOff )
+                return;
+            juce::MessageManager::callAsync( [this]() {
+                pick( "ARP RATE", mm::arpRateNames(), [this]( int Rate ) {
+                    edit( "arp" ).setArp( -1, Rate );
+                    juce::MessageManager::callAsync( [this]() {
+                        pick( "ARP OCTAVES", { "1", "2", "3", "4" }, [this]( int Octaves ) {
+                            edit( "arp" ).setArp( -1, -1, Octaves + 1 );
+                            juce::MessageManager::callAsync( [this]() {
+                                static const std::array<float, 4> gates{ 0.25f, 0.5f, 0.75f, 1.f };
+                                pick( "ARP GATE", { "25%", "50%", "75%", "100% (legato)" }, [this]( int Gate ) { edit( "arp" ).setArp( -1, -1, -1, gates[(size_t)Gate] ); } );
+                            } );
+                        } );
+                    } );
+                } );
+            } );
+        } );
+    }
+
+    juce::String ModularEditor::arpText() const
+    {
+        const auto read = reader();
+        if( read.getArp() == mm::ArpOff )
+            return "ARP OFF";
+        return "ARP " + mm::arpModeNames()[read.getArp()].toUpperCase() + " " + mm::arpRateNames()[read.getArpRate()];
+    }
+
+    juce::String ModularEditor::voicesText() const
+    {
+        const auto read = reader();
+        if( read.getPlayMode() == mm::Poly )
+            return "POLY " + juce::String( read.getVoices() );
+        juce::String text = read.getPlayMode() == mm::Mono ? "MONO" : "LEGATO";
+        if( read.getGlide() > 0.f )
+            text << " " << juce::roundToInt( read.getGlide() * 1000.f ) << "MS";
+        return text;
+    }
+
+    void ModularEditor::pickSaveOrDelete()
+    {
+        if( !program )
+            return;
+        if( program->getPresetNames().size() <= program->getNumFactoryPresets() )
+        {
+            savePreset(); // nothing to delete yet
+            return;
+        }
+        pick( "PRESETS", { "Save as a preset", "Delete a user preset" }, [this]( int Index ) {
+            juce::MessageManager::callAsync( [this, Index]() {
+                if( Index == 0 )
+                    savePreset();
+                else
+                    deleteUserPreset();
+            } );
+        } );
+    }
+
+    void ModularEditor::deleteUserPreset()
+    {
+        juce::StringArray user;
+        const auto        names = program->getPresetNames();
+        for( int i = program->getNumFactoryPresets(); i < names.size(); ++i )
+            user.add( names[i] );
+        pick( "DELETE WHICH PRESET?", user, [this, user]( int Index ) {
+            if( program->deleteUserPreset( user[Index] ) )
+                mt::utils::showNotification( "Deleted preset \"" + user[Index] + "\"" );
+        } );
     }
 
     void ModularEditor::pickMacro()
@@ -623,7 +761,8 @@ namespace kick_ui
             return;
         const auto patch = view();
         title.setText( "MODULAR  " + patch.getProperty( PatchIDs::name ).toString(), juce::dontSendNotification );
-        voices.setButtonText( "VOICES " + juce::String( reader().getVoices() ) );
+        voices.setButtonText( voicesText() );
+        arp.setButtonText( arpText() );
         grid->repaint();
         refreshInspector();
     }
@@ -811,6 +950,41 @@ namespace kick_ui
     }
 
     //==============================================================================
+    void ModularEditor::visibilityChanged()
+    {
+        if( isVisible() )
+            startTimerHz( 30 );
+        else
+            stopTimer();
+    }
+
+    float ModularEditor::activityOf( int Id ) const
+    {
+        const auto it = activity.find( Id );
+        return it != activity.end() ? it->second : 0.f;
+    }
+
+    void ModularEditor::timerCallback()
+    {
+        if( !program || !isShowing() )
+            return;
+        bool changed = false;
+        for( const auto& m : view() )
+        {
+            const int  id    = m.getProperty( PatchIDs::id );
+            const auto value = program->getActivity( id );
+            auto&      shown = activity[id];
+            if( std::abs( value - shown ) > 0.01f )
+            {
+                shown   = value;
+                changed = true;
+            }
+        }
+        if( changed )
+            grid->repaint();
+    }
+
+    //==============================================================================
     void ModularEditor::paint( juce::Graphics& g )
     {
         g.setColour( ui::Theme::backgroundColour( 1 ) );
@@ -823,7 +997,8 @@ namespace kick_ui
 
         auto top = b.removeFromTop( 42 );
         back.setBounds( top.removeFromLeft( 110 ).reduced( 3 ) );
-        voices.setBounds( top.removeFromRight( 120 ).reduced( 3 ) );
+        voices.setBounds( top.removeFromRight( 150 ).reduced( 3 ) );
+        arp.setBounds( top.removeFromRight( 150 ).reduced( 3 ) );
         save.setBounds( top.removeFromRight( 90 ).reduced( 3 ) );
         macros.setBounds( top.removeFromRight( 110 ).reduced( 3 ) );
         title.setBounds( top.reduced( 12, 0 ) );

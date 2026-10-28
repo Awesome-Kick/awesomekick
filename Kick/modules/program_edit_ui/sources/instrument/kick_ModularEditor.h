@@ -8,7 +8,10 @@
  *  - right: the selected module or effect. PARAMS shows its knobs, MODS the
  *    modulations into it, IN the cables into it (depth/amount -1..1); four per
  *    page on Q-links P1..P4. The centre knob moves the selection.
- *  - top: SAVE (a user preset), MACROS (rename them), VOICES.
+ *  - top: SAVE (or delete a user preset), MACROS (rename them), ARP (pattern,
+ *    rate, octaves, gate), VOICES (poly count, mono, legato, glide).
+ *  - while notes play, each module shows its activity: modulators their value,
+ *    audio modules and effects their level.
  *
  * Every change is an undoable edit of the program's patch tree (PatchEditor);
  * the editor redraws from the tree, so undo, redo and preset loads show up too.
@@ -23,6 +26,7 @@ namespace kick_ui
         : public juce::Component
         , private juce::ValueTree::Listener
         , private juce::AsyncUpdater
+        , private juce::Timer
     {
     public:
         static constexpr int knobsPerPage = 4;
@@ -45,6 +49,7 @@ namespace kick_ui
         void addModule( const juce::String& Type ); // a module or an effect, in the selected cell
         void deleteModule();
         void moveModule( int Col, int Row ); // the selected module, then follows it
+        void moveEffect( int Slot );         // the selected effect, then follows it
         void addModulation( const juce::String& Param, const juce::String& Source, float Depth = 0.5f );
         void addCable( const juce::String& Source, float Amount = 0.5f );
 
@@ -82,11 +87,20 @@ namespace kick_ui
         void pickType();
         void pickLink(); // + MOD or + CABLE
         void pickVoices();
+        void pickGlide();
+        void pickArp();
+        juce::String arpText() const;
+        void pickSaveOrDelete();
+        void deleteUserPreset();
+        juce::String voicesText() const;
         void pickMacro();
         void askName( const juce::String& Title, const juce::String& Initial, std::function<void( const juce::String& )> OnName );
         void savePreset();
 
         void handleAsyncUpdate() override { refresh(); }
+        void timerCallback() override; // activity meters
+        void visibilityChanged() override;
+        float activityOf( int Id ) const;
         void valueTreePropertyChanged( juce::ValueTree&, const juce::Identifier& ) override { triggerAsyncUpdate(); }
         void valueTreeChildAdded( juce::ValueTree&, juce::ValueTree& ) override { triggerAsyncUpdate(); }
         void valueTreeChildRemoved( juce::ValueTree&, juce::ValueTree&, int ) override { triggerAsyncUpdate(); }
@@ -106,6 +120,8 @@ namespace kick_ui
         juce::String lastGesture;
         juce::uint32 lastEditMs{ 0 };
 
+        std::map<int, float> activity; // part id -> latest value, as drawn
+
         std::unique_ptr<Grid> grid;
 
         ui::KickButton back{ "modularBack", "< BACK" };
@@ -113,6 +129,7 @@ namespace kick_ui
         ui::KickButton macros{ "modularMacros", "MACROS" };
         ui::KickButton save{ "modularSave", "SAVE" };
         ui::KickButton voices{ "modularVoices", "VOICES" };
+        ui::KickButton arp{ "modularArp", "ARP" };
 
         ui::KickLabel  moduleTitle, hint;
         ui::KickButton paramsTab{ "modularParams", "PARAMS" }, modsTab{ "modularMods", "MODS" }, inputsTab{ "modularInputs", "IN" };

@@ -402,6 +402,8 @@ namespace mt
                 else
                     list.insert( -1, juce::MidiMessage::noteOff( effCh, effNo ) );
             }
+            else if( Msg.isAftertouch() ) // the same note number as its note-on
+                list.insert( -1, juce::MidiMessage::aftertouchChange( getMidiOutChannel(), getEffectiveNoteNo( Msg.getNoteNumber() ), Msg.getAfterTouchValue() ) );
             else
                 list.insert( -1, Msg );
 

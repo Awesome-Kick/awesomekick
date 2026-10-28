@@ -9,6 +9,9 @@
  * always stops exactly that note: even if the bank, layout or selected track
  * changed in between, or the press and release are handled by different screens.
  *
+ * Pad messages for a held pad that are neither a press nor a release carry its
+ * pressure: they become poly aftertouch on that note.
+ *
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 #pragma once
@@ -28,7 +31,17 @@ namespace kick_ui
                 return press( pad, contracts::DclContractsHelper::getPadVelocity( Msg ) );
             if( state == contracts::DeviceControlContracts::BTN_RELEASED )
                 return release( pad );
-            return -1;
+            pressure( pad, contracts::DclContractsHelper::getPadAftertouch( Msg ) );
+            return -1; // not a new note
+        }
+
+        static void pressure( int Pad, int Value )
+        {
+            auto& held = heldNotes();
+            if( !juce::isPositiveAndBelow( Pad, (int)held.size() ) || held[(size_t)Pad].note < 0 )
+                return;
+            const auto& h = held[(size_t)Pad];
+            mt::getAudioInterface().addLiveMidiMsg( h.target, juce::MidiMessage::aftertouchChange( 1, h.note, juce::jlimit( 0, 127, Value ) ) );
         }
 
         static int press( int Pad, int Velocity )

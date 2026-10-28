@@ -558,6 +558,90 @@ namespace sim
                 log( "after SAVE: patch " + i->getPatchName() + ", presets: " + i->getPresetNames().joinIntoString( ", " ) + " | macro 1 = " + i->getParamName( 0 ) );
         } );
 
+        // Round 4: legato with glide, pressure, live activity, moving an effect, deleting a preset.
+        tapButton( "POLY 8" );
+        wait( 3 );
+        tapButton( "Legato" );
+        wait( 4 );
+        tapButton( "100 ms" );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+            {
+                const mt::modular::PatchEditor read( i->getPatch(), nullptr );
+                log( "play mode " + juce::String( read.getPlayMode() ) + ", glide " + juce::String( read.getGlide(), 3 ) + " s" );
+            }
+        } );
+        s.push_back( [editor] {
+            if( auto* e = editor() )
+            {
+                e->selectCell( 0, kick_ui::ModularEditor::effectRow );
+                e->moveEffect( 2 );
+            }
+        } );
+        wait( 2 );
+        describe( "after moving the reverb to FX 3" );
+        s.push_back( [this] { pads.getPad( 0 ).hit( true, 110 ); } );
+        wait( 2 );
+        s.push_back( [this] { pads.getPad( 0 ).press( 100 ); } );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+            {
+                juce::StringArray parts;
+                for( const auto& m : i->getPatch() )
+                    parts.add( m.getProperty( "type" ).toString() + "=" + juce::String( i->getActivity( m.getProperty( "id" ) ), 2 ) );
+                log( "activity while held: " + parts.joinIntoString( " " ) );
+            }
+        } );
+        shot( "modular_editor_activity" );
+        s.push_back( [this] { pads.getPad( 0 ).hit( false ); } );
+        wait( 2 );
+
+        tapButton( "SAVE" );
+        wait( 3 );
+        tapButton( "Delete a user preset" );
+        wait( 4 );
+        tapButton( "Init 2" );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+                log( "after delete: presets " + i->getPresetNames().joinIntoString( ", " ) );
+        } );
+
+        // Wave 5: a Formant module from the list, and the arpeggiator set up through ARP.
+        s.push_back( [editor] { if( auto* e = editor() ) e->selectCell( 3, 0 ); } );
+        tapButton( "+ MODULE" );
+        wait( 3 );
+        tapButton( "Formant" );
+        wait( 3 );
+        tapButton( "ARP OFF" );
+        wait( 3 );
+        tapButton( "Up" );
+        wait( 4 );
+        tapButton( "1/16" );
+        wait( 4 );
+        tapButton( "2" );
+        wait( 4 );
+        tapButton( "50%" );
+        wait( 3 );
+        s.push_back( [log, instrument] {
+            if( auto* i = instrument() )
+            {
+                const mt::modular::PatchEditor read( i->getPatch(), nullptr );
+                log( "arp mode " + juce::String( read.getArp() ) + ", rate " + juce::String( read.getArpRate() ) + ", octaves " + juce::String( read.getArpOctaves() ) + ", gate " +
+                     juce::String( read.getArpGate(), 2 ) + " | modules: " + juce::String( i->getPatch().getNumChildren() ) );
+            }
+        } );
+        for( int p : { 0, 2, 4 } ) // a chord: three pads together
+            s.push_back( [this, p] { pads.getPad( p ).hit( true, 100 ); } );
+        wait( 3 );
+        shot( "modular_editor_arp" );
+        wait( 2 );
+        for( int p : { 0, 2, 4 } )
+            s.push_back( [this, p] { pads.getPad( p ).hit( false ); } );
+        wait( 2 );
+
         tapButton( "< BACK" );
         wait( 3 );
         s.push_back( [log, instrument] {
