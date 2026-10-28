@@ -186,6 +186,23 @@ namespace ui
         project.findChildFiles(sourceFiles, juce::File::findFiles, false, "*.kickPrj");
         if(sourceFiles.isEmpty() || projDir.createDirectory().failed()) return;
         const auto destination = projDir.getChildFile(text + mt::__projectFileSuffix);
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // Kit templates bring their samples: copy the whole folder, rename the project file and fill in
+        // the new folder for "@PROJECT_DIR@" (see ui::userCopyOfDemo).
+        if( project.getChildFile( "Samples" ).isDirectory() )
+        {
+            auto path = projDir.getFullPathName().replace( "&", "&amp;" ).replace( "\"", "&quot;" ).replace( "<", "&lt;" ).replace( ">", "&gt;" );
+            if( !project.getChildFile( "Samples" ).copyDirectoryTo( projDir.getChildFile( "Samples" ) )
+                || !destination.replaceWithText( sourceFiles[0].loadFileAsString().replace( "@PROJECT_DIR@", path ) ) )
+            {
+                projDir.deleteRecursively();
+                return;
+            }
+            auto destinationFile = projDir;
+            loadProject( destinationFile );
+            return;
+        }
+#endif
         if(!sourceFiles[0].copyFileTo(destination))
         {
             projDir.deleteFile(); // Only the just-created empty directory can be removed.
@@ -320,6 +337,10 @@ namespace ui
     {
         juce::File templatePath = getAppDirs( MTTemp );
         templatePath.findChildFiles( templateDirList, juce::File::findDirectories, false );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // The public firmware's templates are empty: show the kit templates (pads assigned, no notes).
+        templateDirList.removeIf( []( const juce::File& d ) { return !demoHasContent( d ); } );
+#endif
         // Sort the list numerically based on the number in the file name
         std::sort( templateDirList.begin(), templateDirList.end(),
                    []( const juce::File& a, const juce::File& b ) {
