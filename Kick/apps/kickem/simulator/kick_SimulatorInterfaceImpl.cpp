@@ -30,7 +30,7 @@ namespace sim
         static const juce::String logPath = juce::SystemStats::getEnvironmentVariable( "KICKEM_LOG", {} );
         static juce::CriticalSection lock;
 
-        const juce::String text = "[Kickray] " + line;
+        const juce::String text = "[AwesomeKick] " + line;
         juce::Logger::outputDebugString( text );
 
         if( logPath.isNotEmpty() )

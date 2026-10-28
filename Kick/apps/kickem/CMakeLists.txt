@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-## Kickray - software simulator of the KICK front panel with the real Kick UI embedded.
+## AwesomeKick - software simulator of the KICK front panel with the real Kick UI embedded.
 ## Enabled with -DKICK_SIMULATOR=ON (see apps/CMakeLists.txt).
 
 ## Share the version of the main application...
@@ -36,11 +36,11 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 juce_add_gui_app(${TargetName}
         PRODUCT_NAME ${TargetName}
         COMPANY_NAME ${TargetCompany}
-        BUNDLE_ID org.awesomekick.kickray
-        ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/kickray-icon.png
+        BUNDLE_ID org.awesomekick.app
+        ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/awesomekick-icon.png
         # macOS ends an app that opens an audio input without this text (the sampler records)
         MICROPHONE_PERMISSION_ENABLED TRUE
-        MICROPHONE_PERMISSION_TEXT "Kickray records from your audio input when you sample."
+        MICROPHONE_PERMISSION_TEXT "AwesomeKick records from your audio input when you sample."
 )
 
 set_target_properties(${TargetName} PROPERTIES
@@ -81,7 +81,7 @@ target_sources(${TargetName}
 target_compile_definitions(${TargetName}
     PRIVATE
         SIM_BUILD=1
-        JUCE_JACK_CLIENT_NAME="Kickray"
+        JUCE_JACK_CLIENT_NAME="AwesomeKick"
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_PROJECT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_VERSION>"
         JUCE_ALSA=1

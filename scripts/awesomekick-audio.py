@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Kickray audio relay – stream the simulator's sound to the browser (headless mode).
+AwesomeKick audio relay – stream the simulator's sound to the browser (headless mode).
 
     simulator --JACK--> ffmpeg (raw PCM) --> this relay --WebSocket--> browser (index.html)
 
 The simulator plays into a JACK server without hardware (jackd -d dummy). This script
   * runs ffmpeg as a JACK client that captures 2 channels as 48 kHz s16le PCM,
-  * keeps the simulator's outputs (Kickray:out_1/2) connected to ffmpeg's inputs,
+  * keeps the simulator's outputs (AwesomeKick:out_1/2) connected to ffmpeg's inputs,
     also after the simulator was restarted,
   * serves the PCM as binary WebSocket messages on --port to every connected browser.
 
@@ -33,7 +33,7 @@ RATE = 48000
 CHANNELS = 2
 CHUNK = RATE // 50 * CHANNELS * 2          # 20 ms of s16le stereo
 MAX_QUEUED = 10                            # per client: at most 200 ms waiting to be sent
-CAPTURE_CLIENT = "kickray_stream"
+CAPTURE_CLIENT = "awesomekick_stream"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
 class Client:
@@ -48,7 +48,7 @@ clients_lock = threading.Lock()
 
 
 def log(*args):
-    print("[Kickray audio]", *args, file=sys.stderr, flush=True)
+    print("[AwesomeKick audio]", *args, file=sys.stderr, flush=True)
 
 
 # --- capture ---------------------------------------------------------------------
@@ -159,7 +159,7 @@ def main():
     os.environ["JACK_NO_START_SERVER"] = "1"
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6081, help="WebSocket port (default 6081)")
-    ap.add_argument("--source", default="Kickray", help="JACK client name of the simulator (default Kickray)")
+    ap.add_argument("--source", default="AwesomeKick", help="JACK client name of the simulator (default AwesomeKick)")
     args = ap.parse_args()
 
     def stop(*_):

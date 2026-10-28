@@ -115,7 +115,7 @@ namespace sim
     // The playable demo projects in <data>/content (Kick/content in the source tree) carry "@PROJECT_DIR@"
     // instead of their own folder in the sample paths, because the engine stores absolute paths. Copy each one
     // the user has not received yet into the projects folder and fill in the real path. On the very first start,
-    // open "Kickray Groove" so that PLAY sounds right away. Deleted demos are not installed again
+    // open "AwesomeKick Groove" so that PLAY sounds right away. Deleted demos are not installed again
     // (prefs/installed-content.txt remembers them).
     void SimulatorBoard::installBundledContent()
     {
@@ -150,7 +150,7 @@ namespace sim
                 SimulatorInterfaceImpl::log( "content: installed " + dest.getFullPathName() );
             }
             installed.add( name );
-            if( firstStart && name == "Kickray Groove" )
+            if( firstStart && name == "AwesomeKick Groove" )
                 openFirst = dest;
         }
         marker.replaceWithText( installed.joinIntoString( "\n" ) );
@@ -1274,7 +1274,7 @@ namespace sim
         startTimer( 400 );
     }
 
-    // Writes the electronic "Kickray Groove" kit: 8 drum sounds synthesized here (no third-party samples).
+    // Writes the electronic "AwesomeKick Groove" kit: 8 drum sounds synthesized here (no third-party samples).
     static bool writeSynthKit( const juce::File& dir )
     {
         static const char* sounds[] = { "Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "High Tom", "Rim" };
@@ -1343,7 +1343,7 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
     {
         // KICKEM_SELFTEST=makedemo builds the playable demo projects that ship in Kick/content (the factory demos
         // have no sequences or samples, so PLAY does nothing there):
-        //   "Kickray Groove" - electronic kit synthesized here, 2-bar groove on pads 1-8
+        //   "AwesomeKick Groove" - electronic kit synthesized here, 2-bar groove on pads 1-8
         //   "Rusty Kit"      - 16 acoustic one-shots from KICKEM_MAKEDEMO_KIT (made by scripts/build-cc0-kit.py, CC0)
         // Projects go to KICKEM_MAKEDEMO_OUT (default: the projects folder), their samples into <project>/Samples.
         // Existing projects are left alone. Then the app quits.
@@ -1363,7 +1363,7 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
             std::function<bool( const juce::File& )>        writeSamples;
         };
         std::vector<Demo> demos;
-        demos.push_back( { "Kickray Groove", "Community Kit", 104,
+        demos.push_back( { "AwesomeKick Groove", "Community Kit", 104,
                            { { 0, "X.....x.X.x.....X......xX.....x." },   // Kick
                              { 1, "....X.......X.......X.......X..o" },   // Snare
                              { 2, "............................x.x." },   // Clap

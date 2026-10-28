@@ -1,5 +1,5 @@
 /*
- * Kickray - KICK front-panel simulator.
+ * AwesomeKick - KICK front-panel simulator.
  *
  * Same application wiring as apps/kick/Main.cpp (monolith adapters for device control, audio engine and
  * audio interface), but the window shows a simulated hardware panel with the real Kick UI embedded.
@@ -53,7 +53,7 @@ public:
         }
 
         juce::SystemStats::setApplicationCrashHandler( []( void* ) {
-            juce::Logger::outputDebugString( "[Kickray] CRASH\n" + juce::SystemStats::getStackBacktrace() );
+            juce::Logger::outputDebugString( "[AwesomeKick] CRASH\n" + juce::SystemStats::getStackBacktrace() );
         } );
 
         audioInterface.reset( new KickAudioInterface() );

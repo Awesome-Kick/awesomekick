@@ -1,4 +1,4 @@
-# Native Kickray simulator builds for macOS (universal: Apple Silicon + Intel) and Windows (x64).
+# Native AwesomeKick simulator builds for macOS (universal: Apple Silicon + Intel) and Windows (x64).
 # Every push that touches the code builds both and keeps the zips as workflow artifacts;
 # a tag v* additionally publishes them as a GitHub release.
 name: Desktop builds
@@ -40,7 +40,7 @@ jobs:
       - name: Smoke test (starts, quits on its own)
         continue-on-error: true   # a CI Mac may have no audio device / asks for the microphone
         run: |
-          cd dist/Kickray.app/Contents/MacOS
+          cd dist/AwesomeKick.app/Contents/MacOS
           KICKEM_SELFTEST=makedemo ./KT_KickEM > ../../../makedemo.log 2>&1 &
           pid=$!
           for i in $(seq 1 90); do kill -0 $pid 2>/dev/null || break; sleep 1; done
@@ -49,8 +49,8 @@ jobs:
           grep -q "saved: yes" ../../../makedemo.log
       - uses: actions/upload-artifact@v4
         with:
-          name: Kickray-macOS
-          path: dist/Kickray-macOS.zip
+          name: AwesomeKick-macOS
+          path: dist/AwesomeKick-macOS.zip
 
   windows:
     runs-on: windows-2022
@@ -70,8 +70,8 @@ jobs:
         run: ./scripts/package-windows.ps1
       - uses: actions/upload-artifact@v4
         with:
-          name: Kickray-Windows
-          path: dist/Kickray-Windows.zip
+          name: AwesomeKick-Windows
+          path: dist/AwesomeKick-Windows.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -87,4 +87,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release create "${GITHUB_REF_NAME}" dist/*.zip --repo "${GITHUB_REPOSITORY}"
-          --title "Kickray ${GITHUB_REF_NAME}" --notes "Kickray simulator for macOS (Apple Silicon + Intel) and Windows x64. See README for first-start notes."
+          --title "AwesomeKick ${GITHUB_REF_NAME}" --notes "AwesomeKick simulator for macOS (Apple Silicon + Intel) and Windows x64. See README for first-start notes."

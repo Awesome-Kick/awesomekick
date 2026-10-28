@@ -1,4 +1,4 @@
-# Package the Windows simulator build as dist/Kickray-Windows.zip.
+# Package the Windows simulator build as dist/AwesomeKick-Windows.zip.
 #
 #   pwsh scripts/package-windows.ps1 [-BuildDir Kick/build/sim]
 #
@@ -13,12 +13,12 @@ $Dist = Join-Path $Repo "dist"
 $Exe = Get-ChildItem -Path $BuildDir -Recurse -Filter "KT_KickEM.exe" | Select-Object -First 1
 if( -not $Exe ) { throw "KT_KickEM.exe not found below $BuildDir" }
 
-$Out = Join-Path $Dist "Kickray"
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Out, (Join-Path $Dist "Kickray-Windows.zip")
+$Out = Join-Path $Dist "AwesomeKick"
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Out, (Join-Path $Dist "AwesomeKick-Windows.zip")
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 Copy-Item $Exe.FullName (Join-Path $Out "KT_KickEM.exe")
 foreach( $d in "assets", "demos", "templates", "content" ) {
     Copy-Item -Recurse (Join-Path $Repo "Kick/$d") (Join-Path $Out $d)
 }
-Compress-Archive -Path $Out -DestinationPath (Join-Path $Dist "Kickray-Windows.zip")
-Write-Host "Packaged: $(Join-Path $Dist 'Kickray-Windows.zip')"
+Compress-Archive -Path $Out -DestinationPath (Join-Path $Dist "AwesomeKick-Windows.zip")
+Write-Host "Packaged: $(Join-Path $Dist 'AwesomeKick-Windows.zip')"

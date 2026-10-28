@@ -30,7 +30,7 @@ namespace mt
     static int hwShell( const char* cmd )
     {
 #if defined( SIM_BUILD ) && SIM_BUILD
-        std::fprintf( stderr, "[Kickray sandbox] blocked system(): %s\n", cmd );
+        std::fprintf( stderr, "[AwesomeKick sandbox] blocked system(): %s\n", cmd );
         return -1;
 #else
         return system( cmd );

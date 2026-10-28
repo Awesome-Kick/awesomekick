@@ -56,12 +56,12 @@ namespace mt
 
 #if defined( SIM_BUILD ) && SIM_BUILD
         // KICKEM_AUDIO_TYPE=<JUCE device type, e.g. JACK>: on a headless server the simulator plays into a
-        // JACK server without hardware, from where scripts/kickray-audio.py streams it to the browser.
+        // JACK server without hardware, from where scripts/awesomekick-audio.py streams it to the browser.
         if( const auto type = juce::SystemStats::getEnvironmentVariable( "KICKEM_AUDIO_TYPE", {} ); type.isNotEmpty() )
         {
             deviceManager->setCurrentAudioDeviceType( type, true );
             auto* device = deviceManager->getCurrentAudioDevice();
-            std::fprintf( stderr, "[Kickray audio] %s: %s\n", type.toRawUTF8(),
+            std::fprintf( stderr, "[AwesomeKick audio] %s: %s\n", type.toRawUTF8(),
                           device ? ( device->getName() + ", " + juce::String( device->getCurrentSampleRate() ) + " Hz, "
                                      + juce::String( device->getCurrentBufferSizeSamples() ) + " samples" ).toRawUTF8()
                                  : "no device (is the server running?)" );

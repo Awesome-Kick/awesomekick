@@ -51,7 +51,7 @@ namespace sim
         /// through its controls and the Q-links, undo, and snapshot each step.
         void startModularTest();
         /// KICKEM_SELFTEST=makedemo: build the playable demo projects (see kick_Simulator.cpp)
-        /// "Kickray Groove" + "Rusty Kit" (sequence, drum program, 2-bar pattern), save them and quit.
+        /// "AwesomeKick Groove" + "Rusty Kit" (sequence, drum program, 2-bar pattern), save them and quit.
         void startMakeDemo();
         /// Copies the bundled demo projects (<data>/content) into the projects folder, see kick_Simulator.cpp.
         void installBundledContent();

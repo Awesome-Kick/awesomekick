@@ -1,7 +1,7 @@
 # AwesomeKick – KICK simulator for macOS, Windows and Linux
 
 **AwesomeKick** is a community project around the open-sourced KICK groovebox firmware.
-It runs the real KICK firmware as a simulator – **Kickray** – with the front panel laid out like the
+It runs the real KICK firmware as a simulator with the front panel laid out like the
 hardware: as a native app on **macOS** and **Windows** (download and play, sound straight from your
 computer), and on **Ubuntu / Debian** on a desktop or a **headless server**, played from any browser in your network.
 
@@ -19,20 +19,20 @@ Get the latest build from [Releases](https://github.com/Awesome-Kick/awesomekick
 
 | System | File | Start |
 |---|---|---|
-| macOS 12+ (Apple Silicon and Intel) | `Kickray-macOS.zip` | unzip, move **Kickray** to *Applications*, open it |
-| Windows 10/11 (x64) | `Kickray-Windows.zip` | unzip to a folder you can write to (e.g. *Documents*), run `KT_KickEM.exe` |
+| macOS 12+ (Apple Silicon and Intel) | `AwesomeKick-macOS.zip` | unzip, move **AwesomeKick** to *Applications*, open it |
+| Windows 10/11 (x64) | `AwesomeKick-Windows.zip` | unzip to a folder you can write to (e.g. *Documents*), run `KT_KickEM.exe` |
 
-On the first start Kickray installs two playable demo projects and opens **Kickray Groove** – press
+On the first start AwesomeKick installs two playable demo projects and opens **AwesomeKick Groove** – press
 **PLAY**. **Rusty Kit** (an acoustic kit) is in the file browser under *Internal*. Both use free CC0
 samples, see [`Kick/content`](Kick/content/README.md).
 
 The apps are not signed yet, so the system warns once:
-- **macOS:** "Kickray cannot be opened because the developer cannot be verified" → *System Settings →
-  Privacy & Security* → **Open Anyway** (or in Terminal: `xattr -dr com.apple.quarantine /Applications/Kickray.app`).
+- **macOS:** "AwesomeKick cannot be opened because the developer cannot be verified" → *System Settings →
+  Privacy & Security* → **Open Anyway** (or in Terminal: `xattr -dr com.apple.quarantine /Applications/AwesomeKick.app`).
   macOS asks for the microphone: allow it if you want to sample, sound output works either way.
 - **Windows:** SmartScreen "Windows protected your PC" → **More info** → **Run anyway**.
 
-For the lowest latency choose your audio interface and a small buffer in Kickray's audio settings
+For the lowest latency choose your audio interface and a small buffer in AwesomeKick's audio settings
 (macOS: 64–128 samples; Windows: *Windows Audio (Exclusive Mode)*).
 
 ## Quick start (Linux)
@@ -155,19 +155,19 @@ the panel. The look is our own – no manufacturer logo or branding; the bezel s
 | `KICKEM_DATA_DIR=<dir>` | where `assets/`, `demos/`, `templates/` are |
 | `KICKEM_SANDBOX_QUIET=1` | don't log blocked system commands |
 | `KICKEM_SELFTEST=1` | drive every panel control once (more: `tour`, `record`, `modular`, …) |
-| `KICKEM_SELFTEST=makedemo` | create the playable demo project "Kickray Groove" and quit |
+| `KICKEM_SELFTEST=makedemo` | create the playable demo project "AwesomeKick Groove" and quit |
 
 ## Known limitations
 - The factory samples were removed from the public release, so the bundled demos and templates
-  are empty (no sequence – PLAY does nothing there). For a playable demo, create **Kickray Groove**
+  are empty (no sequence – PLAY does nothing there). For a playable demo, create **AwesomeKick Groove**
   (own synthesized drum kit, 2-bar groove) once:
 
   ```bash
   cd Kick/build/sim/apps/kickem/KT_KickEM_artefacts/Release && KICKEM_SELFTEST=makedemo ./KT_KickEM
   ```
 
-  It quits by itself. Open it via the folder icon on the screen → Internal → `Kickray Groove` →
-  double-click `Kickray Groove.kickPrj`, then press PLAY.
+  It quits by itself. Open it via the folder icon on the screen → Internal → `AwesomeKick Groove` →
+  double-click `AwesomeKick Groove.kickPrj`, then press PLAY.
 - LINK LEDs and the camera on the panel are decoration only.
 - Only x86_64 Ubuntu has been tested so far.
 
