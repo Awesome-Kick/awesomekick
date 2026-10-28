@@ -12,18 +12,23 @@
 <title>AwesomeKick</title>
 <style>
   html, body { margin: 0; height: 100%; background: #111; overflow: hidden; font-family: system-ui, sans-serif; }
-  iframe { border: 0; width: 100%; height: 100%; display: block; }
-  #sound { position: fixed; right: 16px; bottom: 16px; z-index: 10; display: flex; align-items: center; gap: 10px;
-           background: rgba(20, 20, 20, 0.85); color: #eee; border: 1px solid #444; border-radius: 10px; padding: 8px 12px; }
-  #sound button { font: inherit; font-size: 15px; cursor: pointer; color: #111; background: #ffd23f;
-                  border: 0; border-radius: 7px; padding: 6px 12px; }
+  body { display: flex; flex-direction: column; }
+  /* Slim bar above the panel, so nothing covers the simulator's keys */
+  #bar { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 12px;
+         background: #1a1a1c; border-bottom: 1px solid #333; color: #ccc; font-size: 14px; }
+  #bar .name { font-weight: 600; color: #ddd; margin-right: auto; }
+  iframe { border: 0; width: 100%; flex: 1 1 auto; display: block; }
+  #sound { display: flex; align-items: center; gap: 10px; }
+  #sound button { font: inherit; font-size: 14px; cursor: pointer; color: #111; background: #ffd23f;
+                  border: 0; border-radius: 6px; padding: 4px 10px; }
   #sound.on button { background: #333; color: #eee; }
   #status { font-size: 12px; color: #aaa; min-width: 9em; }
 </style>
 </head>
 <body>
+<div id="bar"><span class="name">AwesomeKick</span>
+  <div id="sound"><span id="status">sound off</span><button id="toggle">🔊 Sound on</button></div></div>
 <iframe id="vnc" src="vnc.html?autoconnect=1&amp;resize=scale" allow="autoplay"></iframe>
-<div id="sound"><button id="toggle">🔊 Sound on</button><span id="status">sound off</span></div>
 <script>
 (() => {
   const AUDIO_PORT = 6081;

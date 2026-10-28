@@ -144,8 +144,11 @@ namespace mt
         if( !loopStart.isUsingDefault() && bars <= loopStart.get() )
             loopStart = ( bars - 1 );
 
-        // Update loopEnd accordingly...
+        // Update loopEnd accordingly... A loop over the whole sequence grows with it,
+        // otherwise a longer sequence would still only loop its old bars.
         if( bars < loopEnd.get() )
+            loopEnd = bars;
+        else if( loopEnd.get() == prevLength )
             loopEnd = bars;
         else if( ( loopEnd.get() == bars - 1 ) && ( loopEnd.get() + 2 != prevLength ) )
             loopEnd = bars;

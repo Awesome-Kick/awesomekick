@@ -33,7 +33,7 @@ namespace BPM
 namespace BAR
 {
     static constexpr int MIN{ 1 };
-    static constexpr int MAX{ 100 };
+    static constexpr int MAX{ 999 }; // sequences up to 999 bars (was 100)
     static constexpr int LOOP_RECORDER_MAX{ 16 };
     static constexpr int STEP{ 1 };
     static constexpr int DEFAULT{ 4 };

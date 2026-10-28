@@ -68,7 +68,7 @@ a virtual display and is shared to your browser. At the end the script prints th
 AwesomeKick simulator is running.
   Open in a browser: http://<server-ip>:6080/
   Password:          none (use --password to set one)
-  Sound:             click "Sound on" at the bottom right of the page
+  Sound:             click "Sound on" at the top right of the page
 ```
 
 The simulator still runs on the server. The page shows its picture, sends your clicks and plays its

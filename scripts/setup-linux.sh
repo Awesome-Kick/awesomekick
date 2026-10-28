@@ -82,7 +82,7 @@ PKGS=( build-essential cmake ninja-build git pkg-config
        libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev
        libxrandr-dev libxrender-dev libxi-dev libglu1-mesa-dev mesa-common-dev
        libserial-dev fonts-dejavu-core )
-[ "$MODE" = headless ] && PKGS+=( xvfb x11vnc novnc python3-websockify x11-utils openssl jackd2 ffmpeg )
+[ "$MODE" = headless ] && PKGS+=( xvfb x11vnc novnc python3-websockify x11-utils x11-xserver-utils openssl jackd2 ffmpeg )
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PKGS[@]}"
 ok "Packages installed"
@@ -145,6 +145,8 @@ fi
 setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1600x1600x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.25; done
 xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual display :$DISPLAY_NUM did not start – see \$LOG/xvfb.log"; exit 1; }
+# A normal arrow pointer (Xvfb's default is an "X" cross, which the simulator window inherits)
+xsetroot -display :$DISPLAY_NUM -cursor_name left_ptr 2>/dev/null
 # Sound: a JACK server without hardware (dummy driver, no root or audio group needed). The simulator
 # plays into it, awesomekick-audio.py captures it and streams it to the browser page.
 setsid nohup jackd --no-realtime -t 2000 -d dummy -r 48000 -p 512 >"\$LOG/jackd.log" 2>&1 < /dev/null &
@@ -166,7 +168,7 @@ echo
 echo "AwesomeKick simulator is running."
 echo "  Open in a browser: http://\$IP:$WEB_PORT/"
 echo "  Password:          $PASSWORD_INFO"
-echo "  Sound:             click \"Sound on\" at the bottom right of the page"
+echo "  Sound:             click \"Sound on\" at the top right of the page"
 echo "  Stop:              $DEV_DIR/kickem-stop.sh"
 echo "  Logs:              \$LOG/"
 echo "  Blocked commands:  grep sandbox \$LOG/kickem.log"

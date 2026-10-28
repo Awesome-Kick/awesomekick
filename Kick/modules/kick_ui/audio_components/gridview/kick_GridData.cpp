@@ -12,6 +12,10 @@ namespace kick_ui
         mt::utils::setTitleFontHeight( 16, snapMode, hittingPadsMode, autoScroll, autoAdvance );
         mt::utils::setTitleProportion( .4f, snapMode, hittingPadsMode, autoScroll, autoAdvance );
         mt::utils::makeHidden( autoAdvance );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // Simulator: let the grid follow the playhead by default (gear icon -> AUTO SCROLL to change it).
+        autoScroll.setSelected( AutoScrollMode::Follow, juce::dontSendNotification );
+#endif
 
         snapMode.onSelectionChanged = [&]( int Index, const juce::String& Value ) {
             if( onSnapModeChanged )
