@@ -4,6 +4,25 @@
 
 namespace mt
 {
+#if defined( SIM_BUILD ) && SIM_BUILD
+    // The KICK's MASTER pot is analog. The simulator's MASTER knob sets this gain on the output instead.
+    std::atomic<float> kickSimOutputGain { 1.0f };
+
+    // Ramps from the last block's gain to the current one, so turning the knob doesn't click.
+    static void applySimOutputGain( float* const* Outputs, int NumOutputs, int NumSamples )
+    {
+        static float last = 1.0f;
+        const float  next = kickSimOutputGain.load( std::memory_order_relaxed );
+        if( last == 1.0f && next == 1.0f )
+            return;
+        for( int ch = 0; ch < NumOutputs; ++ch )
+            if( auto* out = Outputs[ch] )
+                for( int i = 0; i < NumSamples; ++i )
+                    out[i] *= last + ( next - last ) * (float)i / (float)NumSamples;
+        last = next;
+    }
+#endif
+
     AudioDevice::AudioDevice( uint32_t NumInputs, uint32_t NumOutputs, const juce::String& DeviceStateXml )
         : AudIO::IAudioDevice( NumInputs, NumOutputs )
         , shutdownGuard( new ShutdownGuard( *this ) )
@@ -148,6 +167,9 @@ namespace mt
                         juce::FloatVectorOperations::clear( Outputs[ch], NumSamples );
                 }
             outFifo.clear(); // already played: don't replay it if the FIFO path takes over
+#if defined( SIM_BUILD ) && SIM_BUILD
+            applySimOutputGain( Outputs, NumOutputs, NumSamples );
+#endif
             return;
         }
 
@@ -183,5 +205,8 @@ namespace mt
                 fifoPos = 0;
             }
         }
+#if defined( SIM_BUILD ) && SIM_BUILD
+        applySimOutputGain( Outputs, NumOutputs, NumSamples );
+#endif
     }
 } // namespace mt

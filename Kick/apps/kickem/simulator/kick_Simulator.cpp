@@ -4,6 +4,11 @@
 #include "kick_Simulator.h"
 #include "kick_SimulatorInterfaceImpl.h"
 
+namespace mt
+{
+    extern std::atomic<float> kickSimOutputGain; // AudIO_juce/source/mt_audio_device.cpp
+}
+
 namespace sim
 {
     namespace
@@ -53,6 +58,12 @@ namespace sim
         }
         for( auto* b : { &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
             addAndMakeVisible( b );
+
+        // MASTER and REC are analog pots on the KICK, outside the firmware. Here MASTER sets the output
+        // level and REC the sampling input gain. Their start position (3/4) is unity gain; full left is silent.
+        auto potGain = []( double v ) { return (float)std::pow( v / 0.75, 2.0 ); };
+        masterKnob.onValue = [potGain]( double v ) { mt::kickSimOutputGain = potGain( v ); };
+        recKnob.onValue    = [potGain]( double v ) { mt::getAudioInterface().setRecorderGain( potGain( v ) ); };
 
         // Hardware look
         for( auto* k : { &masterKnob, &recKnob } )
@@ -970,16 +981,22 @@ namespace sim
 
         wait( 4 );
         s.push_back( [log] {
-            auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
-            auto name   = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "Vintage Soul Kit" );
-            auto source = exeDir.getChildFile( "projects" ).getChildFile( name );
+            // KICKEM_TOUR_PROJECT: a project in the projects folder or a bundled demo (default "AwesomeKick Groove").
+            auto name    = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "AwesomeKick Groove" );
+            auto content = getAppDirs( MTDemos ).getParentDirectory().getChildFile( "content" );
+            auto source  = getAppDirs( MTProjects ).getChildFile( name );
             if( !source.isDirectory() )
-                source = exeDir.getChildFile( "templates/Template 01" );
+                source = content.getChildFile( name );
+            if( !source.isDirectory() )
+                source = getAppDirs( MTTemp ).getChildFile( "Template 01" );
             // The engine opens <folder>/<folder name>.kickPrj, so keep the project's folder name.
             auto root = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_tour" );
             root.deleteRecursively();
-            auto       scratch = root.getChildFile( source.getFileName() );
-            const bool ok      = source.copyDirectoryTo( scratch ) && mt::getAudioInterface().loadProject( scratch );
+            auto scratch = root.getChildFile( source.getFileName() );
+            bool ok      = source.copyDirectoryTo( scratch );
+            if( auto prj = scratch.getChildFile( source.getFileName() + mt::__projectFileSuffix ); ok && prj.existsAsFile() )
+                prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", scratch.getFullPathName() ) ); // bundled demos
+            ok = ok && mt::getAudioInterface().loadProject( scratch );
             auto&      ae      = mt::getAudioInterface();
             log( "loaded scratch copy of " + source.getFileName() + ( ok ? "" : " (FAILED)" ) + ": " + juce::String( ae.getNumSequences() ) + " sequence(s), "
                  + juce::String( ae.getNumPrograms() ) + " program(s)" );
