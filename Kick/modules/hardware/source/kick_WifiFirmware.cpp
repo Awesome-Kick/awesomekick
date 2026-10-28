@@ -26,6 +26,7 @@
     #include <sys/ioctl.h>
     #include <unistd.h>
 #endif
+#include <sys/stat.h> // stat() in fileExists(), on every system
 
 #define WIFI_CRED_FILE "/home/Kick/wifi_credentials.txt"
 #define WIFI_CONF_FILE "/home/Kick/wpa_supplicant.conf"
@@ -42,6 +43,11 @@ namespace mt
 
     juce::String WifiManager::executeCommand( const juce::String& command )
     {
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // Simulator: never reconfigure the host's network (ip link, wpa_supplicant, dhclient, killall ...).
+        std::fprintf( stderr, "[AwesomeKick sandbox] blocked command: %s\n", command.toRawUTF8() );
+        return {};
+#endif
         juce::ChildProcess process;
         process.start( command );
         process.waitForProcessToFinish( -1 );
@@ -95,6 +101,10 @@ namespace mt
         juce::ChildProcess                                childProcess;
 
         DBG( "-------------------------scanning-----------------------" );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        std::fprintf( stderr, "[AwesomeKick sandbox] blocked command: %s\n", command.toRawUTF8() );
+        return {};
+#endif
         if( childProcess.start( command ) )
         {
             juce::StringArray tempResults;
