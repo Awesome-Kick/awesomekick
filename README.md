@@ -44,7 +44,7 @@ password:
 
 ```
 AwesomeKick simulator is running.
-  Open in a browser: http://<server-ip>:6080/vnc.html?autoconnect=1&resize=scale
+  Open in a browser: http://<server-ip>:6080/
   Password:          ********
 ```
 

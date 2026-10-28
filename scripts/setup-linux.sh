@@ -130,12 +130,16 @@ cd "$(dirname "$BIN")"
 DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
 setsid nohup x11vnc -display :$DISPLAY_NUM -rfbport $VNC_PORT -localhost -forever -shared \\
       -rfbauth "$CONF_DIR/vncpass" -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
-setsid nohup websockify --web /usr/share/novnc $WEB_PORT localhost:$VNC_PORT >"\$LOG/novnc.log" 2>&1 < /dev/null &
+# Web root: noVNC plus an index.html, so http://<host>:$WEB_PORT/ opens the simulator directly
+WEB="$DEV_DIR/novnc-web"; mkdir -p "\$WEB"
+for f in /usr/share/novnc/*; do ln -sfn "\$f" "\$WEB/\$(basename "\$f")"; done
+echo '<!doctype html><meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=1&amp;resize=scale"><title>AwesomeKick</title>' > "\$WEB/index.html"
+setsid nohup websockify --web "\$WEB" $WEB_PORT localhost:$VNC_PORT >"\$LOG/novnc.log" 2>&1 < /dev/null &
 sleep 2
 IP=\$(hostname -I | awk '{print \$1}')
 echo
 echo "AwesomeKick simulator is running."
-echo "  Open in a browser: http://\$IP:$WEB_PORT/vnc.html?autoconnect=1&resize=scale"
+echo "  Open in a browser: http://\$IP:$WEB_PORT/"
 echo "  Password:          \$(cat "$CONF_DIR/vncpass.txt")"
 echo "  Stop:              $DEV_DIR/kickem-stop.sh"
 echo "  Logs:              \$LOG/"
