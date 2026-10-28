@@ -18,7 +18,7 @@
 class KickEMApplication : public juce::JUCEApplication
 {
 public:
-    const juce::String getApplicationName() override { return "KickEM"; }
+    const juce::String getApplicationName() override { return "AwesomeKick"; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
     // Self-tests may run alongside a simulator the user already has open.
     bool moreThanOneInstanceAllowed() override { return juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty(); }

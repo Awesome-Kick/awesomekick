@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AwesomeKick app icon: 4x4 pad grid (own design, no manufacturer branding) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<rect width="256" height="256" rx="40" fill="#141414"/>
+<rect x="22" y="22" width="44" height="44" rx="7" fill="#262626" stroke="#ff4d4d" stroke-width="4"/>
+<rect x="78" y="22" width="44" height="44" rx="7" fill="#262626" stroke="#ff9f1c" stroke-width="4"/>
+<rect x="134" y="22" width="44" height="44" rx="7" fill="#262626" stroke="#ffd23f" stroke-width="4"/>
+<rect x="190" y="22" width="44" height="44" rx="7" fill="#262626" stroke="#e040fb" stroke-width="4"/>
+<rect x="22" y="78" width="44" height="44" rx="7" fill="#262626" stroke="#ffffff" stroke-width="4"/>
+<rect x="78" y="78" width="44" height="44" rx="7" fill="#262626" stroke="#ff4d4d" stroke-width="4"/>
+<rect x="134" y="78" width="44" height="44" rx="7" fill="#262626" stroke="#c2185b" stroke-width="4"/>
+<rect x="190" y="78" width="44" height="44" rx="7" fill="#262626" stroke="#ffb300" stroke-width="4"/>
+<rect x="22" y="134" width="44" height="44" rx="7" fill="#262626" stroke="#e040fb" stroke-width="4"/>
+<rect x="78" y="134" width="44" height="44" rx="7" fill="#262626" stroke="#2ecc40" stroke-width="4"/>
+<rect x="134" y="134" width="44" height="44" rx="7" fill="#262626" stroke="#ff4d4d" stroke-width="4"/>
+<rect x="190" y="134" width="44" height="44" rx="7" fill="#262626" stroke="#00e5ff" stroke-width="4"/>
+<rect x="22" y="190" width="44" height="44" rx="7" fill="#262626" stroke="#f48fb1" stroke-width="4"/>
+<rect x="78" y="190" width="44" height="44" rx="7" fill="#262626" stroke="#2ecc40" stroke-width="4"/>
+<rect x="134" y="190" width="44" height="44" rx="7" fill="#262626" stroke="#ffb300" stroke-width="4"/>
+<rect x="190" y="190" width="44" height="44" rx="7" fill="#262626" stroke="#ff4d4d" stroke-width="4"/>
+</svg>

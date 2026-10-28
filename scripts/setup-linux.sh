@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+# =============================================================================
+#  AwesomeKick – build and start the KICK simulator (KT_KickEM) on Linux
+# =============================================================================
+#  Run from the repository, as a normal user (NOT with sudo):
+#
+#      bash scripts/setup-linux.sh              # pick the mode automatically
+#      bash scripts/setup-linux.sh --desktop    # normal window on this desktop
+#      bash scripts/setup-linux.sh --headless   # virtual display + browser (noVNC)
+#
+#  1. installs the build dependencies (asks for the sudo password once)
+#  2. builds the simulator with all CPU cores
+#  3. writes helper scripts to ~/kick-dev:
+#        kickem-desktop.sh  kickem-start.sh  kickem-stop.sh  kickem-rebuild.sh
+#  4. starts the simulator
+#
+#  Output is also written to ~/kick-dev/setup.log
+#  Tested on Ubuntu 24.04 (x86_64).
+# =============================================================================
+set -euo pipefail
+
+REPO_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+BUILD_DIR="$REPO_DIR/Kick/build/sim"
+BIN="$BUILD_DIR/apps/kickem/KT_KickEM_artefacts/Release/KT_KickEM"
+DEV_DIR="$HOME/kick-dev"
+CONF_DIR="$HOME/.config/kickem"
+WEB_PORT=6080          # noVNC in the browser (headless mode)
+VNC_PORT=5942          # internal, localhost only
+DISPLAY_NUM=42         # virtual display :42 (headless mode)
+
+say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
+ok()   { printf '\033[1;32m    ✓ %s\033[0m\n' "$*"; }
+fail() { printf '\n\033[1;31m!!! %s\033[0m\n' "$*" >&2; exit 1; }
+
+# --- mode ---------------------------------------------------------------------
+MODE=""
+for arg in "$@"; do
+  case "$arg" in
+    --desktop)  MODE=desktop ;;
+    --headless) MODE=headless ;;
+    -h|--help)  sed -n '2,19p' "$0"; exit 0 ;;
+    *)          fail "Unknown option: $arg (use --desktop or --headless)" ;;
+  esac
+done
+if [ -z "$MODE" ]; then
+  # A local desktop session has WAYLAND_DISPLAY, or DISPLAY without being an SSH login
+  # (ssh -X also sets DISPLAY, but then the window would travel over the network).
+  if [ -n "${WAYLAND_DISPLAY:-}" ] || { [ -n "${DISPLAY:-}" ] && [ -z "${SSH_CONNECTION:-}" ]; }; then
+    MODE=desktop
+  else
+    MODE=headless
+  fi
+fi
+
+# --- checks ---------------------------------------------------------------------
+[ "$(id -u)" -eq 0 ] && fail "Please do NOT run this as root / with sudo. Run: bash scripts/setup-linux.sh"
+command -v apt-get >/dev/null || fail "apt-get not found – this script supports Ubuntu / Debian."
+[ -f "$REPO_DIR/Kick/CMakeLists.txt" ] || fail "Run this script from the AwesomeKick repository (Kick/ not found)."
+mkdir -p "$DEV_DIR/logs" "$CONF_DIR"
+exec > >(tee -a "$DEV_DIR/setup.log") 2>&1
+say "AwesomeKick setup $(date '+%Y-%m-%d %H:%M') on $(hostname) – $(nproc) CPU cores, $(lsb_release -ds 2>/dev/null || echo Linux), mode: $MODE"
+
+if [ "$MODE" = headless ] && grep -q ":$WEB_PORT " <(ss -ltn 2>/dev/null); then
+  pgrep -u "$USER" -f "websockify --web .* $WEB_PORT" >/dev/null \
+    || fail "Port $WEB_PORT is already used by another service. Change WEB_PORT in this script."
+fi
+
+# --- 1. packages ----------------------------------------------------------------
+say "1/4 Installing packages (asks for your sudo password)"
+PKGS=( build-essential cmake ninja-build git pkg-config
+       libasound2-dev libjack-jackd2-dev libcurl4-openssl-dev
+       libfreetype-dev libfontconfig1-dev
+       libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev
+       libxrandr-dev libxrender-dev libxi-dev libglu1-mesa-dev mesa-common-dev
+       libserial-dev fonts-dejavu-core )
+[ "$MODE" = headless ] && PKGS+=( xvfb x11vnc novnc python3-websockify x11-utils openssl )
+sudo apt-get update -qq
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PKGS[@]}"
+ok "Packages installed"
+
+# --- 2. build -------------------------------------------------------------------
+say "2/4 Building the simulator – takes a few minutes the first time"
+cmake -S "$REPO_DIR/Kick" -B "$BUILD_DIR" -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF > "$DEV_DIR/cmake.log" 2>&1 \
+  || { tail -40 "$DEV_DIR/cmake.log"; fail "CMake configuration failed (see $DEV_DIR/cmake.log)"; }
+time cmake --build "$BUILD_DIR" --target KT_KickEM -j"$(nproc)" \
+  || fail "Build failed – the last lines above show why"
+[ -x "$BIN" ] || fail "Executable not found: $BIN"
+# Never start a binary without the safety sandbox (see README).
+grep -q "__wrap_system" <(nm -C "$BIN" 2>/dev/null) \
+  || fail "The safety sandbox is missing from the executable – do NOT start it"
+ok "Built: $BIN (safety sandbox active)"
+
+# --- 3. helper scripts ----------------------------------------------------------
+say "3/4 Writing helper scripts to $DEV_DIR"
+echo "$MODE" > "$CONF_DIR/mode"
+
+cat > "$DEV_DIR/kickem-desktop.sh" <<EOF
+#!/usr/bin/env bash
+# Start the AwesomeKick simulator as a normal window on this desktop.
+set -u
+[ "\$(id -u)" -eq 0 ] && { echo "Do not run the simulator as root."; exit 1; }
+LOG="$DEV_DIR/logs"; mkdir -p "\$LOG"
+if pgrep -u "\$USER" -x KT_KickEM >/dev/null; then
+  echo "The simulator is already running (stop it with $DEV_DIR/kickem-stop.sh)."; exit 0
+fi
+cd "$(dirname "$BIN")"
+exec "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null
+EOF
+
+cat > "$DEV_DIR/kickem-start.sh" <<EOF
+#!/usr/bin/env bash
+# Start the AwesomeKick simulator on the virtual display :$DISPLAY_NUM and share it to the browser:
+#   http://<this machine>:$WEB_PORT/vnc.html?autoconnect=1&resize=scale
+set -u
+[ "\$(id -u)" -eq 0 ] && { echo "Do not run the simulator as root."; exit 1; }
+LOG="$DEV_DIR/logs"; mkdir -p "\$LOG"
+"$DEV_DIR/kickem-stop.sh" >/dev/null 2>&1
+# Wait until the old instance is really gone – otherwise the new Xvfb fails with
+# "Server is already active for display $DISPLAY_NUM" and the simulator has no screen.
+old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT"; }
+for i in \$(seq 1 40); do old_running >/dev/null || break; sleep 0.25; done
+if old_running >/dev/null; then
+  pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM; sleep 0.5
+fi
+setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1600x1600x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
+for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.25; done
+xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual display :$DISPLAY_NUM did not start – see \$LOG/xvfb.log"; exit 1; }
+cd "$(dirname "$BIN")"
+DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
+setsid nohup x11vnc -display :$DISPLAY_NUM -rfbport $VNC_PORT -localhost -forever -shared \\
+      -rfbauth "$CONF_DIR/vncpass" -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
+setsid nohup websockify --web /usr/share/novnc $WEB_PORT localhost:$VNC_PORT >"\$LOG/novnc.log" 2>&1 < /dev/null &
+sleep 2
+IP=\$(hostname -I | awk '{print \$1}')
+echo
+echo "AwesomeKick simulator is running."
+echo "  Open in a browser: http://\$IP:$WEB_PORT/vnc.html?autoconnect=1&resize=scale"
+echo "  Password:          \$(cat "$CONF_DIR/vncpass.txt")"
+echo "  Stop:              $DEV_DIR/kickem-stop.sh"
+echo "  Logs:              \$LOG/"
+echo "  Blocked commands:  grep sandbox \$LOG/kickem.log"
+EOF
+
+cat > "$DEV_DIR/kickem-stop.sh" <<EOF
+#!/usr/bin/env bash
+# Stop the simulator and, in headless mode, the virtual display and browser sharing.
+pkill -u "\$USER" -f "websockify --web .* $WEB_PORT" 2>/dev/null
+pkill -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" 2>/dev/null
+pkill -u "\$USER" -x KT_KickEM 2>/dev/null
+pkill -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" 2>/dev/null
+echo "AwesomeKick simulator stopped."
+EOF
+
+cat > "$DEV_DIR/kickem-rebuild.sh" <<EOF
+#!/usr/bin/env bash
+# Rebuild after code changes and restart in the mode chosen at setup ($CONF_DIR/mode).
+set -e
+cmake --build "$BUILD_DIR" --target KT_KickEM -j"\$(nproc)"
+if [ "\$(cat "$CONF_DIR/mode" 2>/dev/null)" = desktop ]; then
+  "$DEV_DIR/kickem-stop.sh" >/dev/null
+  for i in \$(seq 1 40); do pgrep -u "\$USER" -x KT_KickEM >/dev/null || break; sleep 0.25; done
+  setsid nohup "$DEV_DIR/kickem-desktop.sh" >/dev/null 2>&1 < /dev/null &
+  echo "AwesomeKick simulator restarted as a window."
+else
+  "$DEV_DIR/kickem-start.sh"
+fi
+EOF
+chmod +x "$DEV_DIR"/kickem-*.sh
+ok "Scripts: kickem-desktop.sh | kickem-start.sh | kickem-stop.sh | kickem-rebuild.sh"
+
+if [ "$MODE" = headless ]; then
+  if [ ! -f "$CONF_DIR/vncpass" ]; then
+    VNC_PW="$(openssl rand -hex 4)"
+    x11vnc -storepasswd "$VNC_PW" "$CONF_DIR/vncpass" >/dev/null 2>&1
+    echo "$VNC_PW" > "$CONF_DIR/vncpass.txt"
+    chmod 600 "$CONF_DIR/vncpass" "$CONF_DIR/vncpass.txt"
+  fi
+  ok "Browser password stored in $CONF_DIR/vncpass.txt"
+else
+  APPS="$HOME/.local/share/applications"; mkdir -p "$APPS"
+  cat > "$APPS/awesomekick.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=AwesomeKick
+Comment=KICK groovebox simulator (community build)
+Exec=$DEV_DIR/kickem-desktop.sh
+Icon=$REPO_DIR/scripts/awesomekick.svg
+Terminal=false
+Categories=AudioVideo;Audio;Music;
+EOF
+  command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" >/dev/null 2>&1 || true
+  ok "Application menu entry: AwesomeKick"
+fi
+
+# --- 4. start -------------------------------------------------------------------
+say "4/4 Starting the simulator"
+if [ "$MODE" = desktop ]; then
+  "$DEV_DIR/kickem-stop.sh" >/dev/null
+  setsid nohup "$DEV_DIR/kickem-desktop.sh" >/dev/null 2>&1 < /dev/null &
+  echo
+  echo "AwesomeKick simulator is starting as a window."
+  echo "  Start again later: application menu → AwesomeKick, or $DEV_DIR/kickem-desktop.sh"
+  echo "  Logs:              $DEV_DIR/logs/"
+  echo "  Blocked commands:  grep sandbox $DEV_DIR/logs/kickem.log"
+else
+  "$DEV_DIR/kickem-start.sh"
+fi

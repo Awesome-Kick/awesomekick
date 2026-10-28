@@ -1618,7 +1618,7 @@ namespace sim
         // Community name under the screen (no manufacturer logo)
         g.setColour( palette::legend.withAlpha( 0.75f ) );
         g.setFont( juce::Font( 30.0f, juce::Font::bold ) );
-        g.drawText( "KickEM", juce::Rectangle<int>( bezelRect.getX(), screenRect.getBottom() + 6, bezelRect.getWidth(), bezelRect.getBottom() - screenRect.getBottom() - 10 ),
+        g.drawText( "AwesomeKick", juce::Rectangle<int>( bezelRect.getX(), screenRect.getBottom() + 6, bezelRect.getWidth(), bezelRect.getBottom() - screenRect.getBottom() - 10 ),
                     juce::Justification::centred );
     }
 

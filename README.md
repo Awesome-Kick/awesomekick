@@ -1,88 +1,143 @@
-<p align="center">
-  <img src="docs/images/social-preview.png" alt="Behringer KICK (BE 0700-AAM)" width="100%">
-</p>
+# AwesomeKick – KICK simulator on Linux
 
-# Behringer KICK (BE 0700-AAM)
-
-Source code for the Behringer KICK.
-
-> [!NOTE]
-> **About this fork: a community build, not an official Behringer / MUSIC Tribe release.**
->
-> The `desktop-build` branch builds and runs the KICK firmware on Windows. It adds a hardware simulator (`KT_KickEM`), so you can play it with no KICK at all. On top of the original code it adds:
-> - **Instrument programs**, with a **Modular synth engine**:
->   - a grid patch editor, cables, effects and an arpeggiator;
->   - Mono/Legato with glide, and pad pressure;
->   - 22 presets, and saving your own.
-> - **Recording pads** into sequences, and REC on the Sampler.
-> - **Real CPU and RAM meters**, plus many crash and UI fixes.
->
-> - **Try it:** download the simulator zip from [Releases](https://github.com/chillbeast/0700-AAM/releases) (Windows x64). Unzip it anywhere and run `KT_KickEM.exe`.
-> - **Manual:** [Kick/docs/manual/USER_MANUAL.md](Kick/docs/manual/USER_MANUAL.md) covers the panel, the screens and the Modular engine.
-> - **Build it:** with Visual Studio 2022 and CMake, from `Kick/`:
->   `cmake -S . -B build/sim -G "Visual Studio 17 2022" -A x64 -DKICK_SIMULATOR=ON -DTIMESTAMP=OFF`, then
->   `cmake --build build/sim --config Release --target KT_KickEM`
-> - **Licence:** AGPL-3.0, the same as upstream. The original code lives at [MusicTribeOpenSource/0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM).
+**AwesomeKick** is a community project around the open-sourced KICK groovebox firmware.
+This branch builds and runs the simulator (`KT_KickEM`) on **Ubuntu / Debian** – on a desktop or on a
+**headless server**, played from any browser in your network.
 
 <p align="center">
-  <img src="docs/images/kick-front.webp" alt="Behringer KICK" width="720">
+  <img src="docs/images/kickem-linux.png" alt="AwesomeKick simulator on Linux, front panel laid out like the hardware" width="720">
 </p>
 
-## Key features
+> This is a community project, not an official Behringer / MUSIC Tribe release.
+> It builds on the `desktop-build` branch by [chillbeast](https://github.com/chillbeast/0700-AAM)
+> and on the original source at [MusicTribeOpenSource/0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM).
 
-- AI camera for gesture control
-- Touchscreen
-- 16 RGB pads, 8 banks
-- Sampler with sample editing, step sequencer and looper
-- Over 300 built-in effects
-- 4 assignable knobs and a jog wheel
-- MIDI in/out, USB and 4 CV / Gate jacks
+## Quick start
 
-## Connections
+```bash
+git clone -b linux https://github.com/Awesome-Kick/awesomekick.git
+cd awesomekick
+bash scripts/setup-linux.sh        # as a normal user, NOT with sudo
+```
 
-<p align="center">
-  <img src="docs/images/kick-rear.webp" alt="Behringer KICK rear panel" width="100%">
-</p>
+The script installs the build dependencies (asks for your sudo password once), builds the
+simulator with all CPU cores and starts it. It picks the right mode by itself:
 
-| Rear | Front |
+### On a Linux desktop: a normal window
+
+If you run the script inside a desktop session (Ubuntu Desktop, KDE, …), the simulator opens as
+a **normal application window**, with sound through your computer's audio device. No browser
+involved. You also get an **AwesomeKick** entry in your application menu.
+
+Start it again later from the menu, or with `~/kick-dev/kickem-desktop.sh`. You can also run the
+binary directly:
+
+```bash
+cd Kick/build/sim/apps/kickem/KT_KickEM_artefacts/Release && ./KT_KickEM
+```
+
+### On a server without a screen: in the browser
+
+On a headless machine (no desktop, e.g. a home server you reach via SSH), the simulator runs on
+a virtual display and is shared to your browser. At the end the script prints a link and a
+password:
+
+```
+AwesomeKick simulator is running.
+  Open in a browser: http://<server-ip>:6080/vnc.html?autoconnect=1&resize=scale
+  Password:          ********
+```
+
+The simulator still runs on the server – the browser only shows the picture and sends your
+clicks, so **sound comes out of the server**, not out of the computer with the browser.
+
+Force a mode with `bash scripts/setup-linux.sh --desktop` or `--headless`.
+
+### Afterwards
+
+| Command | What it does |
 |---|---|
-| 12 V DC power input, power switch | SD card slot |
-| LINK (RJ45) | Headphones output |
-| USB-C, USB-A | |
-| MIDI IN, MIDI OUT (5-pin DIN) | |
-| Stereo output, stereo input | |
-| CV / Gate (4 jacks) | |
+| `~/kick-dev/kickem-desktop.sh` | start the simulator as a window (desktop) |
+| `~/kick-dev/kickem-start.sh` | start it headless with browser access (server) |
+| `~/kick-dev/kickem-stop.sh` | stop everything |
+| `~/kick-dev/kickem-rebuild.sh` | rebuild after code changes and restart (in the mode chosen at setup) |
 
-## Repository
+Logs are in `~/kick-dev/logs/`, your projects and preferences in `~/.local/share/KickEM/`.
 
-| Folder | Contents | License |
-|---|---|---|
-| [`Kick/`](Kick) | Application | AGPL-3.0-or-later |
-| [`AudIO/`](AudIO) | Audio engine library | AGPL-3.0-or-later |
-| [`ComProtocol/`](ComProtocol) | Hardware communication protocol | AGPL-3.0-or-later |
-| [`Linux/`](Linux) | Buildroot Linux image | GPL-2.0 (Buildroot) |
+Tested on Ubuntu 24.04 (x86_64).
 
-The root [`LICENSE`](LICENSE) is the AGPL-3.0 text that covers the Music Tribe code (Kick, AudIO, ComProtocol).
-Third-party components keep their original licenses. See the README in each folder.
+## What this branch changes
 
-## Community
+### ⚠️ Safety sandbox – please read
 
-- **Chat with us:** [Discord](https://discord.gg/gS6qtuShvw)
-- **Contribute:** fork the repository and open a pull request. No membership needed. See the
-  [contributing guide](https://github.com/MusicTribeOpenSource/.github/blob/main/CONTRIBUTING.md).
-- **Report a security problem** privately: [Report a vulnerability](https://github.com/MusicTribeOpenSource/0700-AAM/security/advisories/new).
+The firmware assumes it runs on the KICK hardware. At startup it executes shell commands such as
 
-<details>
-<summary>Product renders</summary>
+```
+timedatectl set-timezone Asia/Kolkata
+ifconfig eth0 192.168.0.1 netmask 255.255.255.0
+killall udhcpc
+echo 127 > /sys/devices/platform/backlight/backlight/backlight/brightness
+```
 
-<p align="center">
-  <img src="docs/images/views.png" alt="KICK top, front, side and rear views" width="100%">
-</p>
-</details>
+and elsewhere `mount`, `reboot`, firmware decryption and more. On a normal Linux machine – and
+especially when run as root – this can change your timezone and network configuration and take
+a server off the network.
 
----
+In the simulator build every such call is intercepted at link time
+(`-Wl,--wrap=system,popen,execve,…`, see `Kick/apps/kickem/simulator/kick_SimSandbox.cpp`).
+Nothing is executed except two read-only queries (`df -h`, `du -sh`) used by the System
+Resources screen. Blocked calls are logged:
 
-Behringer is a brand of MUSIC Tribe. The Behringer name and logo, and the KICK name and logo, are
-trademarks and are not covered by the software licenses in this repository.
+```bash
+grep sandbox ~/kick-dev/logs/kickem.log
+```
 
-Copyright (c) MUSIC Tribe.
+**Never run the simulator as root.** Set `KICKEM_SANDBOX_QUIET=1` to silence the log lines.
+
+### Linux build fixes (GCC)
+- `#include <thread>` added in `AudIO/AudIO/Daw/DawRouting.cpp` and `DawEngine.cpp`.
+- `juce::jmax<juce::int64>` / `jmin` replaced by `std::max` / `std::min` – with GCC the JUCE
+  SIMD templates fail to compile for `long long` (see also upstream issue #9).
+- `libxi-dev` is required (the bundled JUCE multitouch patch uses XInput2). `libwebkit2gtk` is
+  **not** required (`JUCE_WEB_BROWSER=0`); it no longer exists in Ubuntu 24.04 anyway.
+
+### Data paths
+The firmware writes to `/app`, `/home/Kick` and `/data`. In the simulator build
+(`Kick/modules/common/source/kick_paths.cpp`, `SIM_BUILD` only):
+- assets, demos, templates: found next to the executable (or set `KICKEM_DATA_DIR`)
+- projects, preferences, logs, samples: `~/.local/share/KickEM/`
+
+### Front panel laid out like the hardware
+Every control sits where it is on the real unit, with the same spacing: MASTER / REC pots with
+MIN/MAX, LINK, touch strip, FULL LEVEL / 16 LEVELS / ERASE, 4×4 pads with numbers, P1–P4,
+BANK A–D, the mode keys, the jog wheel with its LED ring and four navigation keys (undo, copy,
+−, +), SHIFT, and the round transport keys. The positions were measured from a photo of the
+unit; the 1024×600 screen sits where the display is.
+
+Keys show their main function on the backlit cap and the SHIFT function printed below, as on
+the panel. The look is our own – no manufacturer logo or branding; the bezel shows "AwesomeKick".
+
+### Headless / browser mode
+- `KICKEM_KIOSK=1` makes the window fill the whole display.
+- In headless mode `setup-linux.sh` runs the simulator on a virtual display (Xvfb, 1600×1600), shares it with
+  x11vnc (localhost only, password protected) and serves it via noVNC on port 6080.
+- On a desktop the simulator simply opens as a window (`--desktop`, automatic when a desktop is running).
+- Sound always comes out of the machine the simulator runs on.
+
+## Useful environment variables
+
+| Variable | Effect |
+|---|---|
+| `KICKEM_KIOSK=1` | fill the whole display, no title bar |
+| `KICKEM_DATA_DIR=<dir>` | where `assets/`, `demos/`, `templates/` are |
+| `KICKEM_SANDBOX_QUIET=1` | don't log blocked system commands |
+| `KICKEM_SELFTEST=1` | drive every panel control once (more: `tour`, `record`, `modular`, …) |
+
+## Known limitations
+- The factory samples were removed from the public release, so demo pads may be silent.
+- LINK LEDs and the camera on the panel are decoration only.
+- Only x86_64 Ubuntu has been tested so far.
+
+## Licence
+AGPL-3.0-or-later, same as upstream. Behringer and the Behringer logo are trademarks of
+MUSIC Tribe and are not covered by the software licence.
