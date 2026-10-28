@@ -89,7 +89,9 @@ namespace contracts
         { juce::KeyPress::F9Key, { contracts::DeviceControlContracts::EN_RECORD, false } },
         { juce::KeyPress::F10Key, { contracts::DeviceControlContracts::EN_OVERDUB, false } },
         { juce::KeyPress::F11Key, { contracts::DeviceControlContracts::EN_STOP, false } },
+#if !( defined( SIM_BUILD ) && SIM_BUILD ) // the simulator toggles PLAY / STOP itself (SimulatorBoard::keyPressed)
         { juce::KeyPress::spaceKey, { contracts::DeviceControlContracts::EN_PLAY, false } },
+#endif
         { juce::KeyPress::F12Key, { contracts::DeviceControlContracts::EN_PLAYSTART, false } },
         { juce::KeyPress::playKey, { contracts::DeviceControlContracts::EN_PLAYSTART, false } },
         { juce::KeyPress::stopKey, { contracts::DeviceControlContracts::EN_STOP, false } },
@@ -170,6 +172,10 @@ namespace contracts
 
     bool keyPressedDetector::keyPressed( const juce::KeyPress& key, juce::Component* originatingComponent )
     {
+#if defined( SIM_BUILD ) && SIM_BUILD
+        if( key == juce::KeyPress::spaceKey )
+            return false; // pass it on to the simulator board
+#endif
         return true;
     }
 

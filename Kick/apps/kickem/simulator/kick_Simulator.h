@@ -24,8 +24,25 @@ namespace sim
 
         void paint( juce::Graphics& g ) override;
         void resized() override;
+        /// Space bar: PLAY when stopped, STOP while playing.
+        bool keyPressed( const juce::KeyPress& key ) override;
+        void visibilityChanged() override;
+        void togglePlayStop();
 
     private:
+        /// Keys first go to the focused component (often a firmware button, which JUCE "clicks" on space),
+        /// so this listener is attached to whatever has the focus: its key listeners are asked first.
+        struct SpaceBar : juce::KeyListener, juce::FocusChangeListener
+        {
+            explicit SpaceBar( SimulatorBoard& b ) : board( b ) {}
+            bool keyPressed( const juce::KeyPress& key, juce::Component* origin ) override;
+            void globalFocusChanged( juce::Component* focused ) override;
+            void attach( juce::Component* c );
+            SimulatorBoard&                            board;
+            juce::Component::SafePointer<juce::Component> attached;
+        };
+        SpaceBar spaceBar { *this };
+
         /// Packets the app sent to the "hardware" (LEDs, pads, slider).
         void handleOutput( const CPktMgr::HWMsg_t& m );
         void setButtonLed( int id, bool on );

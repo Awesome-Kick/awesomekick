@@ -102,6 +102,8 @@ namespace sim
 
         outputConnection = SimulatorInterfaceImpl::outputReceived.connect( [this]( const CPktMgr::HWMsg_t& m ) { handleOutput( m ); } );
 
+        setWantsKeyboardFocus( true ); // space bar = PLAY / STOP, see keyPressed() and SpaceBar
+        juce::Desktop::getInstance().addFocusChangeListener( &spaceBar );
         setSize( boardWidth, boardHeight ); // last: resized() needs every child
 
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_TRACE_MOUSE", {} ).isNotEmpty() )
@@ -111,6 +113,58 @@ namespace sim
             startSelfTest();
         else
             installBundledContent();
+    }
+
+    void SimulatorBoard::togglePlayStop()
+    {
+        const int code = mt::getAudioInterface().isSequencePlaying() ? DCC::EN_STOP : DCC::EN_PLAY;
+        if( auto* b = findButton( code ) )
+        {
+            b->press( true );
+            b->press( false );
+        }
+    }
+
+    bool SimulatorBoard::keyPressed( const juce::KeyPress& key )
+    {
+        if( key != juce::KeyPress::spaceKey )
+            return false; // other keys: let the firmware handle them
+        togglePlayStop();
+        return true;
+    }
+
+    void SimulatorBoard::visibilityChanged()
+    {
+        // Take the keyboard once the window is up, so the space bar works without a click first.
+        if( isShowing() )
+            juce::MessageManager::callAsync( [safe = juce::Component::SafePointer<SimulatorBoard>( this )] {
+                if( safe == nullptr || !safe->isShowing() )
+                    return;
+                if( !safe->hasKeyboardFocus( true ) )
+                    safe->grabKeyboardFocus();
+                safe->spaceBar.attach( juce::Component::getCurrentlyFocusedComponent() );
+            } );
+    }
+
+    bool SimulatorBoard::SpaceBar::keyPressed( const juce::KeyPress& key, juce::Component* origin )
+    {
+        if( key != juce::KeyPress::spaceKey || dynamic_cast<juce::TextEditor*>( origin ) != nullptr )
+            return false; // typing a name keeps its spaces
+        board.togglePlayStop();
+        return true;
+    }
+
+    void SimulatorBoard::SpaceBar::globalFocusChanged( juce::Component* focused ) { attach( focused ); }
+
+    void SimulatorBoard::SpaceBar::attach( juce::Component* c )
+    {
+        if( attached != nullptr )
+            attached->removeKeyListener( this );
+        if( c == nullptr && board.isShowing() )
+            c = board.getTopLevelComponent(); // nothing focused: keys go to the window itself
+        attached = c;
+        if( c != nullptr && c != &board ) // the board handles space in its own keyPressed()
+            c->addKeyListener( this );
     }
 
     // The playable demo projects in <data>/content (Kick/content in the source tree) carry "@PROJECT_DIR@"
@@ -1606,6 +1660,9 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
     SimulatorBoard::~SimulatorBoard()
     {
         ShiftLatch::onChange = nullptr;
+        juce::Desktop::getInstance().removeFocusChangeListener( &spaceBar );
+        if( spaceBar.attached != nullptr )
+            spaceBar.attached->removeKeyListener( &spaceBar );
         juce::Desktop::getInstance().removeGlobalMouseListener( &mouseTrace );
         // KickHome is a process-wide singleton: detach it, don't let it be destroyed with the board.
         removeChildComponent( &screen );
