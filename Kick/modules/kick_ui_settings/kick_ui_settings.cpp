@@ -165,6 +165,19 @@ namespace kick_ui
 
     void Settings::handleCommand( CPktMgr::HWMsg_t& hwMsg )
     {
+        // Transport keeps working while the preferences are open, as on every other screen.
+        if( contracts::DclContractsHelper::isButtonMessage( hwMsg ) && contracts::DclContractsHelper::getButtonState( hwMsg ) == contracts::DeviceControlContracts::BTN_PRESSED )
+        {
+            auto& ae    = mt::getAudioInterface();
+            auto& aeSel = ae.getSelected();
+            switch( contracts::DclContractsHelper::getButtonCode( hwMsg ) )
+            {
+                case contracts::DeviceControlContracts::EN_PLAY: ae.setSequencePlay( aeSel.sequence, false, true ); return;
+                case contracts::DeviceControlContracts::EN_PLAYSTART: ae.setSequencePlay( aeSel.sequence, true, true ); return;
+                case contracts::DeviceControlContracts::EN_STOP: ae.setSequencePause(); return;
+                default: break;
+            }
+        }
         if( pView )
             pView->handleCommand( hwMsg );
     }
