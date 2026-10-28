@@ -76,6 +76,7 @@ target_sources(${TargetName}
 target_compile_definitions(${TargetName}
     PRIVATE
         SIM_BUILD=1
+        JUCE_JACK_CLIENT_NAME="Kickray"
         JUCE_APPLICATION_NAME_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_PROJECT_NAME>"
         JUCE_APPLICATION_VERSION_STRING="$<TARGET_PROPERTY:${TargetName},JUCE_VERSION>"
         JUCE_ALSA=1

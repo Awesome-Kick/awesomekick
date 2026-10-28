@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  Kickray in the browser: the noVNC view of the simulator plus its sound.
+  Sound comes as raw 48 kHz s16le stereo over a WebSocket from scripts/kickray-audio.py (port 6081).
+  Browsers only start audio after a click, hence the "Sound on" button.
+  SPDX-License-Identifier: AGPL-3.0-or-later
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kickray – AwesomeKick</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; overflow: hidden; font-family: system-ui, sans-serif; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  #sound { position: fixed; right: 16px; bottom: 16px; z-index: 10; display: flex; align-items: center; gap: 10px;
+           background: rgba(20, 20, 20, 0.85); color: #eee; border: 1px solid #444; border-radius: 10px; padding: 8px 12px; }
+  #sound button { font: inherit; font-size: 15px; cursor: pointer; color: #111; background: #ffd23f;
+                  border: 0; border-radius: 7px; padding: 6px 12px; }
+  #sound.on button { background: #333; color: #eee; }
+  #status { font-size: 12px; color: #aaa; min-width: 9em; }
+</style>
+</head>
+<body>
+<iframe id="vnc" src="vnc.html?autoconnect=1&amp;resize=scale" allow="autoplay"></iframe>
+<div id="sound"><button id="toggle">🔊 Sound on</button><span id="status">sound off</span></div>
+<script>
+(() => {
+  const AUDIO_PORT = 6081;
+  const TARGET = 0.06, MAX = 0.20;        // seconds buffered: aim / hard limit (drop older audio above)
+  const box = document.getElementById('sound'), btn = document.getElementById('toggle'),
+        status = document.getElementById('status');
+  let ctx = null, ws = null, node = null, retry = null;
+  let rate = 48000, ring = null, size = 0, rd = 0, wr = 0, priming = true;
+
+  const buffered = () => (wr - rd + size) % size;
+
+  function setupRing() {
+    size = rate * 2;                       // 1 s per channel, interleaved stereo
+    ring = new Float32Array(size); rd = wr = 0; priming = true;
+  }
+
+  function push(int16) {
+    for (let i = 0; i < int16.length; i++) { ring[wr] = int16[i] / 32768; wr = (wr + 1) % size; }
+    const limit = Math.floor(MAX * rate) * 2, keep = Math.floor(TARGET * rate) * 2;
+    if (buffered() > limit) rd = (wr - keep + size) % size;   // too far behind: jump forward
+  }
+
+  function connect() {
+    ws = new WebSocket(`ws://${location.hostname}:${AUDIO_PORT}/`);
+    ws.binaryType = 'arraybuffer';
+    ws.onopen = () => { status.textContent = 'connecting…'; };
+    ws.onmessage = (e) => {
+      if (typeof e.data === 'string') { const h = JSON.parse(e.data); if (h.rate) rate = h.rate; setupRing(); return; }
+      if (ring) push(new Int16Array(e.data));
+    };
+    ws.onclose = () => {
+      if (!ctx) return;
+      status.textContent = 'no sound stream – retrying';
+      retry = setTimeout(connect, 2000);
+    };
+  }
+
+  function start() {
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000, latencyHint: 'interactive' });
+    rate = ctx.sampleRate; setupRing();
+    // ScriptProcessor works on plain http:// (AudioWorklet would need https).
+    node = ctx.createScriptProcessor(1024, 0, 2);
+    node.onaudioprocess = (e) => {
+      const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), n = L.length;
+      if (priming && buffered() >= Math.floor(TARGET * rate) * 2) priming = false;
+      if (priming || buffered() < n * 2) { L.fill(0); R.fill(0); priming = true; return; }
+      for (let i = 0; i < n; i++) { L[i] = ring[rd]; R[i] = ring[(rd + 1) % size]; rd = (rd + 2) % size; }
+      status.textContent = `sound on · ${Math.round(buffered() / 2 / rate * 1000)} ms buffer`;
+    };
+    node.connect(ctx.destination);
+    connect();
+    box.classList.add('on'); btn.textContent = '🔇 Sound off';
+  }
+
+  function stop() {
+    clearTimeout(retry);
+    const c = ctx; ctx = null;
+    if (ws) { ws.onclose = null; ws.close(); ws = null; }
+    if (node) { node.disconnect(); node = null; }
+    if (c) c.close();
+    box.classList.remove('on'); btn.textContent = '🔊 Sound on'; status.textContent = 'sound off';
+  }
+
+  btn.addEventListener('click', () => {
+    ctx ? stop() : start();
+    document.getElementById('vnc').focus();   // keep keyboard input in the simulator
+  });
+})();
+</script>
+</body>
+</html>

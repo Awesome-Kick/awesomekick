@@ -26,6 +26,7 @@ DEV_DIR="$HOME/kick-dev"
 CONF_DIR="$HOME/.config/kickem"
 WEB_PORT=6080          # noVNC in the browser (headless mode)
 VNC_PORT=5942          # internal, localhost only
+AUDIO_PORT=6081        # sound stream to the browser (headless mode)
 DISPLAY_NUM=42         # virtual display :42 (headless mode)
 
 say()  { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -64,6 +65,10 @@ if [ "$MODE" = headless ] && grep -q ":$WEB_PORT " <(ss -ltn 2>/dev/null); then
   pgrep -u "$USER" -f "websockify --web .* $WEB_PORT" >/dev/null \
     || fail "Port $WEB_PORT is already used by another service. Change WEB_PORT in this script."
 fi
+if [ "$MODE" = headless ] && grep -q ":$AUDIO_PORT " <(ss -ltn 2>/dev/null); then
+  pgrep -u "$USER" -f "kickray-audio.py" >/dev/null \
+    || fail "Port $AUDIO_PORT is already used by another service. Change AUDIO_PORT in this script."
+fi
 
 # --- 1. packages ----------------------------------------------------------------
 say "1/4 Installing packages (asks for your sudo password)"
@@ -73,7 +78,7 @@ PKGS=( build-essential cmake ninja-build git pkg-config
        libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev
        libxrandr-dev libxrender-dev libxi-dev libglu1-mesa-dev mesa-common-dev
        libserial-dev fonts-dejavu-core )
-[ "$MODE" = headless ] && PKGS+=( xvfb x11vnc novnc python3-websockify x11-utils openssl )
+[ "$MODE" = headless ] && PKGS+=( xvfb x11vnc novnc python3-websockify x11-utils openssl jackd2 ffmpeg )
 sudo apt-get update -qq
 sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${PKGS[@]}"
 ok "Packages installed"
@@ -111,14 +116,14 @@ EOF
 cat > "$DEV_DIR/kickem-start.sh" <<EOF
 #!/usr/bin/env bash
 # Start the AwesomeKick simulator on the virtual display :$DISPLAY_NUM and share it to the browser:
-#   http://<this machine>:$WEB_PORT/vnc.html?autoconnect=1&resize=scale
+#   http://<this machine>:$WEB_PORT/   (picture via noVNC, sound via JACK -> kickray-audio.py on port $AUDIO_PORT)
 set -u
 [ "\$(id -u)" -eq 0 ] && { echo "Do not run the simulator as root."; exit 1; }
 LOG="$DEV_DIR/logs"; mkdir -p "\$LOG"
 "$DEV_DIR/kickem-stop.sh" >/dev/null 2>&1
 # Wait until the old instance is really gone – otherwise the new Xvfb fails with
 # "Server is already active for display $DISPLAY_NUM" and the simulator has no screen.
-old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT"; }
+old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT" || pgrep -u "\$USER" -f "^jackd --no-realtime -d dummy" || pgrep -u "\$USER" -f "^python3 -I .*kickray-audio.py"; }
 for i in \$(seq 1 40); do old_running >/dev/null || break; sleep 0.25; done
 if old_running >/dev/null; then
   pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM; sleep 0.5
@@ -126,14 +131,20 @@ fi
 setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1600x1600x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.25; done
 xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual display :$DISPLAY_NUM did not start – see \$LOG/xvfb.log"; exit 1; }
+# Sound: a JACK server without hardware (dummy driver, no root or audio group needed). The simulator
+# plays into it, kickray-audio.py captures it and streams it to the browser page.
+setsid nohup jackd --no-realtime -d dummy -r 48000 -p 512 >"\$LOG/jackd.log" 2>&1 < /dev/null &
+for i in \$(seq 1 40); do jack_lsp >/dev/null 2>&1 && break; sleep 0.25; done
+jack_lsp >/dev/null 2>&1 || echo "WARNING: JACK did not start – no sound in the browser (see \$LOG/jackd.log)"
+setsid nohup python3 -I "$REPO_DIR/scripts/kickray-audio.py" --port $AUDIO_PORT >"\$LOG/audio.log" 2>&1 < /dev/null &
 cd "$(dirname "$BIN")"
-DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
+DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 KICKEM_AUDIO_TYPE=JACK setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
 setsid nohup x11vnc -display :$DISPLAY_NUM -rfbport $VNC_PORT -localhost -forever -shared \\
       -rfbauth "$CONF_DIR/vncpass" -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
-# Web root: noVNC plus an index.html, so http://<host>:$WEB_PORT/ opens the simulator directly
+# Web root: noVNC plus our index.html (noVNC view + "Sound on" button), so http://<host>:$WEB_PORT/ is all you need
 WEB="$DEV_DIR/novnc-web"; mkdir -p "\$WEB"
 for f in /usr/share/novnc/*; do ln -sfn "\$f" "\$WEB/\$(basename "\$f")"; done
-echo '<!doctype html><meta http-equiv="refresh" content="0; url=vnc.html?autoconnect=1&amp;resize=scale"><title>AwesomeKick</title>' > "\$WEB/index.html"
+cp "$REPO_DIR/scripts/web/index.html" "\$WEB/index.html"
 setsid nohup websockify --web "\$WEB" $WEB_PORT localhost:$VNC_PORT >"\$LOG/novnc.log" 2>&1 < /dev/null &
 sleep 2
 IP=\$(hostname -I | awk '{print \$1}')
@@ -141,6 +152,7 @@ echo
 echo "AwesomeKick simulator is running."
 echo "  Open in a browser: http://\$IP:$WEB_PORT/"
 echo "  Password:          \$(cat "$CONF_DIR/vncpass.txt")"
+echo "  Sound:             click \"Sound on\" at the bottom right of the page"
 echo "  Stop:              $DEV_DIR/kickem-stop.sh"
 echo "  Logs:              \$LOG/"
 echo "  Blocked commands:  grep sandbox \$LOG/kickem.log"
@@ -153,6 +165,9 @@ pkill -u "\$USER" -f "websockify --web .* $WEB_PORT" 2>/dev/null
 pkill -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" 2>/dev/null
 pkill -u "\$USER" -x KT_KickEM 2>/dev/null
 pkill -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" 2>/dev/null
+pkill -u "\$USER" -f "^python3 -I .*kickray-audio.py" 2>/dev/null
+pkill -u "\$USER" -f "^ffmpeg .* kickray_stream" 2>/dev/null
+pkill -u "\$USER" -f "^jackd --no-realtime -d dummy" 2>/dev/null
 echo "AwesomeKick simulator stopped."
 EOF
 
