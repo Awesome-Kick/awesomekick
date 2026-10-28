@@ -36,6 +36,13 @@ MAX_QUEUED = 10                            # per client: at most 200 ms waiting 
 CAPTURE_CLIENT = "kickray_stream"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+class Client:
+    """One browser: chunks waiting to be sent, and an event that wakes its sender thread."""
+    def __init__(self):
+        self.queue = collections.deque()
+        self.ready = threading.Event()
+
+
 clients = set()
 clients_lock = threading.Lock()
 
@@ -59,11 +66,11 @@ def run_ffmpeg():
             if not data:
                 break
             with clients_lock:
-                for q, ready in clients:
-                    if len(q) >= MAX_QUEUED:
-                        q.popleft()            # drop the oldest chunk: keep latency low
-                    q.append(data)
-                    ready.set()
+                for c in clients:
+                    if len(c.queue) >= MAX_QUEUED:
+                        c.queue.popleft()      # drop the oldest chunk: keep latency low
+                    c.queue.append(data)
+                    c.ready.set()
         proc.wait()
         log("ffmpeg stopped (exit %s), restarting in 2 s" % proc.returncode)
         time.sleep(2)
@@ -124,22 +131,21 @@ class Handler(socketserver.BaseRequestHandler):
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.sendall(ws_frame(json.dumps({"rate": RATE, "channels": CHANNELS, "format": "s16le"}).encode(), 0x1))
 
-        q, ready = collections.deque(), threading.Event()
-        entry = (q, ready)
+        client = Client()
         with clients_lock:
-            clients.add(entry)
+            clients.add(client)
         log("browser connected:", self.client_address[0])
         try:
             while True:
-                ready.wait(1.0)
-                ready.clear()
-                while q:
-                    sock.sendall(ws_frame(q.popleft(), 0x2))
+                client.ready.wait(1.0)
+                client.ready.clear()
+                while client.queue:
+                    sock.sendall(ws_frame(client.queue.popleft(), 0x2))
         except OSError:
             pass
         finally:
             with clients_lock:
-                clients.discard(entry)
+                clients.discard(client)
             log("browser disconnected:", self.client_address[0])
 
 
