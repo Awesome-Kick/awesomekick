@@ -169,10 +169,17 @@ namespace kick_ui
                 ae.setSequenceLength( ae.getSelectedSequence(), Value );
             else*/
             int seqLen = ae.getSequenceLength();
+#if defined( SIM_BUILD ) && SIM_BUILD
+            // Simulator: a longer track lengthens the sequence instead of being refused.
+            if( Value > seqLen )
+                ae.setSequenceLength( aeSel.sequence, Value );
+            ae.setTrackLength( aeSel.sequence, aeSel.track, Value );
+#else
             if( Value > seqLen ) // validate and set bounded value.
                 hdrComp.bars.setValue( seqLen );
             else
                 ae.setTrackLength( aeSel.sequence, aeSel.track, Value );
+#endif
 
             redraw( ae.getSelectedSequence(), ae.getSelectedTrack() );
             gridComponent.triggerAsyncUpdate();

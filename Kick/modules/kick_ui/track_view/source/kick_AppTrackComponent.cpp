@@ -67,10 +67,17 @@ AppTrackDisplay::AppTrackDisplay( int Seq, int Track )
         else if( Value == 0 && pTrack )
             pTrack->isSeqLength = true;
         auto seqLength = ae.getSequenceLength( seq );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // Simulator: a longer track lengthens the sequence instead of being refused.
+        if( Value > seqLength )
+            ae.setSequenceLength( seq, Value );
+        ae.setTrackLength( seq, track, Value );
+#else
         if( Value > seqLength )
             length.setValue( seqLength );
         else
             ae.setTrackLength( seq, track, Value );
+#endif
     };
     mute.onClick = [&]() {
         if( !pTrack ) return;
