@@ -4,7 +4,7 @@
 #include <PktMgr/PktMgr.hpp>
 
 ///
-/// Bridge between Controls::InputEvents and a software control surface (KickEM simulator, SIM_BUILD).
+/// Bridge between Controls::InputEvents and a software control surface (Kickray simulator, SIM_BUILD).
 ///
 /// Both directions use the same CPktMgr::HWMsg_t packets that travel over the serial link
 /// to/from the front-panel MCU, so the rest of the application cannot tell the difference.

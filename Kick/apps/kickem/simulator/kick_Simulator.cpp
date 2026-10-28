@@ -1230,13 +1230,13 @@ namespace sim
     {
         // KICKEM_SELFTEST=makedemo: the factory demos ship without sequences or samples, so PLAY does
         // nothing. This builds a playable project from scratch: a drum kit synthesized here (no
-        // third-party samples), a 2-bar groove on pads 1-8 of bank A, saved as "KickEM Groove".
+        // third-party samples), a 2-bar groove on pads 1-8 of bank A, saved as "Kickray Groove".
         auto& s    = selfTestSteps;
         auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
         auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
 
-        static const juce::String projectName = "KickEM Groove";
-        static const juce::String kitName     = "KickEM Community Kit";
+        static const juce::String projectName = "Kickray Groove";
+        static const juce::String kitName     = "Kickray Community Kit";
         static const char*        sounds[]    = { "Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "High Tom", "Rim" };
         auto projectDir = []() { return getAppDirs( MTProjects ).getChildFile( projectName ); };
         auto kitDir     = []() { return getAppDirs( MTSamples ).getChildFile( kitName ); };

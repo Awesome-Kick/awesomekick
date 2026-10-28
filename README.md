@@ -132,19 +132,19 @@ the panel. The look is our own – no manufacturer logo or branding; the bezel s
 | `KICKEM_DATA_DIR=<dir>` | where `assets/`, `demos/`, `templates/` are |
 | `KICKEM_SANDBOX_QUIET=1` | don't log blocked system commands |
 | `KICKEM_SELFTEST=1` | drive every panel control once (more: `tour`, `record`, `modular`, …) |
-| `KICKEM_SELFTEST=makedemo` | create the playable demo project "KickEM Groove" and quit |
+| `KICKEM_SELFTEST=makedemo` | create the playable demo project "Kickray Groove" and quit |
 
 ## Known limitations
 - The factory samples were removed from the public release, so the bundled demos and templates
-  are empty (no sequence – PLAY does nothing there). For a playable demo, create **KickEM Groove**
+  are empty (no sequence – PLAY does nothing there). For a playable demo, create **Kickray Groove**
   (own synthesized drum kit, 2-bar groove) once:
 
   ```bash
   cd Kick/build/sim/apps/kickem/KT_KickEM_artefacts/Release && KICKEM_SELFTEST=makedemo ./KT_KickEM
   ```
 
-  It quits by itself. Open it via the folder icon on the screen → Internal → `KickEM Groove` →
-  double-click `KickEM Groove.kickPrj`, then press PLAY.
+  It quits by itself. Open it via the folder icon on the screen → Internal → `Kickray Groove` →
+  double-click `Kickray Groove.kickPrj`, then press PLAY.
 - LINK LEDs and the camera on the panel are decoration only.
 - Only x86_64 Ubuntu has been tested so far.
 

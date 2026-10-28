@@ -9,7 +9,7 @@
  * In the simulator build every such call is intercepted at link time
  * (-Wl,--wrap=...). Nothing is executed except a small allow-list of
  * read-only queries used by the System Resources screen. Blocked calls are
- * logged to stderr with the prefix "[KickEM sandbox]".
+ * logged to stderr with the prefix "[Kickray sandbox]".
  *
  * Set KICKEM_SANDBOX_QUIET=1 to silence the log lines.
  *
@@ -38,7 +38,7 @@ namespace
     void logBlocked( const char* what, const char* cmd )
     {
         if( !quiet() )
-            std::fprintf( stderr, "[KickEM sandbox] blocked %s: %s\n", what, cmd ? cmd : "(null)" );
+            std::fprintf( stderr, "[Kickray sandbox] blocked %s: %s\n", what, cmd ? cmd : "(null)" );
     }
 
     // Read-only commands the simulator may run. A command is allowed only if

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
-## KickEM - software simulator of the KICK front panel with the real Kick UI embedded.
+## Kickray - software simulator of the KICK front panel with the real Kick UI embedded.
 ## Enabled with -DKICK_SIMULATOR=ON (see apps/CMakeLists.txt).
 
 ## Share the version of the main application...

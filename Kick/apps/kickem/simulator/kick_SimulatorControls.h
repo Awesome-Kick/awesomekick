@@ -7,7 +7,7 @@
 #include <contracts/dcl/dcl_contracts.h>
 
 ///
-/// Code-drawn front-panel controls for the KickEM simulator.
+/// Code-drawn front-panel controls for the Kickray simulator.
 /// Every interaction is turned into the CPktMgr::HWMsg_t the front-panel MCU would send
 /// (layouts as read by contracts::DclContractsHelper) and injected via SimulatorInterfaceImpl.
 ///
