@@ -47,9 +47,13 @@ namespace kick_ui
             back.setToggleState( false, juce::dontSendNotification );
         };
 
+#if defined( SIM_BUILD ) && SIM_BUILD
+        MetronomeToggle::attach( metronome );
+#else
         metronome.onClick = [&]() {
             MetronomePopup::Instance().Show();
         };
+#endif
 
         automation.onClick = [&] {
         };
@@ -301,6 +305,47 @@ namespace kick_ui
     //MetronomePopup
     //////////////////////////////////////
     // Static Methods
+#if defined( SIM_BUILD ) && SIM_BUILD
+    namespace
+    {
+        // Keeps every attached icon lit while the click is on.
+        struct MetronomeIcons : private juce::Timer
+        {
+            std::vector<juce::Component::SafePointer<juce::Button>> icons;
+            MetronomeIcons() { startTimerHz( 4 ); }
+            void timerCallback() override
+            {
+                const bool on = mt::getSettings().metronome.enabled();
+                icons.erase( std::remove_if( icons.begin(), icons.end(), []( auto& b ) { return b == nullptr; } ), icons.end() );
+                for( auto& b : icons )
+                    if( b->getToggleState() != on )
+                        b->setToggleState( on, juce::dontSendNotification );
+            }
+            static MetronomeIcons& get()
+            {
+                static MetronomeIcons instance;
+                return instance;
+            }
+        };
+    }
+
+    void MetronomeToggle::attach( juce::Button& Icon )
+    {
+        Icon.setClickingTogglesState( false ); // the click handler sets the state from the setting
+        Icon.setToggleable( true );            // ... and the icon shows it (lit while on)
+        Icon.setTooltip( TRANS( "Click on / off (options: Settings -> Metronome)" ) );
+        Icon.onClick = [&Icon] {
+            auto& enabled = mt::getSettings().metronome.enabled;
+            enabled       = !enabled();
+            Icon.setToggleState( enabled(), juce::dontSendNotification );
+        };
+        Icon.setToggleState( mt::getSettings().metronome.enabled(), juce::dontSendNotification );
+        MetronomeIcons::get().icons.emplace_back( &Icon );
+    }
+
+    void MetronomeToggle::showOptions() { MetronomePopup::Show(); }
+#endif
+
     void MetronomePopup::Show()
     {
         auto& metronomeInstance = MetronomePopup::Instance();

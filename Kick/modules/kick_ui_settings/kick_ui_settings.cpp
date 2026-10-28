@@ -117,6 +117,17 @@ namespace kick_ui
             ++idx;
         }
         selectors[0].setToggleState( true, juce::sendNotification );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        metronomeOptions.setName( "Metronome" );
+        metronomeOptions.setTitle( "Metronome" );
+        metronomeOptions.setToggleButtonText( "Metronome", "Metronome" );
+        metronomeOptions.setTooltip( TRANS( "Click options: level, mode, count-in, rate, sound" ) );
+        mt::utils::addChildComponents( this, metronomeOptions );
+        metronomeOptions.onClick = [this] {
+            metronomeOptions.setToggleState( false, juce::dontSendNotification );
+            MetronomeToggle::showOptions();
+        };
+#endif
 
         header.onBackButtonPressed = [&]( bool ) { closeScreen(); };
 
@@ -165,12 +176,19 @@ namespace kick_ui
         header.setBounds( b.removeFromTop( ui::layout::header.getHeight() ) );
         // Set selector bounds
         b               = b.reduced( 5, 0 );
-        auto bw         = b.getWidth() / (int)selectors.size();
+        auto numButtons = (int)selectors.size();
+#if defined( SIM_BUILD ) && SIM_BUILD
+        ++numButtons; // + Metronome
+#endif
+        auto bw         = b.getWidth() / numButtons;
         auto bSelectors = b.removeFromTop( 64 );
         for( auto i = 0; i < selectors.size(); ++i )
         {
             selectors[i].setBounds( bSelectors.removeFromLeft( bw ).reduced( 5, 10 ) );
         }
+#if defined( SIM_BUILD ) && SIM_BUILD
+        metronomeOptions.setBounds( bSelectors.removeFromLeft( bw ).reduced( 5, 10 ) );
+#endif
         // Set view bounds
         bCont = b.reduced( 5, 0 );
         for( const auto& it : pViews )

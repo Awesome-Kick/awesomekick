@@ -120,10 +120,105 @@ namespace sim
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_TRACE_MOUSE", {} ).isNotEmpty() )
             juce::Desktop::getInstance().addGlobalMouseListener( &mouseTrace );
 
+        setupTooltips();
+
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty() )
             startSelfTest();
         else
             installBundledContent();
+    }
+
+    juce::String SimulatorBoard::Tooltips::getTipFor( juce::Component& c )
+    {
+        for( auto* p = &c; p != nullptr; p = p->getParentComponent() )
+            if( auto it = tips.find( p ); it != tips.end() )
+                return it->second;
+        auto tip = juce::TooltipWindow::getTipFor( c );
+        if( tip.isEmpty() )
+            if( auto* b = dynamic_cast<juce::Button*>( &c ) )
+                if( b->getButtonText().isEmpty() && !b->getName().containsChar( '_' ) )
+                    tip = b->getName(); // icon buttons; their text, if any, is already on screen
+        return tip;
+    }
+
+    juce::TextLayout SimulatorBoard::Tooltips::Look::layout( const juce::String& text, juce::Colour colour ) const
+    {
+        juce::AttributedString s;
+        s.setJustification( juce::Justification::centredLeft );
+        s.append( text, juce::Font( 22.0f ), colour );
+        juce::TextLayout tl;
+        tl.createLayoutWithBalancedLineLengths( s, 560.0f );
+        return tl;
+    }
+
+    juce::Rectangle<int> SimulatorBoard::Tooltips::Look::getTooltipBounds( const juce::String& text, juce::Point<int> pos, juce::Rectangle<int> parent )
+    {
+        const auto tl = layout( text, juce::Colours::white );
+        const int  w = (int)( tl.getWidth() + 24.0f ), h = (int)( tl.getHeight() + 16.0f );
+        return juce::Rectangle<int>( pos.x > parent.getCentreX() ? pos.x - ( w + 12 ) : pos.x + 24,
+                                     pos.y > parent.getCentreY() ? pos.y - ( h + 12 ) : pos.y + 24, w, h )
+            .constrainedWithin( parent );
+    }
+
+    void SimulatorBoard::Tooltips::Look::drawTooltip( juce::Graphics& g, const juce::String& text, int w, int h )
+    {
+        const auto r = juce::Rectangle<float>( (float)w, (float)h );
+        g.setColour( juce::Colour( 0xf0101012 ) );
+        g.fillRoundedRectangle( r, 6.0f );
+        g.setColour( juce::Colour( 0xff5a5a60 ) );
+        g.drawRoundedRectangle( r.reduced( 0.5f ), 6.0f, 1.0f );
+        layout( text, juce::Colour( 0xffe8e8ea ) ).draw( g, r.reduced( 12.0f, 8.0f ) );
+    }
+
+    void SimulatorBoard::setupTooltips()
+    {
+        static const std::map<int, const char*> what {
+            { DCC::EN_BANK_A, "Pad bank A" }, { DCC::EN_BANK_B, "Pad bank B" }, { DCC::EN_BANK_C, "Pad bank C" }, { DCC::EN_BANK_D, "Pad bank D" },
+            { DCC::EN_BANK_E, "Pad bank E" }, { DCC::EN_BANK_F, "Pad bank F" }, { DCC::EN_BANK_G, "Pad bank G" }, { DCC::EN_BANK_H, "Pad bank H" },
+            { DCC::EN_MAINMODE, "Main screen: sequences, tracks, programs" }, { DCC::EN_GRID, "Grid: piano-roll note editor" },
+            { DCC::EN_BROWSE, "File browser: projects, samples, demos" }, { DCC::EN_SAVE, "Save the project" },
+            { DCC::EN_TRACK_MIX, "Track mixer" }, { DCC::EN_PAD_MIX, "Pad mixer" }, { DCC::EN_TRACK_MUTE, "Mute tracks" },
+            { DCC::EN_PAD_MUTE, "Mute pads" }, { DCC::EN_NEXT_SEQ, "Next sequence: queue sequences live" }, { DCC::EN_FX, "XY effects pad" },
+            { DCC::EN_TAP_TEMPO, "Tap the tempo" }, { DCC::EN_MASTER, "Master tempo / length" },
+            { DCC::EN_NOTE_REPEAT, "Note repeat (hold, then play pads)" }, { DCC::EN_LATCH, "Latch note repeat" },
+            { DCC::EN_STEP_SEQ, "Step sequencer" }, { DCC::EN_AUTOMATION, "Automation: record knob moves" },
+            { DCC::EN_TC, "Timing correct: quantize on" }, { DCC::EN_ON_OFF, "Timing correct on / off" },
+            { DCC::EN_SAMPLER, "Sampler: record a sample" }, { DCC::EN_LOOPER, "Looper" },
+            { DCC::EN_SAMPLE_EDIT, "Sample editor: trim, slice" }, { DCC::EN_LINK_EDIT, "Q-link edit: assign P1-P4" },
+            { DCC::EN_PROG_EDIT, "Program editor: sound of the pads" }, { DCC::EN_MIDI_CONTROL, "MIDI control" },
+            { DCC::EN_MENU, "Menu" }, { DCC::EN_PREF, "Preferences / settings" },
+            { DCC::EN_BACK, "Undo / back" }, { DCC::EN_COPY, "Copy" }, { DCC::EN_MINUS, "Previous / decrease" }, { DCC::EN_PLUS, "Next / increase" },
+            { DCC::EN_SHIFT, "SHIFT: click once, then a key for its second function (printed below the key)" },
+            { DCC::EN_RECORD, "Record" }, { DCC::EN_OVERDUB, "Overdub: record on top" }, { DCC::EN_STOP, "Stop" },
+            { DCC::EN_PLAY, "Play / continue (space bar: play / stop)" }, { DCC::EN_PLAYSTART, "Play from the start" },
+            { DCC::EN_LINK, "LINK: Ableton Link sync" }, { DCC::EN_FULL_LEVEL, "Full level: pads always at maximum velocity" },
+            { DCC::EN_HALF_LEVEL, "Half level: pads at half velocity" }, { DCC::EN_16LEVELS, "16 levels: one sound on 16 pads in steps" },
+            { DCC::EN_NOTES, "Notes: play the pads as a keyboard" }, { DCC::EN_ERASE, "Erase: hold and hit a pad to delete its notes" },
+        };
+        auto describe = [&]( int code ) -> juce::String {
+            auto it = what.find( code );
+            return it != what.end() ? juce::String( it->second ) : juce::String();
+        };
+
+        std::vector<SimButton*> buttons { &fullLevelBtn, &levels16Btn, &eraseBtn, &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn };
+        mainControl.collectButtons( buttons );
+        for( auto* b : buttons )
+        {
+            auto tip = describe( b->getCode() );
+            if( auto shift = describe( b->getShiftCode() ); shift.isNotEmpty() )
+                tip << "\nSHIFT: " << shift;
+            if( tip.isNotEmpty() )
+                tooltips.tips[b] = tip;
+        }
+        tooltips.tips[&masterKnob] = "MASTER: output level (drag or mouse wheel)";
+        tooltips.tips[&recKnob]    = "REC: recording input gain for sampling";
+        for( int i = 0; i < 4; ++i )
+            tooltips.tips[qlinks[(size_t)i].get()] = "P" + juce::String( i + 1 ) + ": edits the value the screen shows in position " + juce::String( i + 1 )
+                                                      + " (drag or mouse wheel)";
+        tooltips.tips[&mainControl.getJog()] = "Jog wheel: scroll / change the selected value (drag or mouse wheel); click the centre for ENTER";
+        tooltips.tips[&slider]               = "Touch strip: pitch / modulation, depends on the screen (drag)";
+        for( int i = 0; i < 16; ++i )
+            tooltips.tips[&pads.getPad( i )] = "Pad " + juce::String( i + 1 ) + ": click to play (higher = louder); drag up while holding for pressure";
     }
 
     void SimulatorBoard::togglePlayStop()

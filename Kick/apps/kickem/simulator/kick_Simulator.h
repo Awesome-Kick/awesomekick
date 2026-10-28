@@ -80,6 +80,25 @@ namespace sim
         juce::Component& screen;
 
         // Left column
+        /// Tooltips: the panel's own texts (tips), then a component's own tooltip, then the name of an
+        /// icon button of the firmware UI (most have one, e.g. "Metronome").
+        struct Tooltips : juce::TooltipWindow
+        {
+            /// Larger, panel-coloured tooltips (the default font is tiny once the board is scaled down).
+            struct Look : juce::LookAndFeel_V4
+            {
+                juce::TextLayout layout( const juce::String& text, juce::Colour colour ) const;
+                juce::Rectangle<int> getTooltipBounds( const juce::String& text, juce::Point<int> pos, juce::Rectangle<int> parent ) override;
+                void drawTooltip( juce::Graphics& g, const juce::String& text, int w, int h ) override;
+            } look;
+            Tooltips( juce::Component* parent ) : juce::TooltipWindow( parent, 600 ) { setLookAndFeel( &look ); }
+            ~Tooltips() override { setLookAndFeel( nullptr ); }
+            juce::String getTipFor( juce::Component& c ) override;
+            std::map<const juce::Component*, juce::String> tips;
+        };
+        Tooltips tooltips { this };
+        void setupTooltips();
+
         SimTouchSlider slider;
         SimKnob        masterKnob { "MASTER", SimKnob::Mode::absolute };
         SimKnob        recKnob { "REC", SimKnob::Mode::absolute };

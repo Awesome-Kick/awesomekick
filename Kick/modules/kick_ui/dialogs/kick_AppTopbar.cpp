@@ -95,7 +95,20 @@ namespace kick_ui
         newFileButton.onClick    = []() { signals::sigScreenClose( Screen::RecentProject ); };
         axisButton.onClick       = []() { signals::sigScreenClose( Screen::HomeXYView ); };
 
+#if defined( SIM_BUILD ) && SIM_BUILD
+        menuButton.setTooltip( TRANS( "Menu" ) );
+        mainModeButton.setTooltip( TRANS( "Main screen" ) );
+        gridButton.setTooltip( TRANS( "Grid: note editor" ) );
+        stepSeqButton.setTooltip( TRANS( "Step sequencer" ) );
+        axisButton.setTooltip( TRANS( "XY effects" ) );
+        kickPlayButton.setTooltip( TRANS( "Play / pause" ) );
+        kickBrowseButton.setTooltip( TRANS( "File browser" ) );
+        newFileButton.setTooltip( TRANS( "Projects: demos, kit templates, recent projects" ) );
+        settingsButton.setTooltip( TRANS( "Settings" ) );
+        MetronomeToggle::attach( metronomeButton );
+#else
         metronomeButton.onClick = []() { MetronomePopup::Instance().Show(); };
+#endif
     }
 
     void AppTopbar::resized()

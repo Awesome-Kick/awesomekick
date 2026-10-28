@@ -87,6 +87,16 @@ namespace kick_ui
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( KickModeHeader )
     };
 
+#if defined( SIM_BUILD ) && SIM_BUILD
+    /// Simulator: a metronome icon switches the click on and off (lit while on); its options live in
+    /// Settings -> Metronome. All attached icons follow the setting, also when it changes in the dialog.
+    struct MetronomeToggle
+    {
+        static void attach( juce::Button& Icon );
+        static void showOptions(); // the former click dialog (level, mode, count-in, rate, style)
+    };
+#endif
+
     class MetronomePopup : public juce::Component
     {
     public:

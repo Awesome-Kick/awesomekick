@@ -82,6 +82,9 @@ namespace kick_ui
         std::array<juce::String, 8>                     selectorStrings{ "Info", "Project Defaults", "Hardware", "Audio", "MIDI", "CV", "Ethernet", "WiFi" };
         std::array<ui::KickToggleButton, 8>             selectors;
         std::vector<std::unique_ptr<SettingsInterface>> pViews;
+#if defined( SIM_BUILD ) && SIM_BUILD
+        ui::KickToggleButton metronomeOptions; // opens the click options (the metronome icons only switch it on/off)
+#endif
         SettingsInterface*                              pView{ nullptr };
 
         void showView( int Index );
