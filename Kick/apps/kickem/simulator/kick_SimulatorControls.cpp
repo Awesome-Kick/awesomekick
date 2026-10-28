@@ -528,7 +528,15 @@ namespace sim
 
     void SimKnob::mouseWheelMove( const juce::MouseEvent&, const juce::MouseWheelDetails& w )
     {
-        wheelAccum += ( w.isReversed ? -w.deltaY : w.deltaY ) / 0.11; // ~0.11 per notch on Windows
+        const auto delta = w.isReversed ? -w.deltaY : w.deltaY;
+        if( !w.isSmooth && delta != 0.0f )
+        {
+            // A mouse wheel notch is exactly one encoder step. Its deltaY differs per system
+            // (~0.11 Windows, ~0.2 Linux), so scaling it gave 1 or 2 steps per notch.
+            rotateBy( ( delta > 0.0f ? 1 : -1 ) * degreesPerStep );
+            return;
+        }
+        wheelAccum += delta / 0.11; // trackpads: smooth scrolling, ~0.11 per step
         int notches = (int)wheelAccum;
         if( notches != 0 )
         {
