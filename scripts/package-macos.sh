@@ -3,7 +3,7 @@
 #
 #   bash scripts/package-macos.sh [build dir]     (default: Kick/build/sim)
 #
-# Puts assets/, demos/ and templates/ into Kickray.app/Contents/Resources (see kick_paths.cpp),
+# Puts assets/, demos/, templates/ and content/ into Kickray.app/Contents/Resources (see kick_paths.cpp),
 # names the app "Kickray" in Finder and signs it ad hoc: Apple Silicon refuses to start an app
 # whose contents changed after linking ("damaged"). The app is not notarized – see README.
 set -euo pipefail
@@ -19,7 +19,7 @@ mkdir -p "$DIST"
 cp -R "$APP_SRC" "$DIST/Kickray.app"
 RES="$DIST/Kickray.app/Contents/Resources"
 mkdir -p "$RES"
-for d in assets demos templates; do
+for d in assets demos templates content; do
   rm -rf "$RES/$d"
   cp -R "$REPO_DIR/Kick/$d" "$RES/$d"
 done

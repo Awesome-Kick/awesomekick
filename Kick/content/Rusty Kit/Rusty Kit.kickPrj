@@ -1,0 +1,429 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<ROOT name="gg" manufacturer="Musictribe" version="0.1" bpm="120.0"
+      length="4" num="4" den="4" isMasterBPM="1">
+  <BUSES>
+    <BUS name="Out-1">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Out-1,2">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Out-2">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Return-1">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Return-2">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Return-3">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Return-4">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Submix-1">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Submix-2">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Submix-3">
+      <INSERTS/>
+    </BUS>
+    <BUS name="Submix-4">
+      <INSERTS/>
+    </BUS>
+  </BUSES>
+  <FILEMANAGER id="AMowy9q0">
+    <ASSETS>
+      <FILE id="Nrws3Flm" path="@PROJECT_DIR@/Samples/01 Kick.wav">
+        <SLICE id="B8nfyuiu" loopStart="0" loopEnd="38112"/>
+      </FILE>
+      <FILE id="GFS2FiUp" path="@PROJECT_DIR@/Samples/02 Snare.wav">
+        <SLICE id="fCl8PgOP" loopStart="0" loopEnd="35752"/>
+      </FILE>
+      <FILE id="Kcx1E020" path="@PROJECT_DIR@/Samples/03 Rimshot.wav">
+        <SLICE id="YZzIR6qI" loopStart="0" loopEnd="42877"/>
+      </FILE>
+      <FILE id="ya9QK9JL" path="@PROJECT_DIR@/Samples/04 Sidestick.wav">
+        <SLICE id="pTwTyMTP" loopStart="0" loopEnd="41425"/>
+      </FILE>
+      <FILE id="EEz1u2OX" path="@PROJECT_DIR@/Samples/05 Hihat Closed.wav">
+        <SLICE id="I6YkOj5j" loopStart="0" loopEnd="35039"/>
+      </FILE>
+      <FILE id="i64zlflW" path="@PROJECT_DIR@/Samples/06 Hihat Pedal.wav">
+        <SLICE id="IMk8fAL9" loopStart="0" loopEnd="28812"/>
+      </FILE>
+      <FILE id="Uk5HMSy1" path="@PROJECT_DIR@/Samples/07 Hihat Open.wav">
+        <SLICE id="OoFJprMw" loopStart="0" loopEnd="220500"/>
+      </FILE>
+      <FILE id="x59Vzn8c" path="@PROJECT_DIR@/Samples/08 Ride.wav">
+        <SLICE id="IfNRLnoi" loopStart="0" loopEnd="220500"/>
+      </FILE>
+      <FILE id="Gs821qIm" path="@PROJECT_DIR@/Samples/09 Tom High.wav">
+        <SLICE id="hzNXD6aX" loopStart="0" loopEnd="73657"/>
+      </FILE>
+      <FILE id="zXTPBgWx" path="@PROJECT_DIR@/Samples/10 Tom Mid.wav">
+        <SLICE id="LvikJYHe" loopStart="0" loopEnd="68296"/>
+      </FILE>
+      <FILE id="Q5Om5cOR" path="@PROJECT_DIR@/Samples/11 Tom Low.wav">
+        <SLICE id="LswQhHpi" loopStart="0" loopEnd="63629"/>
+      </FILE>
+      <FILE id="mQi8wA8U" path="@PROJECT_DIR@/Samples/12 Floor Tom.wav">
+        <SLICE id="AK8SwENL" loopStart="0" loopEnd="105077"/>
+      </FILE>
+      <FILE id="L5OnVHsh" path="@PROJECT_DIR@/Samples/13 Ride Bell.wav">
+        <SLICE id="fb216fZe" loopStart="0" loopEnd="220500"/>
+      </FILE>
+      <FILE id="cfG6ZXUh" path="@PROJECT_DIR@/Samples/14 Crash.wav">
+        <SLICE id="qj7Xg3dy" loopStart="0" loopEnd="220500"/>
+      </FILE>
+      <FILE id="wVF9qwpF" path="@PROJECT_DIR@/Samples/15 Stack.wav">
+        <SLICE id="wg2qbinF" loopStart="0" loopEnd="55530"/>
+      </FILE>
+      <FILE id="yC4EvVDL" path="@PROJECT_DIR@/Samples/16 Snare Edge.wav">
+        <SLICE id="jPyzQiMJ" loopStart="0" loopEnd="42080"/>
+      </FILE>
+    </ASSETS>
+    <AUDIO/>
+    <EXPORTS/>
+  </FILEMANAGER>
+  <Project version="1.0.0"/>
+  <LOOPER>
+    <INSERTS/>
+    <SAMPLER/>
+  </LOOPER>
+  <SAMPLER/>
+  <TEMPOS>
+    <TEMPO bpm="96.0"/>
+  </TEMPOS>
+  <PROGRAMS>
+    <PROGRAM name="Rusty Kit" type="0" id="JDyrPKtd">
+      <COLOURS/>
+      <PERFORMANCE/>
+      <SEND/>
+      <CLIPS>
+        <CLIP minNote="0" maxNote="0" keyNote="0">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/01 Kick.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="1" maxNote="1" keyNote="1">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/02 Snare.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="2" maxNote="2" keyNote="2">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/03 Rimshot.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="3" maxNote="3" keyNote="3">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/04 Sidestick.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="4" maxNote="4" keyNote="4">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/05 Hihat Closed.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="5" maxNote="5" keyNote="5">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/06 Hihat Pedal.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="6" maxNote="6" keyNote="6">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/07 Hihat Open.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="7" maxNote="7" keyNote="7">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/08 Ride.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="8" maxNote="8" keyNote="8">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/09 Tom High.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="9" maxNote="9" keyNote="9">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/10 Tom Mid.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="10" maxNote="10" keyNote="10">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/11 Tom Low.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="11" maxNote="11" keyNote="11">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/12 Floor Tom.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="12" maxNote="12" keyNote="12">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/13 Ride Bell.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="13" maxNote="13" keyNote="13">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/14 Crash.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="14" maxNote="14" keyNote="14">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/15 Stack.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+        <CLIP minNote="15" maxNote="15" keyNote="15">
+          <SPLAY/>
+          <SMUTE/>
+          <LAYERS>
+            <LAYER source="@PROJECT_DIR@/Samples/16 Snare Edge.wav"
+                   slice="0"/>
+            <LAYER/>
+            <LAYER/>
+            <LAYER/>
+          </LAYERS>
+          <LFO/>
+          <PITCHENV/>
+          <FILTERENV/>
+          <AMPENV/>
+        </CLIP>
+      </CLIPS>
+      <INSERTS/>
+    </PROGRAM>
+  </PROGRAMS>
+  <SONGS/>
+  <SEQUENCES>
+    <SEQUENCE name="Groove" id="jcJYQaVT" length="2" loopEnd="2" loop="1">
+      <TEMPOS>
+        <TEMPO/>
+      </TEMPOS>
+      <TRACK name="Drums" id="kDOXKusE" program="JDyrPKtd">
+        <NOTELIST>
+          <NOTE id="1" no="0" velocity="127" start="0" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="32" no="13" velocity="127" start="0" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="13" no="4" velocity="100" start="0" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="14" no="4" velocity="70" start="48" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="7" no="1" velocity="127" start="96" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="15" no="4" velocity="100" start="96" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="16" no="4" velocity="70" start="144" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="17" no="4" velocity="100" start="192" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="2" no="0" velocity="100" start="192" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="18" no="4" velocity="70" start="240" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="3" no="0" velocity="100" start="240" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="19" no="4" velocity="100" start="288" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="8" no="1" velocity="127" start="288" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="20" no="4" velocity="70" start="336" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="9" no="1" velocity="70" start="360" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="21" no="4" velocity="100" start="384" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="4" no="0" velocity="127" start="384" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="22" no="4" velocity="70" start="432" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="23" no="4" velocity="100" start="480" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="10" no="1" velocity="127" start="480" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="24" no="4" velocity="70" start="528" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="11" no="1" velocity="70" start="552" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="5" no="0" velocity="100" start="576" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="25" no="4" velocity="100" start="576" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="6" no="0" velocity="100" start="624" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="27" no="6" velocity="100" start="624" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="12" no="1" velocity="100" start="648" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="26" no="5" velocity="70" start="672" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="28" no="8" velocity="100" start="672" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="29" no="9" velocity="100" start="696" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="30" no="10" velocity="100" start="720" length="12" probability="100"
+                ratchet="1"/>
+          <NOTE id="31" no="11" velocity="127" start="744" length="12" probability="100"
+                ratchet="1"/>
+        </NOTELIST>
+      </TRACK>
+    </SEQUENCE>
+  </SEQUENCES>
+</ROOT>

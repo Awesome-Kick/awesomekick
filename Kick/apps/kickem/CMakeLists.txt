@@ -19,9 +19,9 @@ set(TargetVersion  ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_V
 
 project(${TargetName} VERSION ${TargetVersion})
 
-## Runtime data (assets/templates/demos) is looked up next to the executable
+## Runtime data (assets/templates/demos/content) is looked up next to the executable
 ## (see modules/common/source/kick_paths.cpp). apps/kick normally copies them already.
-foreach(dataDir assets templates demos)
+foreach(dataDir assets templates demos content)
     if(NOT EXISTS "${CMAKE_BINARY_DIR}/${dataDir}")
         file(COPY "${CMAKE_SOURCE_DIR}/${dataDir}" DESTINATION "${CMAKE_BINARY_DIR}")
     endif()

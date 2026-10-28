@@ -108,6 +108,54 @@ namespace sim
 
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty() )
             startSelfTest();
+        else
+            installBundledContent();
+    }
+
+    // The playable demo projects in <data>/content (Kick/content in the source tree) carry "@PROJECT_DIR@"
+    // instead of their own folder in the sample paths, because the engine stores absolute paths. Copy each one
+    // the user has not received yet into the projects folder and fill in the real path. On the very first start,
+    // open "Kickray Groove" so that PLAY sounds right away. Deleted demos are not installed again
+    // (prefs/installed-content.txt remembers them).
+    void SimulatorBoard::installBundledContent()
+    {
+        const auto content = getAppDirs( MTDemos ).getParentDirectory().getChildFile( "content" );
+        if( !content.isDirectory() )
+            return;
+        auto              marker = getAppDirs( MTPrefs ).getChildFile( "installed-content.txt" );
+        juce::StringArray installed;
+        installed.addLines( marker.loadFileAsString() );
+        installed.removeEmptyStrings();
+        const bool firstStart = installed.isEmpty();
+        auto       xmlEscape  = []( juce::String t ) {
+            return t.replace( "&", "&amp;" ).replace( "\"", "&quot;" ).replace( "<", "&lt;" ).replace( ">", "&gt;" );
+        };
+
+        juce::File openFirst;
+        for( const auto& src : content.findChildFiles( juce::File::findDirectories, false ) )
+        {
+            const auto name = src.getFileName();
+            if( installed.contains( name ) )
+                continue;
+            auto dest = getAppDirs( MTProjects ).getChildFile( name );
+            if( !dest.exists() )
+            {
+                auto prj = dest.getChildFile( name + mt::__projectFileSuffix );
+                if( !src.copyDirectoryTo( dest )
+                    || !prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", xmlEscape( dest.getFullPathName() ) ) ) )
+                {
+                    SimulatorInterfaceImpl::log( "content: could not install " + name );
+                    continue;
+                }
+                SimulatorInterfaceImpl::log( "content: installed " + dest.getFullPathName() );
+            }
+            installed.add( name );
+            if( firstStart && name == "Kickray Groove" )
+                openFirst = dest;
+        }
+        marker.replaceWithText( installed.joinIntoString( "\n" ) );
+        if( openFirst != juce::File() )
+            juce::Timer::callAfterDelay( 2500, [openFirst] { ui::LoadProjectAndAnimation::getInstance().startLoading( openFirst ); } );
     }
 
     SimButton* SimulatorBoard::findButton( int code )
@@ -1226,146 +1274,191 @@ namespace sim
         startTimer( 400 );
     }
 
+    // Writes the electronic "Kickray Groove" kit: 8 drum sounds synthesized here (no third-party samples).
+    static bool writeSynthKit( const juce::File& dir )
+    {
+        static const char* sounds[] = { "Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "High Tom", "Rim" };
+        dir.createDirectory();
+        // Synthesize the kit: 44.1 kHz, mono, 16 bit. Fixed seed, so every run gives the same sounds.
+        constexpr double sr = 44100.0;
+        juce::Random     rnd( 0x4b69636b );
+        auto envelope = []( double t, double decay ) { return std::exp( -t / decay ); };
+        auto render   = [&]( int sound ) {
+            const int                 len = (int)( sr * ( sound == 0 ? 0.6 : sound == 4 ? 0.5 : 0.35 ) );
+            juce::AudioBuffer<float>  buf( 1, len );
+            double                    phase = 0.0, hp = 0.0, lastNoise = 0.0;
+            for( int i = 0; i < len; ++i )
+            {
+                const double t     = i / sr;
+                const double noise = rnd.nextDouble() * 2.0 - 1.0;
+                hp                 = 0.85 * ( hp + noise - lastNoise ); // one-pole high-pass for hats/claps
+                lastNoise          = noise;
+                double v           = 0.0;
+                auto   sweep       = [&]( double f0, double f1, double tau ) {
+                    phase += juce::MathConstants<double>::twoPi * ( f1 + ( f0 - f1 ) * std::exp( -t / tau ) ) / sr;
+                    return std::sin( phase );
+                };
+                switch( sound )
+                {
+                    case 0: v = sweep( 160.0, 45.0, 0.04 ) * envelope( t, 0.25 ) + noise * envelope( t, 0.003 ) * 0.3; break;
+                    case 1: v = sweep( 220.0, 180.0, 0.02 ) * envelope( t, 0.06 ) * 0.6 + hp * envelope( t, 0.12 ) * 0.7; break;
+                    case 2:
+                    {
+                        const double burst = std::fmod( t, 0.011 ) < 0.004 && t < 0.035 ? 1.0 : 0.0;
+                        v                  = hp * ( t < 0.035 ? burst : envelope( t - 0.035, 0.08 ) ) * 0.9;
+                        break;
+                    }
+                    case 3: v = hp * envelope( t, 0.035 ) * 0.6; break;
+                    case 4: v = hp * envelope( t, 0.25 ) * 0.5; break;
+                    case 5: v = sweep( 140.0, 90.0, 0.08 ) * envelope( t, 0.2 ) * 0.9; break;
+                    case 6: v = sweep( 230.0, 160.0, 0.06 ) * envelope( t, 0.16 ) * 0.9; break;
+                    case 7: v = ( sweep( 900.0, 800.0, 0.01 ) * 0.6 + hp * 0.4 ) * envelope( t, 0.015 ); break;
+                }
+                const double fade = juce::jmin( 1.0, ( len - i ) / ( sr * 0.005 ) ); // no click at the end
+                buf.setSample( 0, i, (float)( v * fade ) );
+            }
+            if( const auto peak = buf.getMagnitude( 0, len ); peak > 0.0f )
+                buf.applyGain( juce::Decibels::decibelsToGain( sound == 3 || sound == 4 ? -6.0f : -1.0f ) / peak ); // hats a bit quieter
+            return buf;
+        };
+        for( int i = 0; i < (int)std::size( sounds ); ++i )
+        {
+            auto file = dir.getChildFile( juce::String( i + 1 ).paddedLeft( '0', 2 ) + " " + sounds[i] + ".wav" );
+            file.deleteFile();
+            auto buf = render( i );
+            if( auto out = file.createOutputStream() )
+            {
+                std::unique_ptr<juce::OutputStream> stream( out.release() );
+                if( auto writer = std::unique_ptr<juce::AudioFormatWriter>( juce::WavAudioFormat().createWriterFor( stream.get(), sr, 1, 16, {}, 0 ) ) )
+                {
+                    stream.release(); // the writer owns it now
+                    writer->writeFromAudioSampleBuffer( buf, 0, buf.getNumSamples() );
+                }
+            }
+        }
+return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::size( sounds );
+    }
+
     void SimulatorBoard::startMakeDemo()
     {
-        // KICKEM_SELFTEST=makedemo: the factory demos ship without sequences or samples, so PLAY does
-        // nothing. This builds a playable project from scratch: a drum kit synthesized here (no
-        // third-party samples), a 2-bar groove on pads 1-8 of bank A, saved as "Kickray Groove".
+        // KICKEM_SELFTEST=makedemo builds the playable demo projects that ship in Kick/content (the factory demos
+        // have no sequences or samples, so PLAY does nothing there):
+        //   "Kickray Groove" - electronic kit synthesized here, 2-bar groove on pads 1-8
+        //   "Rusty Kit"      - 16 acoustic one-shots from KICKEM_MAKEDEMO_KIT (made by scripts/build-cc0-kit.py, CC0)
+        // Projects go to KICKEM_MAKEDEMO_OUT (default: the projects folder), their samples into <project>/Samples.
+        // Existing projects are left alone. Then the app quits.
         auto& s    = selfTestSteps;
         auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SELFTEST " + text ); };
         auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
 
-        static const juce::String projectName = "Kickray Groove";
-        static const juce::String kitName     = "Kickray Community Kit";
-        static const char*        sounds[]    = { "Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "High Tom", "Rim" };
-        auto projectDir = []() { return getAppDirs( MTProjects ).getChildFile( projectName ); };
-        auto kitDir     = []() { return getAppDirs( MTSamples ).getChildFile( kitName ); };
+        const auto outEnv = juce::SystemStats::getEnvironmentVariable( "KICKEM_MAKEDEMO_OUT", {} );
+        const auto kitEnv = juce::SystemStats::getEnvironmentVariable( "KICKEM_MAKEDEMO_KIT", {} );
+        const auto outDir = outEnv.isNotEmpty() ? juce::File( outEnv ) : getAppDirs( MTProjects );
+
+        struct Demo
+        {
+            juce::String                                    name, program;
+            int                                             bpm;
+            std::vector<std::pair<int, const char*>>        pattern; // pad (0-15) -> 32 steps: 'X' accent, 'x' normal, 'o' soft
+            std::function<bool( const juce::File& )>        writeSamples;
+        };
+        std::vector<Demo> demos;
+        demos.push_back( { "Kickray Groove", "Community Kit", 104,
+                           { { 0, "X.....x.X.x.....X......xX.....x." },   // Kick
+                             { 1, "....X.......X.......X.......X..o" },   // Snare
+                             { 2, "............................x.x." },   // Clap
+                             { 3, "x.o.x.o.x.o.x...x.o.x...x.o.x.o." },   // Closed Hat
+                             { 4, "..............x.......x........." },   // Open Hat
+                             { 5, "..........................x....." },   // Low Tom
+                             { 6, ".........................x......" },   // High Tom
+                             { 7, "...o.......o.......o............" } }, // Rim
+                           writeSynthKit } );
+        if( kitEnv.isNotEmpty() )
+            demos.push_back( { "Rusty Kit", "Rusty Kit", 96,
+                               { { 0, "X.......x.x.....X.......x.x....." },   // Kick
+                                 { 1, "....X.......X..o....X..o...x...." },   // Snare
+                                 { 4, "x.o.x.o.x.o.x.o.x.o.x.o.x......." },   // Hihat closed
+                                 { 5, "............................o..." },   // Hihat pedal
+                                 { 6, "..........................x....." },   // Hihat open
+                                 { 8, "............................x..." },   // Toms: fill at the end of bar 2
+                                 { 9, ".............................x.." },
+                                 { 10, "..............................x." },
+                                 { 11, "...............................X" },
+                                 { 13, "X..............................." } }, // Crash
+                               [kitEnv]( const juce::File& dir ) {
+                                   dir.createDirectory();
+                                   bool ok = true;
+                                   for( const auto& f : juce::File( kitEnv ).findChildFiles( juce::File::findFiles, false, "*.wav" ) )
+                                       ok = f.copyFileTo( dir.getChildFile( f.getFileName() ) ) && ok;
+                                   return ok && dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) > 0;
+                               } } );
+        else
+            log( "makedemo: KICKEM_MAKEDEMO_KIT not set, skipping \"Rusty Kit\"" );
 
         wait( 4 );
-        s.push_back( [log, projectDir, kitDir] {
-            if( projectDir().exists() )
-            {
-                log( "makedemo: " + projectDir().getFullPathName() + " already exists, nothing changed (delete it to rebuild)" );
-                return;
-            }
-            // Synthesize the kit: 44.1 kHz, mono, 16 bit. Fixed seed, so every run gives the same sounds.
-            constexpr double sr = 44100.0;
-            juce::Random     rnd( 0x4b69636b );
-            auto envelope = []( double t, double decay ) { return std::exp( -t / decay ); };
-            auto render   = [&]( int sound ) {
-                const int                 len = (int)( sr * ( sound == 0 ? 0.6 : sound == 4 ? 0.5 : 0.35 ) );
-                juce::AudioBuffer<float>  buf( 1, len );
-                double                    phase = 0.0, hp = 0.0, lastNoise = 0.0;
-                for( int i = 0; i < len; ++i )
+        for( const auto& demo : demos )
+        {
+            auto project = std::make_shared<juce::File>( outDir.getChildFile( demo.name ) );
+            auto build   = std::make_shared<bool>( false );
+            s.push_back( [log, demo, project, build] {
+                if( project->exists() )
                 {
-                    const double t     = i / sr;
-                    const double noise = rnd.nextDouble() * 2.0 - 1.0;
-                    hp                 = 0.85 * ( hp + noise - lastNoise ); // one-pole high-pass for hats/claps
-                    lastNoise          = noise;
-                    double v           = 0.0;
-                    auto   sweep       = [&]( double f0, double f1, double tau ) {
-                        phase += juce::MathConstants<double>::twoPi * ( f1 + ( f0 - f1 ) * std::exp( -t / tau ) ) / sr;
-                        return std::sin( phase );
-                    };
-                    switch( sound )
-                    {
-                        case 0: v = sweep( 160.0, 45.0, 0.04 ) * envelope( t, 0.25 ) + noise * envelope( t, 0.003 ) * 0.3; break;
-                        case 1: v = sweep( 220.0, 180.0, 0.02 ) * envelope( t, 0.06 ) * 0.6 + hp * envelope( t, 0.12 ) * 0.7; break;
-                        case 2:
+                    log( "makedemo: " + project->getFullPathName() + " already exists, nothing changed (delete it to rebuild)" );
+                    return;
+                }
+                project->createDirectory();
+                if( !demo.writeSamples( project->getChildFile( "Samples" ) ) )
+                {
+                    log( "makedemo: could not write the samples of " + demo.name );
+                    return;
+                }
+                // The engine opens <folder>/<folder name>.kickPrj: start from the empty template.
+                auto templ = getAppDirs( MTTemp ).getChildFile( "Template 01" );
+                templ.getChildFile( "Template 01.png" ).copyFileTo( project->getChildFile( demo.name + ".png" ) );
+                *build = templ.getChildFile( "Template 01.kickPrj" ).copyFileTo( project->getChildFile( demo.name + ".kickPrj" ) )
+                         && mt::getAudioInterface().loadProject( *project );
+                log( "makedemo: created " + project->getFullPathName() + ( *build ? "" : " (LOAD FAILED)" ) );
+            } );
+            wait( 8 );
+            s.push_back( [log, demo, project, build] {
+                if( !*build )
+                    return;
+                auto&      ae  = mt::getAudioInterface();
+                const int  seq = ae.getNumSequences() ? ae.getSelectedSequence() : ae.createSequence( "Groove" );
+                const int  trk = ae.getNumTracks( seq ) ? 0 : ae.createTrack( seq, "Drums" );
+                const int  prg = ae.createProgram( mt::MTProgramType::Drum, demo.program );
+                auto samples   = project->getChildFile( "Samples" ).findChildFiles( juce::File::findFiles, false, "*.wav" );
+                samples.sort();
+                for( int i = 0; i < juce::jmin( 16, samples.size() ); ++i )
+                {
+                    const auto path = samples[i].getFullPathName();
+                    ae.addAsset( path, mt::AssetTypes::Samples );
+                    ae.addSampleToProgram( prg, i, path ); // bank A pad n+1 = note n
+                }
+                ae.setProgramToTrack( prg, seq, trk );
+                ae.setMasterBPM( demo.bpm ); // the template follows the master tempo
+                ae.setSequenceBPM( seq, demo.bpm );
+                ae.setSequenceLength( seq, 2 );
+                ae.setSequenceLoop( seq, true );
+                ae.setSelectedSequenceAndTrack( seq, trk );
+                ae.setSelectedProgram( prg );
+
+                auto*     tm    = ae.getTempoMgr( seq );
+                const int step  = ( tm ? tm->getTicksPerBeat() : 960 ) / 4;
+                int       notes = 0;
+                for( const auto& [pad, row] : demo.pattern )
+                    for( int i = 0; row[i] != 0 && i < 32; ++i )
+                        if( const char c = row[i]; c != '.' )
                         {
-                            const double burst = std::fmod( t, 0.011 ) < 0.004 && t < 0.035 ? 1.0 : 0.0;
-                            v                  = hp * ( t < 0.035 ? burst : envelope( t - 0.035, 0.08 ) ) * 0.9;
-                            break;
+                            ae.addOrModifyNotesInTrack( seq, trk, pad, i * step, step / 2, c == 'X' ? 127 : c == 'x' ? 100 : 70 );
+                            ++notes;
                         }
-                        case 3: v = hp * envelope( t, 0.035 ) * 0.6; break;
-                        case 4: v = hp * envelope( t, 0.25 ) * 0.5; break;
-                        case 5: v = sweep( 140.0, 90.0, 0.08 ) * envelope( t, 0.2 ) * 0.9; break;
-                        case 6: v = sweep( 230.0, 160.0, 0.06 ) * envelope( t, 0.16 ) * 0.9; break;
-                        case 7: v = ( sweep( 900.0, 800.0, 0.01 ) * 0.6 + hp * 0.4 ) * envelope( t, 0.015 ); break;
-                    }
-                    const double fade = juce::jmin( 1.0, ( len - i ) / ( sr * 0.005 ) ); // no click at the end
-                    buf.setSample( 0, i, (float)( v * fade ) );
-                }
-                if( const auto peak = buf.getMagnitude( 0, len ); peak > 0.0f )
-                    buf.applyGain( juce::Decibels::decibelsToGain( sound == 3 || sound == 4 ? -6.0f : -1.0f ) / peak ); // hats a bit quieter
-                return buf;
-            };
-            kitDir().createDirectory();
-            for( int i = 0; i < (int)std::size( sounds ); ++i )
-            {
-                auto file = kitDir().getChildFile( juce::String( i + 1 ).paddedLeft( '0', 2 ) + " " + sounds[i] + ".wav" );
-                file.deleteFile();
-                auto buf = render( i );
-                if( auto out = file.createOutputStream() )
-                {
-                    std::unique_ptr<juce::OutputStream> stream( out.release() );
-                    if( auto writer = std::unique_ptr<juce::AudioFormatWriter>( juce::WavAudioFormat().createWriterFor( stream.get(), sr, 1, 16, {}, 0 ) ) )
-                    {
-                        stream.release(); // the writer owns it now
-                        writer->writeFromAudioSampleBuffer( buf, 0, buf.getNumSamples() );
-                    }
-                }
-            }
-            log( "makedemo: wrote " + juce::String( (int)std::size( sounds ) ) + " samples to " + kitDir().getFullPathName() );
-
-            // The engine opens <folder>/<folder name>.kickPrj: start from the empty template.
-            auto templ   = getAppDirs( MTTemp ).getChildFile( "Template 01" );
-            auto project = projectDir();
-            project.createDirectory();
-            const bool ok = templ.getChildFile( "Template 01.kickPrj" ).copyFileTo( project.getChildFile( projectName + ".kickPrj" ) )
-                            && mt::getAudioInterface().loadProject( project );
-            templ.getChildFile( "Template 01.png" ).copyFileTo( project.getChildFile( projectName + ".png" ) );
-            log( "makedemo: created " + projectDir().getFullPathName() + ( ok ? "" : " (LOAD FAILED)" ) );
-        } );
-        wait( 8 );
-
-        s.push_back( [log, kitDir] {
-            auto& ae = mt::getAudioInterface();
-            if( ae.getNumPrograms() > 0 )
-                return; // project already existed (see above)
-            const int seq = ae.getNumSequences() ? ae.getSelectedSequence() : ae.createSequence( "Groove" );
-            const int trk = ae.getNumTracks( seq ) ? 0 : ae.createTrack( seq, "Drums" );
-            const int prg = ae.createProgram( mt::MTProgramType::Drum, "Community Kit" );
-            for( int i = 0; i < (int)std::size( sounds ); ++i )
-            {
-                const auto path = kitDir().getChildFile( juce::String( i + 1 ).paddedLeft( '0', 2 ) + " " + sounds[i] + ".wav" ).getFullPathName();
-                ae.addAsset( path, mt::AssetTypes::Samples );
-                ae.addSampleToProgram( prg, i, path ); // bank A pad n+1 = note n
-            }
-            ae.setProgramToTrack( prg, seq, trk );
-            ae.setMasterBPM( 104 ); // the template follows the master tempo
-            ae.setSequenceBPM( seq, 104 );
-            ae.setSequenceLength( seq, 2 );
-            ae.setSequenceLoop( seq, true );
-            ae.setSelectedSequenceAndTrack( seq, trk );
-            ae.setSelectedProgram( prg );
-
-            // 2 bars of 16 steps. One string per pad: 'X' accent, 'x' normal, 'o' soft, '.' rest.
-            static const char* pattern[] = {
-                "X.....x.X.x.....X......xX.....x.", // Kick
-                "....X.......X.......X.......X..o", // Snare
-                "............................x.x.", // Clap
-                "x.o.x.o.x.o.x...x.o.x...x.o.x.o.", // Closed Hat
-                "..............x.......x.........", // Open Hat
-                "..........................x.....", // Low Tom
-                ".........................x......", // High Tom
-                "...o.......o.......o............", // Rim
-            };
-            auto*     tm    = ae.getTempoMgr( seq );
-            const int step  = ( tm ? tm->getTicksPerBeat() : 960 ) / 4;
-            int       notes = 0;
-            for( int p = 0; p < (int)std::size( pattern ); ++p )
-                for( int i = 0; pattern[p][i] != 0; ++i )
-                    if( const char c = pattern[p][i]; c != '.' )
-                    {
-                        ae.addOrModifyNotesInTrack( seq, trk, p, i * step, step / 2, c == 'X' ? 127 : c == 'x' ? 100 : 70 );
-                        ++notes;
-                    }
-            const bool saved = ae.saveProject();
-            log( "makedemo: program " + juce::String( prg ) + " with " + juce::String( ae.getNumProgramSamples( prg ) ) + " samples, "
-                 + juce::String( notes ) + " notes at " + juce::String( step ) + " ticks/step, saved: " + ( saved ? "yes" : "NO" ) );
-        } );
-        wait( 4 );
+                const bool saved = ae.saveProject();
+                log( "makedemo: " + demo.name + ": program with " + juce::String( ae.getNumProgramSamples( prg ) ) + " samples, "
+                     + juce::String( notes ) + " notes at " + juce::String( step ) + " ticks/step, saved: " + ( saved ? "yes" : "NO" ) );
+            } );
+            wait( 4 );
+        }
         s.push_back( [] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); } );
         startTimer( 400 );
     }
