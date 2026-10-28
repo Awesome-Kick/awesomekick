@@ -137,7 +137,7 @@ LOG="$DEV_DIR/logs"; mkdir -p "\$LOG"
 "$DEV_DIR/kickem-stop.sh" >/dev/null 2>&1
 # Wait until the old instance is really gone – otherwise the new Xvfb fails with
 # "Server is already active for display $DISPLAY_NUM" and the simulator has no screen.
-old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT" || pgrep -u "\$USER" -f "^jackd --no-realtime -d dummy" || pgrep -u "\$USER" -f "^python3 -I .*awesomekick-audio.py"; }
+old_running() { pgrep -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" || pgrep -u "\$USER" -x KT_KickEM || pgrep -u "\$USER" -f "^x11vnc -display :$DISPLAY_NUM" || pgrep -u "\$USER" -f "websockify --web .* $WEB_PORT" || pgrep -u "\$USER" -f "^jackd --no-realtime" || pgrep -u "\$USER" -f "^python3 -I .*awesomekick-audio.py"; }
 for i in \$(seq 1 40); do old_running >/dev/null || break; sleep 0.25; done
 if old_running >/dev/null; then
   pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM; sleep 0.5
@@ -147,7 +147,7 @@ for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && bre
 xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual display :$DISPLAY_NUM did not start – see \$LOG/xvfb.log"; exit 1; }
 # Sound: a JACK server without hardware (dummy driver, no root or audio group needed). The simulator
 # plays into it, awesomekick-audio.py captures it and streams it to the browser page.
-setsid nohup jackd --no-realtime -d dummy -r 48000 -p 512 >"\$LOG/jackd.log" 2>&1 < /dev/null &
+setsid nohup jackd --no-realtime -t 2000 -d dummy -r 48000 -p 512 >"\$LOG/jackd.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do jack_lsp >/dev/null 2>&1 && break; sleep 0.25; done
 jack_lsp >/dev/null 2>&1 || echo "WARNING: JACK did not start – no sound in the browser (see \$LOG/jackd.log)"
 setsid nohup python3 -I "$REPO_DIR/scripts/awesomekick-audio.py" --port $AUDIO_PORT >"\$LOG/audio.log" 2>&1 < /dev/null &
@@ -181,7 +181,7 @@ pkill -u "\$USER" -x KT_KickEM 2>/dev/null
 pkill -u "\$USER" -f "^Xvfb :$DISPLAY_NUM" 2>/dev/null
 pkill -u "\$USER" -f "^python3 -I .*awesomekick-audio.py" 2>/dev/null
 pkill -u "\$USER" -f "^ffmpeg .* awesomekick_stream" 2>/dev/null
-pkill -u "\$USER" -f "^jackd --no-realtime -d dummy" 2>/dev/null
+pkill -u "\$USER" -f "^jackd --no-realtime" 2>/dev/null
 echo "AwesomeKick simulator stopped."
 EOF
 

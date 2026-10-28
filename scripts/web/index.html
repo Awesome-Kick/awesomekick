@@ -32,6 +32,7 @@
         status = document.getElementById('status');
   let ctx = null, ws = null, node = null, retry = null;
   let rate = 48000, ring = null, size = 0, rd = 0, wr = 0, priming = true;
+  let bytes = 0, peak = 0, lastReport = 0;   // what arrives from the server, shown next to the button
 
   const buffered = () => (wr - rd + size) % size;
 
@@ -52,7 +53,11 @@
     ws.onopen = () => { status.textContent = 'connecting…'; };
     ws.onmessage = (e) => {
       if (typeof e.data === 'string') { const h = JSON.parse(e.data); if (h.rate) rate = h.rate; setupRing(); return; }
-      if (ring) push(new Int16Array(e.data));
+      if (!ring) return;
+      const pcm = new Int16Array(e.data);
+      bytes += e.data.byteLength;
+      for (let i = 0; i < pcm.length; i += 8) peak = Math.max(peak, Math.abs(pcm[i]));
+      push(pcm);
     };
     ws.onclose = () => {
       if (!ctx) return;
@@ -69,9 +74,18 @@
     node.onaudioprocess = (e) => {
       const L = e.outputBuffer.getChannelData(0), R = e.outputBuffer.getChannelData(1), n = L.length;
       if (priming && buffered() >= Math.floor(TARGET * rate) * 2) priming = false;
-      if (priming || buffered() < n * 2) { L.fill(0); R.fill(0); priming = true; return; }
+      if (priming || buffered() < n * 2) {
+        L.fill(0); R.fill(0); priming = true;
+        if (ctx.currentTime - lastReport >= 1) { status.textContent = bytes ? 'sound on · buffering…' : 'sound on · waiting for audio from the server…'; lastReport = ctx.currentTime; bytes = 0; }
+        return;
+      }
       for (let i = 0; i < n; i++) { L[i] = ring[rd]; R[i] = ring[(rd + 1) % size]; rd = (rd + 2) % size; }
-      status.textContent = `sound on · ${Math.round(buffered() / 2 / rate * 1000)} ms buffer`;
+      const now = ctx.currentTime;
+      if (now - lastReport >= 0.5) {
+        const db = peak > 0 ? Math.round(20 * Math.log10(peak / 32768)) + ' dB' : 'silent';
+        status.textContent = `sound on · ${Math.round(bytes / 1024 / (now - lastReport))} kB/s · level ${db} · ${Math.round(buffered() / 2 / rate * 1000)} ms buffer · ${ctx.sampleRate} Hz`;
+        bytes = 0; peak = 0; lastReport = now;
+      }
     };
     node.connect(ctx.destination);
     connect();
