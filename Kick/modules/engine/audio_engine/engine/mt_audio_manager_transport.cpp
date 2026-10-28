@@ -219,7 +219,12 @@ namespace mt
     {
         const juce::ScopedLock guard(getSequenceLock());
         if( Now )
+        {
+            // PLAY START while paused starts over; play() would otherwise just resume.
+            if( FromBeginning && isPaused() )
+                setTransportState( TransportState::Stopped );
             return FromBeginning ? play( Seq ) : resume( Seq );
+        }
         else
         {
             if( auto s = getSequence( Seq ) )

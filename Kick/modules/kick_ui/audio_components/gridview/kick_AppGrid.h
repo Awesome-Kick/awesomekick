@@ -285,7 +285,11 @@ namespace kick_ui
         ~AppGrid() = default;
 
         bool requiresControlBar() override { return false; };
+#if defined( SIM_BUILD ) && SIM_BUILD
+        bool requiresStatusBar() override { return true; } // simulator: keep BAR : BEAT : TICK in view while editing
+#else
         bool requiresStatusBar() override { return false; };
+#endif
         bool requiresHandleCommand() override { return true; };
 
         void handleCommand( CPktMgr::HWMsg_t& ) override;

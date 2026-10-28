@@ -639,8 +639,11 @@ namespace mt
 
     void MTSequence::play()
     {
-        // Setup starting tick.
-        sequencePlayhead.bnb.bar = isLooping.get() ? juce::jmax<int>( 0, loopStart.get() - 1 ) : 0;
+        // Setup starting tick: the first beat of the (loop) start bar. Beat and tick must be reset too,
+        // or PLAY START during playback restarts at the current beat instead of the beginning.
+        sequencePlayhead.bnb.bar  = isLooping.get() ? juce::jmax<int>( 0, loopStart.get() - 1 ) : 0;
+        sequencePlayhead.bnb.beat = 0;
+        sequencePlayhead.bnb.tick = 0;
 
         // Initialize
         initializeTickDataFromTempoSettings( getSequenceTempoSettings( sequencePlayhead.bnb.bar ) );

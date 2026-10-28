@@ -193,6 +193,7 @@ namespace kick_ui
         mt::MTTempoMgr* tempoMgr{ nullptr };
 
         unsigned int numBars{ 1 };
+        unsigned int zoomedForBars{ 0 }; // track length the horizontal zoom was last fitted to
         unsigned int totalTicks{ 0 };
 
         double seqLengthMs{ 0.0 };

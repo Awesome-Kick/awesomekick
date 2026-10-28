@@ -112,6 +112,13 @@ namespace kick_ui
             numBars = ae.getTrackLength( aeSel.sequence, aeSel.track );
             if( numBars < 1 )
                 numBars = ae.getSequenceLength( aeSel.sequence );
+            // A new track length: fit it into the view (up to 4 bars, longer tracks scroll / follow the
+            // playhead). Otherwise the old zoom stayed, e.g. 2 of 8 bars visible and no scroll bar.
+            if( numBars != zoomedForBars )
+            {
+                zoomedForBars = numBars;
+                zoom.width    = gridWidth / (float)juce::jlimit( 1u, 4u, numBars );
+            }
             setZoomFactor( 0.f, 0.f );
             // Notify...
             recalculate( Notify );
