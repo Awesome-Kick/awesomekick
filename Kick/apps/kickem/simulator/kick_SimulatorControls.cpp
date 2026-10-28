@@ -92,8 +92,126 @@ namespace sim
         }
     }
 
+    juce::Rectangle<float> SimButton::capArea() const
+    {
+        auto b = getLocalBounds().toFloat();
+        auto w = juce::jmin( (float)capW, b.getWidth() - 2.0f );
+        auto h = juce::jmin( (float)capH, b.getHeight() - 2.0f );
+        return juce::Rectangle<float>( w, h ).withCentre( { b.getCentreX(), b.getY() + 1.0f + h * 0.5f } );
+    }
+
+    void SimButton::drawIcon( juce::Graphics& g, juce::Rectangle<float> a, juce::Colour c ) const
+    {
+        g.setColour( c );
+        const auto s  = juce::jmin( a.getWidth(), a.getHeight() );
+        const auto ct = a.getCentre();
+        auto box      = juce::Rectangle<float>( s, s ).withCentre( ct );
+        juce::Path p;
+        switch( icon )
+        {
+            case Icon::rec: g.fillEllipse( box.reduced( s * 0.18f ) ); break;
+            case Icon::overdub:
+                // Overdub: a figure with a recording dot - drawn as head + shoulders
+                g.fillEllipse( juce::Rectangle<float>( s * 0.34f, s * 0.34f ).withCentre( { ct.x, ct.y - s * 0.14f } ) );
+                g.fillRoundedRectangle( juce::Rectangle<float>( s * 0.52f, s * 0.26f ).withCentre( { ct.x, ct.y + s * 0.24f } ), s * 0.1f );
+                break;
+            case Icon::stop: g.fillRoundedRectangle( box.reduced( s * 0.24f ), s * 0.05f ); break;
+            case Icon::play:
+                p.addTriangle( ct.x - s * 0.2f, ct.y - s * 0.26f, ct.x - s * 0.2f, ct.y + s * 0.26f, ct.x + s * 0.26f, ct.y );
+                g.fillPath( p );
+                break;
+            case Icon::playStart:
+                p.addTriangle( ct.x - s * 0.3f, ct.y - s * 0.24f, ct.x - s * 0.3f, ct.y + s * 0.24f, ct.x + s * 0.08f, ct.y );
+                g.fillPath( p );
+                g.fillRect( juce::Rectangle<float>( s * 0.08f, s * 0.48f ).withCentre( { ct.x + s * 0.17f, ct.y } ) );
+                g.fillRect( juce::Rectangle<float>( s * 0.08f, s * 0.48f ).withCentre( { ct.x + s * 0.3f, ct.y } ) );
+                break;
+            case Icon::undo:
+            {
+                p.addCentredArc( ct.x + s * 0.04f, ct.y + s * 0.06f, s * 0.24f, s * 0.24f, 0.0f, juce::degreesToRadians( -100.0f ), juce::degreesToRadians( 170.0f ), true );
+                g.strokePath( p, juce::PathStrokeType( s * 0.07f ) );
+                juce::Path head;
+                auto tip = juce::Point<float>( ct.x - s * 0.2f, ct.y - s * 0.22f );
+                head.addTriangle( tip.x - s * 0.12f, tip.y, tip.x + s * 0.1f, tip.y - s * 0.12f, tip.x + s * 0.1f, tip.y + s * 0.12f );
+                g.fillPath( head );
+                break;
+            }
+            case Icon::copy:
+                g.drawRoundedRectangle( juce::Rectangle<float>( s * 0.36f, s * 0.44f ).withCentre( { ct.x - s * 0.07f, ct.y + s * 0.06f } ), s * 0.05f, s * 0.06f );
+                g.drawRoundedRectangle( juce::Rectangle<float>( s * 0.36f, s * 0.44f ).withCentre( { ct.x + s * 0.09f, ct.y - s * 0.08f } ), s * 0.05f, s * 0.06f );
+                break;
+            case Icon::minus: g.fillRect( juce::Rectangle<float>( s * 0.42f, s * 0.08f ).withCentre( ct ) ); break;
+            case Icon::plus:
+                g.fillRect( juce::Rectangle<float>( s * 0.42f, s * 0.08f ).withCentre( ct ) );
+                g.fillRect( juce::Rectangle<float>( s * 0.08f, s * 0.42f ).withCentre( ct ) );
+                break;
+            case Icon::none: break;
+        }
+    }
+
     void SimButton::paint( juce::Graphics& g )
     {
+        if( style == Style::key || style == Style::round )
+        {
+            auto cap   = capArea();
+            auto lit   = led ? ledColour : palette::unlit;
+            auto hover = isMouseOver() && !down;
+
+            // Drop shadow / recess
+            g.setColour( palette::capEdge );
+            if( style == Style::round )
+                g.fillEllipse( cap.expanded( 3.0f ).translated( 0.0f, 2.0f ) );
+            else
+                g.fillRoundedRectangle( cap.expanded( 3.0f ).translated( 0.0f, 2.0f ), 9.0f );
+
+            auto face = down ? cap.reduced( 1.0f ).translated( 0.0f, 1.0f ) : cap;
+            g.setGradientFill( juce::ColourGradient( ( down ? palette::capDown : palette::cap ).brighter( hover ? 0.12f : 0.06f ), face.getX(), face.getY(),
+                                                     down ? palette::capDown : palette::cap, face.getX(), face.getBottom(), false ) );
+            if( style == Style::round )
+                g.fillEllipse( face );
+            else
+                g.fillRoundedRectangle( face, 7.0f );
+
+            g.setColour( led ? ledColour.withAlpha( 0.55f ) : juce::Colour( 0xff3a3a40 ) );
+            if( style == Style::round )
+                g.drawEllipse( face, led ? 2.0f : 1.0f );
+            else
+                g.drawRoundedRectangle( face, 7.0f, led ? 2.0f : 1.0f );
+
+            if( icon != Icon::none )
+            {
+                auto iconArea = face.reduced( face.getHeight() * 0.22f );
+                if( led )
+                {
+                    g.setColour( ledColour.withAlpha( 0.25f ) );
+                    g.fillEllipse( iconArea.expanded( 6.0f ) );
+                }
+                drawIcon( g, iconArea, led ? ledColour.brighter( 0.3f ) : palette::unlit );
+            }
+            else
+            {
+                // Backlit legend on the cap
+                g.setColour( led ? lit.brighter( 0.25f ) : lit );
+                const auto fontH = juce::jmin( 19.0f, face.getHeight() * 0.3f );
+                g.setFont( juce::Font( fontH, juce::Font::bold ) );
+                const int lines = label.containsChar( ' ' ) && label.length() > 6 ? 2 : 1;
+                g.drawFittedText( lines == 2 ? label.replaceFirstOccurrenceOf( " ", "\n" ) : label, face.reduced( 4.0f, 3.0f ).toNearestInt(),
+                                  juce::Justification::centred, lines, 0.8f );
+            }
+
+            // Printed legend under the cap: SHIFT function (keys) or the name (round transport keys)
+            auto below = getLocalBounds().toFloat().withTop( cap.getBottom() + 5.0f );
+            const auto& text = style == Style::round ? label : shiftLabel;
+            if( text.isNotEmpty() && below.getHeight() > 8.0f )
+            {
+                const bool shiftOn = style == Style::key && ShiftLatch::isLatched();
+                g.setColour( shiftOn ? palette::shiftText : palette::legend );
+                g.setFont( juce::Font( juce::jmin( 18.0f, below.getHeight() * 0.8f ), style == Style::round ? juce::Font::plain : juce::Font::bold ) );
+                g.drawFittedText( text, below.toNearestInt(), juce::Justification::centredTop, 1, 0.75f );
+            }
+            return;
+        }
+
         auto b = getLocalBounds().toFloat().reduced( 1.5f );
         g.setColour( down ? palette::keyDown : ( isMouseOver() ? palette::key.brighter( 0.08f ) : palette::key ) );
         g.fillRoundedRectangle( b, 5.0f );
@@ -124,7 +242,13 @@ namespace sim
         }
     }
 
-    void SimButton::mouseDown( const juce::MouseEvent& e ) { press( true, e.mods.isShiftDown() ); }
+    void SimButton::mouseDown( const juce::MouseEvent& e )
+    {
+        // Key styles: only the cap is clickable, not the printed legend under it.
+        if( ( style == Style::key || style == Style::round ) && !capArea().expanded( 4.0f ).contains( e.position ) )
+            return;
+        press( true, e.mods.isShiftDown() );
+    }
     void SimButton::mouseUp( const juce::MouseEvent& ) { press( false ); }
 
     void SimButton::press( bool isDown, bool shiftModifier )
@@ -192,7 +316,13 @@ namespace sim
 
     juce::Rectangle<float> SimKnob::knobArea() const
     {
-        auto b    = getLocalBounds().toFloat();
+        auto b = getLocalBounds().toFloat();
+        if( knobDiameter > 0.0f )
+        {
+            // Fixed geometry: label strip (30) above or below, MIN/MAX strip (40) below.
+            auto top = b.getY() + ( labelAbove && label.isNotEmpty() ? 34.0f : 0.0f );
+            return juce::Rectangle<float>( knobDiameter, knobDiameter ).withCentre( { b.getCentreX(), top + knobDiameter * 0.5f + 3.0f } );
+        }
         auto text = label.isNotEmpty() ? juce::jmin( 20.0f, b.getHeight() * 0.18f ) : 0.0f;
         b.removeFromBottom( text );
         auto side = juce::jmin( b.getWidth(), b.getHeight() ) - 6.0f;
@@ -210,6 +340,77 @@ namespace sim
         auto k = knobArea();
         auto c = k.getCentre();
         auto r = k.getWidth() * 0.5f;
+
+        if( knobDiameter > 0.0f )
+        {
+            // Hardware look: knurled black knob, white pointer; jog wheel with red LED ring.
+            if( onCentrePress )
+            {
+                // LED ring
+                for( int i = 3; i >= 1; --i )
+                {
+                    g.setColour( palette::ring.withAlpha( 0.12f * (float)i ) );
+                    g.drawEllipse( k.reduced( 4.0f - (float)i * 2.0f ), 3.0f + (float)i * 2.5f );
+                }
+                g.setColour( palette::ring );
+                g.drawEllipse( k.reduced( 4.0f ), 5.0f );
+                r -= 12.0f;
+            }
+
+            // Shadow, body, knurling
+            g.setColour( juce::Colour( 0xff050505 ) );
+            g.fillEllipse( juce::Rectangle<float>( 2 * r + 4, 2 * r + 4 ).withCentre( c.translated( 2.0f, 4.0f ) ) );
+            g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff3d3d40 ), c.x - r, c.y - r, juce::Colour( 0xff0c0c0d ), c.x + r, c.y + r, false ) );
+            g.fillEllipse( juce::Rectangle<float>( 2 * r, 2 * r ).withCentre( c ) );
+            g.setColour( juce::Colour( 0xff000000 ).withAlpha( 0.55f ) );
+            for( int i = 0; i < 36; ++i )
+            {
+                auto a = juce::MathConstants<float>::twoPi * (float)i / 36.0f;
+                g.drawLine( { c.getPointOnCircumference( r * 0.9f, a ), c.getPointOnCircumference( r, a ) }, 1.4f );
+            }
+            auto top = r * 0.72f;
+            g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff4a4a4e ), c.x, c.y - top, juce::Colour( 0xff141416 ), c.x, c.y + top, false ) );
+            g.fillEllipse( juce::Rectangle<float>( 2 * top, 2 * top ).withCentre( c ) );
+
+            // Pointer
+            auto a = juce::degreesToRadians( (float)angle );
+            g.setColour( juce::Colours::white.withAlpha( 0.92f ) );
+            g.drawLine( { c.getPointOnCircumference( onCentrePress ? r * 0.5f : r * 0.1f, a ), c.getPointOnCircumference( r * 0.88f, a ) },
+                        juce::jmax( 3.0f, r * 0.07f ) );
+
+            if( onCentrePress )
+            {
+                auto cap = juce::Rectangle<float>( r * 0.72f, r * 0.72f ).withCentre( c );
+                g.setColour( centrePressed ? palette::capDown : juce::Colour( 0xff1c1c1f ) );
+                g.fillEllipse( cap );
+                g.setColour( juce::Colour( 0xff3a3a40 ) );
+                g.drawEllipse( cap, 1.0f );
+                g.setColour( palette::unlit.withAlpha( 0.7f ) );
+                g.setFont( juce::Font( juce::jmin( 14.0f, r * 0.17f ), juce::Font::bold ) );
+                g.drawText( "ENTER", cap, juce::Justification::centred );
+            }
+
+            g.setColour( palette::legend );
+            if( label.isNotEmpty() )
+            {
+                g.setFont( juce::Font( 21.0f, juce::Font::bold ) );
+                auto strip = labelAbove ? juce::Rectangle<float>( 0.0f, 0.0f, (float)getWidth(), 30.0f )
+                                        : juce::Rectangle<float>( 0.0f, k.getBottom() + 8.0f, (float)getWidth(), 28.0f );
+                g.drawText( label, strip, juce::Justification::centred );
+            }
+            if( showMinMax )
+            {
+                g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
+                auto y     = k.getBottom() + 4.0f;
+                auto left  = c.getPointOnCircumference( r + 6.0f, juce::degreesToRadians( -135.0f ) );
+                auto right = c.getPointOnCircumference( r + 6.0f, juce::degreesToRadians( 135.0f ) );
+                g.fillEllipse( juce::Rectangle<float>( 5.0f, 5.0f ).withCentre( left ) );
+                g.fillEllipse( juce::Rectangle<float>( 5.0f, 5.0f ).withCentre( right ) );
+                g.drawText( "MIN", juce::Rectangle<float>( left.x - 40.0f, y + 10.0f, 80.0f, 20.0f ), juce::Justification::centred );
+                g.drawText( "MAX", juce::Rectangle<float>( right.x - 40.0f, y + 10.0f, 80.0f, 20.0f ), juce::Justification::centred );
+            }
+            return;
+        }
 
         if( mode == Mode::absolute )
         {
@@ -358,27 +559,33 @@ namespace sim
 
     void SimPad::paint( juce::Graphics& g )
     {
-        auto b = getLocalBounds().toFloat().reduced( 2.0f );
-        g.setColour( juce::Colour( 0xff222222 ) );
-        g.fillRoundedRectangle( b, 6.0f );
-
+        // Hardware look: black rubber pad, RGB light around its edge.
+        auto b = getLocalBounds().toFloat().reduced( 3.0f );
         if( lit )
         {
-            g.setColour( colour.withAlpha( down ? 0.55f : 0.28f ) );
-            g.fillRoundedRectangle( b.reduced( 4.0f ), 4.0f );
+            for( int i = 3; i >= 1; --i )
+            {
+                g.setColour( colour.withAlpha( 0.10f * (float)i ) );
+                g.drawRoundedRectangle( b.expanded( (float)i * 1.5f ), 12.0f, 3.0f );
+            }
         }
-        else if( down )
-        {
-            g.setColour( juce::Colours::white.withAlpha( 0.15f ) );
-            g.fillRoundedRectangle( b.reduced( 4.0f ), 4.0f );
-        }
+        g.setColour( juce::Colour( 0xff050506 ) );
+        g.fillRoundedRectangle( b.translated( 0.0f, 3.0f ), 12.0f );
 
-        g.setColour( lit ? colour : juce::Colour( 0xff4a4a4a ) );
-        g.drawRoundedRectangle( b, 6.0f, lit ? 3.5f : 1.5f );
+        auto face = down ? b.reduced( 2.0f ).translated( 0.0f, 2.0f ) : b;
+        g.setGradientFill( juce::ColourGradient( juce::Colour( down ? 0xff26262a : 0xff1d1d20 ), face.getX(), face.getY(), juce::Colour( 0xff111113 ),
+                                                 face.getRight(), face.getBottom(), false ) );
+        g.fillRoundedRectangle( face, 12.0f );
+        if( lit )
+        {
+            g.setColour( colour.withAlpha( down ? 0.30f : 0.10f ) );
+            g.fillRoundedRectangle( face.reduced( 6.0f ), 8.0f );
+        }
+        g.setColour( lit ? colour : juce::Colour( 0xff2e2e33 ) );
+        g.drawRoundedRectangle( face, 12.0f, lit ? 4.0f : 1.5f );
 
         g.setColour( palette::text.withAlpha( 0.8f ) );
-        g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
-        g.drawText( "PAD " + juce::String( index + 1 ), b.reduced( 8.0f ), juce::Justification::topLeft );
+        g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
         if( down )
             g.drawText( "vel " + juce::String( lastVelocity ) + ( lastPressure ? "  prs " + juce::String( lastPressure ) : juce::String() ), b.reduced( 8.0f ),
                         juce::Justification::bottomRight );
@@ -444,25 +651,30 @@ namespace sim
 
     void SimPadGrid::paint( juce::Graphics& g )
     {
-        g.setColour( palette::well );
-        g.fillRoundedRectangle( getLocalBounds().toFloat(), 8.0f );
-        g.setColour( palette::text );
-        g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
-        g.drawText( "PADS   BANK " + bankName, getLocalBounds().reduced( 12, 6 ).removeFromTop( 22 ), juce::Justification::centredLeft );
+        // Pad numbers printed under the bottom-left corner of each pad, as on the hardware.
+        g.setColour( palette::legend );
+        g.setFont( juce::Font( 18.0f, juce::Font::bold ) );
+        for( int i = 0; i < 16; ++i )
+        {
+            auto pb = pads[(size_t)i]->getBounds();
+            g.drawText( juce::String( i + 1 ), juce::Rectangle<int>( pb.getX() + 8, pb.getBottom() + 4, 60, 24 ), juce::Justification::centredLeft );
+        }
     }
 
     void SimPadGrid::resized()
     {
-        auto area = getLocalBounds().reduced( 10 );
-        area.removeFromTop( 26 );
-        const int gap = 10;
-        const int w   = ( area.getWidth() - 3 * gap ) / 4;
-        const int h   = ( area.getHeight() - 3 * gap ) / 4;
+        // Hardware proportions: pad 181 x 176 on a 217 x 213 pitch (measured from the panel), numbers below.
+        const float padRatioX = 181.0f / 217.0f, padRatioY = 176.0f / 213.0f;
+        const float labelH    = 30.0f;
+        const float pitchX    = (float)getWidth() / ( 3.0f + padRatioX );
+        const float pitchY    = ( (float)getHeight() - labelH ) / ( 3.0f + padRatioY );
+        const int   w         = juce::roundToInt( pitchX * padRatioX );
+        const int   h         = juce::roundToInt( pitchY * padRatioY );
         for( int i = 0; i < 16; ++i )
         {
             int row = 3 - i / 4; // pad 1 bottom-left
             int col = i % 4;
-            pads[i]->setBounds( area.getX() + col * ( w + gap ), area.getY() + row * ( h + gap ), w, h );
+            pads[(size_t)i]->setBounds( juce::roundToInt( col * pitchX ), juce::roundToInt( row * pitchY ), w, h );
         }
     }
 
@@ -541,40 +753,45 @@ namespace sim
 
     void SimTouchSlider::paint( juce::Graphics& g )
     {
+        // Hardware look: recessed touch strip, a column of small LED dashes on its right side.
         auto b = getLocalBounds().toFloat();
-        g.setColour( palette::text );
-        g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
-        g.drawText( "SLIDER", b.removeFromTop( 20.0f ), juce::Justification::centred );
+        g.setColour( juce::Colour( 0xff0b0b0c ) );
+        g.fillRoundedRectangle( b, 6.0f );
+        auto inner = b.reduced( 12.0f );
+        g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff1e1e21 ), inner.getX(), inner.getY(), juce::Colour( 0xff141416 ), inner.getRight(),
+                                                 inner.getBottom(), false ) );
+        g.fillRect( inner );
+        g.setColour( juce::Colour( 0xff2f2f34 ) );
+        g.drawRect( inner, 1.5f );
 
-        auto strip = b.withSizeKeepingCentre( juce::jmin( 34.0f, b.getWidth() ), b.getHeight() ).reduced( 0.0f, 4.0f );
-        g.setColour( juce::Colour( 0xff101010 ) );
-        g.fillRoundedRectangle( strip, 6.0f );
-
-        // LED segments
         const int segments = 20;
-        auto      segH     = strip.getHeight() / segments;
+        auto      column   = inner.withLeft( inner.getRight() - 46.0f ).reduced( 14.0f, 10.0f );
+        auto      segH     = column.getHeight() / segments;
         for( int i = 0; i < segments; ++i )
         {
-            auto seg = juce::Rectangle<float>( strip.getX() + 6.0f, strip.getBottom() - ( i + 1 ) * segH + 1.5f, strip.getWidth() - 12.0f, segH - 3.0f );
-            bool on  = ( i + 1 ) * 100 / segments <= ledLevel;
-            g.setColour( on ? palette::led : juce::Colour( 0xff2b2b2b ) );
+            auto seg = juce::Rectangle<float>( column.getX(), column.getBottom() - ( i + 1 ) * segH + segH * 0.25f, column.getWidth(), segH * 0.5f );
+            bool on  = ledLevel > 0 && ( i + 1 ) * 100 / segments <= ledLevel;
+            if( on )
+            {
+                g.setColour( palette::ring.withAlpha( 0.3f ) );
+                g.fillRoundedRectangle( seg.expanded( 4.0f ), 4.0f );
+            }
+            g.setColour( on ? palette::ring : juce::Colour( 0xff050505 ) );
             g.fillRect( seg );
         }
 
         if( touchValue >= 0 )
         {
-            auto y = strip.getBottom() - strip.getHeight() * touchValue / 100.0f;
-            g.setColour( juce::Colours::white );
-            g.drawLine( strip.getX() - 4.0f, y, strip.getRight() + 4.0f, y, 2.0f );
+            auto y = inner.getBottom() - inner.getHeight() * touchValue / 100.0f;
+            g.setColour( juce::Colours::white.withAlpha( 0.6f ) );
+            g.drawLine( inner.getX() + 6.0f, y, column.getX() - 8.0f, y, 2.0f );
         }
-        g.setColour( palette::outline );
-        g.drawRoundedRectangle( strip, 6.0f, 1.0f );
     }
 
     void SimTouchSlider::touch( const juce::MouseEvent& e )
     {
-        auto top    = 24.0f;
-        auto height = juce::jmax( 1.0f, (float)getHeight() - top - 4.0f );
+        auto top    = 12.0f;
+        auto height = juce::jmax( 1.0f, (float)getHeight() - 24.0f );
         setTouch( (int)std::round( 100.0f * ( 1.0f - ( e.position.y - top ) / height ) ) );
     }
 

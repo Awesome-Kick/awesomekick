@@ -14,8 +14,10 @@ namespace sim
         , private juce::Timer
     {
     public:
+        // Logical panel size. Layout follows the hardware front panel (measured from a photo,
+        // scale 2.586 board units per photo pixel, so the 1024x600 screen matches the display).
         static constexpr int boardWidth  = 1800;
-        static constexpr int boardHeight = 960;
+        static constexpr int boardHeight = 1790;
 
         SimulatorBoard();
         ~SimulatorBoard() override;
@@ -58,8 +60,8 @@ namespace sim
         // Left column
         SimTouchSlider slider;
         SimKnob        masterKnob { "MASTER", SimKnob::Mode::absolute };
-        SimKnob        recKnob { "REC GAIN", SimKnob::Mode::absolute };
-        SimButton      fullLevelBtn { "FULL LEVEL", DCC::EN_FULL_LEVEL, "HALF LEVEL", DCC::EN_HALF_LEVEL };
+        SimKnob        recKnob { "REC", SimKnob::Mode::absolute };
+        SimButton      fullLevelBtn { "FULL LEVEL", DCC::EN_FULL_LEVEL, "HALF LVL", DCC::EN_HALF_LEVEL };
         SimButton      levels16Btn { "16 LEVELS", DCC::EN_16LEVELS, "NOTES", DCC::EN_NOTES };
         SimButton      eraseBtn { "ERASE", DCC::EN_ERASE };
         SimPadGrid     pads;

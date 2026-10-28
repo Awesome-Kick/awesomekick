@@ -8,7 +8,11 @@ namespace sim
 {
     namespace
     {
-        const juce::Rectangle<int> screenRect { 620, 20, 1024, 600 };
+        // Board coordinates of the hardware panel (see SimulatorBoard::boardWidth).
+        const juce::Rectangle<int> screenRect { 385, 140, 1024, 600 };
+        const juce::Rectangle<int> bezelRect { 300, 52, 1190, 747 };
+        const juce::Rectangle<int> cameraRect { 57, 52, 178, 77 };
+        const juce::Rectangle<int> linkRect { 57, 641, 191, 156 };
 
         /// Diagnostics (set KICKEM_TRACE_MOUSE=1): log every mouse-down the app receives.
         struct MouseTrace : juce::MouseListener
@@ -49,8 +53,35 @@ namespace sim
         for( auto* b : { &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
             addAndMakeVisible( b );
 
+        // Hardware look
+        for( auto* k : { &masterKnob, &recKnob } )
+        {
+            k->setKnobDiameter( 114.0f );
+            k->setLabelAbove( true );
+            k->setShowMinMax( true );
+        }
+        for( auto& q : qlinks )
+            q->setKnobDiameter( 104.0f );
+
+        for( auto* b : { &fullLevelBtn, &levels16Btn, &eraseBtn, &linkBtn } )
+            b->setStyle( SimButton::Style::key );
+        fullLevelBtn.setLedColour( juce::Colour( 0xfff2eef8 ) );
+        levels16Btn.setLedColour( juce::Colour( 0xffff5fd2 ) );
+        eraseBtn.setLedColour( juce::Colour( 0xffff5fd2 ) );
+        linkBtn.setLedColour( juce::Colour( 0xff3fd4ff ) );
+        linkBtn.setCapSize( 104, 64 );
+
+        recBtn.setStyle( SimButton::Style::round, SimButton::Icon::rec );
+        overdubBtn.setStyle( SimButton::Style::round, SimButton::Icon::overdub );
+        stopBtn.setStyle( SimButton::Style::round, SimButton::Icon::stop );
+        playBtn.setStyle( SimButton::Style::round, SimButton::Icon::play );
+        playStartBtn.setStyle( SimButton::Style::round, SimButton::Icon::playStart );
+        for( auto* b : { &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
+            b->setCapSize( 86, 86 );
+
         recBtn.setLedColour( juce::Colour( 0xffff2020 ) );
         overdubBtn.setLedColour( juce::Colour( 0xffff2020 ) );
+        stopBtn.setLedColour( juce::Colour( 0xfff2eef8 ) );
         playBtn.setLedColour( juce::Colour( 0xff20e040 ) );
         playStartBtn.setLedColour( juce::Colour( 0xff20e040 ) );
 
@@ -1396,58 +1427,85 @@ namespace sim
 
     void SimulatorBoard::paint( juce::Graphics& g )
     {
-        g.fillAll( palette::body );
+        // Panel body
+        auto body = getLocalBounds().toFloat().reduced( 2.0f );
+        g.setGradientFill( juce::ColourGradient( palette::panel.brighter( 0.08f ), 0.0f, 0.0f, palette::panel.darker( 0.15f ), body.getRight(), body.getBottom(), false ) );
+        g.fillRoundedRectangle( body, 42.0f );
+        g.setColour( juce::Colour( 0xff3a3a3e ) );
+        g.drawRoundedRectangle( body, 42.0f, 2.0f );
 
-        // Brand
-        g.setColour( palette::text );
-        g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
-        g.drawText( "KLARK TEKNIK", juce::Rectangle<int>( 24, 14, 300, 20 ), juce::Justification::centredLeft );
-        g.setFont( juce::Font( 30.0f, juce::Font::bold ) );
-        g.drawText( "KICK", juce::Rectangle<int>( 24, 32, 200, 32 ), juce::Justification::centredLeft );
-        g.setColour( palette::text.withAlpha( 0.5f ) );
-        g.setFont( juce::Font( 12.0f ) );
-        g.drawText( "KickEM simulator - controls send front-panel MCU packets", juce::Rectangle<int>( 230, 38, 370, 24 ), juce::Justification::centredRight );
+        // Camera window (AI camera) - decorative
+        g.setColour( juce::Colour( 0xff0d0d0f ) );
+        g.fillRoundedRectangle( cameraRect.toFloat(), 10.0f );
+        g.setColour( juce::Colour( 0xff34343a ) );
+        g.drawRoundedRectangle( cameraRect.toFloat(), 10.0f, 1.5f );
+        g.setColour( juce::Colour( 0xff6e5b3a ) );
+        g.fillRect( juce::Rectangle<float>( 18.0f, 22.0f ).withCentre( { 128.0f, 92.0f } ) );
+        auto lens = juce::Rectangle<float>( 40.0f, 40.0f ).withCentre( { 174.0f, 92.0f } );
+        g.setGradientFill( juce::ColourGradient( juce::Colour( 0xff3b3f6a ), lens.getX(), lens.getY(), juce::Colour( 0xff07070a ), lens.getRight(), lens.getBottom(), false ) );
+        g.fillEllipse( lens );
+        g.setColour( juce::Colours::white.withAlpha( 0.5f ) );
+        g.fillEllipse( juce::Rectangle<float>( 8.0f, 8.0f ).withCentre( { 167.0f, 85.0f } ) );
 
-        // Wells
-        g.setColour( palette::well );
-        g.fillRoundedRectangle( juce::Rectangle<int>( 20, 70, 580, 310 ).toFloat(), 8.0f );
-        g.fillRoundedRectangle( juce::Rectangle<int>( 1656, 14, 132, 556 ).toFloat(), 8.0f );
-        g.fillRoundedRectangle( juce::Rectangle<int>( 1656, 580, 132, 360 ).toFloat(), 8.0f );
+        // LINK section: recess with four status LEDs
+        g.setColour( juce::Colour( 0xff151517 ) );
+        g.fillRoundedRectangle( linkRect.toFloat(), 12.0f );
+        g.setColour( juce::Colour( 0xff3a3a3f ) );
+        g.drawRoundedRectangle( linkRect.toFloat(), 12.0f, 1.5f );
+        for( int x : { 91, 132, 171, 212 } )
+        {
+            g.setColour( juce::Colour( 0xff050505 ) );
+            g.fillRect( juce::Rectangle<float>( 22.0f, 16.0f ).withCentre( { (float)x, 667.0f } ) );
+        }
 
         // Screen bezel
+        g.setColour( juce::Colour( 0xff0a0a0b ) );
+        g.fillRoundedRectangle( bezelRect.toFloat(), 14.0f );
+        g.setColour( juce::Colour( 0xff2c2c30 ) );
+        g.drawRoundedRectangle( bezelRect.toFloat(), 14.0f, 2.0f );
         g.setColour( juce::Colours::black );
-        g.fillRoundedRectangle( screenRect.expanded( 8 ).toFloat(), 6.0f );
+        g.fillRect( screenRect.expanded( 4 ) );
 
-        g.setColour( palette::text );
-        g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
-        g.drawText( "Q-LINK", juce::Rectangle<int>( 1656, 16, 132, 18 ), juce::Justification::centred );
-        g.drawText( "TRANSPORT", juce::Rectangle<int>( 1656, 582, 132, 18 ), juce::Justification::centred );
+        // Community name under the screen (no manufacturer logo)
+        g.setColour( palette::legend.withAlpha( 0.75f ) );
+        g.setFont( juce::Font( 30.0f, juce::Font::bold ) );
+        g.drawText( "KickEM", juce::Rectangle<int>( bezelRect.getX(), screenRect.getBottom() + 6, bezelRect.getWidth(), bezelRect.getBottom() - screenRect.getBottom() - 10 ),
+                    juce::Justification::centred );
     }
 
     void SimulatorBoard::resized()
     {
+        // All positions in board units, measured from the hardware panel.
         screen.setBounds( screenRect );
 
-        slider.setBounds( 30, 78, 80, 296 );
-        masterKnob.setBounds( 120, 80, 150, 140 );
-        recKnob.setBounds( 120, 230, 150, 140 );
-        fullLevelBtn.setBounds( 300, 90, 280, 80 );
-        levels16Btn.setBounds( 300, 185, 280, 80 );
-        eraseBtn.setBounds( 300, 280, 280, 80 );
-        pads.setBounds( 20, 390, 580, 550 );
+        // Upper left: MASTER and REC pots, LINK
+        masterKnob.setBounds( 127 - 90, 279 - 94, 180, 196 );
+        recKnob.setBounds( 127 - 90, 494 - 94, 180, 196 );
+        linkBtn.setBounds( 155 - 60, 732 - 33, 120, 68 );
 
-        mainControl.setBounds( 620, 640, 1024, 300 );
+        // Lower left: touch strip, FULL LEVEL / 16 LEVELS / ERASE
+        slider.setBounds( 36, 905, 161, 383 );
+        auto key = []( SimButton& b, int cx, int cy ) { b.setBounds( cx - 62, cy - 36, 124, 118 ); };
+        key( fullLevelBtn, 119, 1396 );
+        key( levels16Btn, 119, 1549 );
+        key( eraseBtn, 119, 1704 );
 
+        // Pads 4 x 4 (numbers printed below each pad)
+        pads.setBounds( 256, 897, 832, 845 );
+
+        // Right of the pads: banks, mode keys, jog wheel
+        mainControl.setBounds( 1140, 860, 650, 802 );
+
+        // Q-link encoders P1-P4 right of the screen
+        const int qy[] = { 150, 331, 507, 680 };
         for( int i = 0; i < 4; ++i )
-            qlinks[(size_t)i]->setBounds( 1664, 36 + i * 118, 116, 112 );
-        linkBtn.setBounds( 1666, 512, 112, 50 );
+            qlinks[(size_t)i]->setBounds( 1673 - 65, qy[i] - 55, 130, 147 );
 
-        int y = 604;
+        // Transport row
+        const int tx[] = { 1200, 1327, 1453, 1580, 1709 };
+        int       i    = 0;
         for( auto* b : { &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
-        {
-            b->setBounds( 1666, y, 112, 58 );
-            y += 66;
-        }
+            b->setBounds( tx[i++] - 60, 1694 - 44, 120, 125 );
     }
 
     //==============================================================================

@@ -2,13 +2,42 @@
 
 namespace sim
 {
+    namespace
+    {
+        // Backlight colours of the keys (as lit on the hardware panel).
+        const juce::Colour cyan { 0xff3fd4ff }, pink { 0xffff5fd2 }, magenta { 0xffe25cff }, blue { 0xff4f7dff }, teal { 0xff2fe0c0 },
+            green { 0xff33e08a }, rose { 0xffff6f7d }, white { 0xfff2eef8 };
+    }
+
     SimulatorMainControl::SimulatorMainControl()
     {
         std::vector<SimButton*> all;
         collectButtons( all );
         for( auto* b : all )
+        {
+            b->setStyle( SimButton::Style::key );
             addAndMakeVisible( b );
+        }
         addAndMakeVisible( jog );
+        jog.setKnobDiameter( 176.0f );
+
+        // Navigation keys carry icons, no printed legend.
+        backBtn.setStyle( SimButton::Style::key, SimButton::Icon::undo );
+        copyBtn.setStyle( SimButton::Style::key, SimButton::Icon::copy );
+        minusBtn.setStyle( SimButton::Style::key, SimButton::Icon::minus );
+        plusBtn.setStyle( SimButton::Style::key, SimButton::Icon::plus );
+        for( auto* b : { &backBtn, &copyBtn, &minusBtn, &plusBtn } )
+            b->setCapSize( 72, 52 );
+        shiftBtn.setCapSize( 98, 82 );
+
+        // Backlight colours
+        for( auto [b, c] : std::initializer_list<std::pair<SimButton*, juce::Colour>> {
+                 { &bankA, cyan }, { &bankB, rose }, { &bankC, cyan }, { &bankD, rose },
+                 { &mainBtn, cyan }, { &browseBtn, pink }, { &trackMixBtn, white }, { &trackMuteBtn, cyan }, { &nextSeqBtn, blue },
+                 { &tapTempoBtn, pink }, { &noteRepeatBtn, blue }, { &menuBtn, teal }, { &shiftBtn, green },
+                 { &stepSeqBtn, magenta }, { &tcBtn, pink }, { &samplerBtn, blue }, { &sampleEditBtn, magenta }, { &progEditBtn, teal },
+                 { &backBtn, white }, { &copyBtn, white }, { &minusBtn, white }, { &plusBtn, white } } )
+            b->setLedColour( c );
 
         // Jog wheel: rotation -> EN_KNOB_CENTER knob packets, centre push -> EN_KNOB_ENTER button packets.
         jog.onStep = []( int steps ) {
@@ -33,59 +62,84 @@ namespace sim
                                  &tcBtn, &samplerBtn, &sampleEditBtn, &progEditBtn, &menuBtn, &shiftBtn } );
     }
 
+    juce::Rectangle<int> SimulatorMainControl::navHousing() const
+    {
+        // Rounded housing around the jog wheel and its four keys (board 1296..1594 x 1150..1468)
+        auto tl = local( 1296, 1150 );
+        return { tl.x, tl.y, 298, 318 };
+    }
+
     void SimulatorMainControl::paint( juce::Graphics& g )
     {
-        g.setColour( palette::well );
-        g.fillRoundedRectangle( getLocalBounds().toFloat(), 8.0f );
+        // "BANK" heading with rules either side
+        auto head = juce::Rectangle<int>( local( 1150, 862 ).x, local( 1150, 862 ).y, 610, 30 );
+        g.setColour( palette::legend );
+        g.setFont( juce::Font( 22.0f, juce::Font::bold ) );
+        g.drawText( "BANK", head, juce::Justification::centred );
+        auto ruleY = (float)head.getCentreY();
+        g.drawLine( (float)head.getX() + 10.0f, ruleY, (float)head.getCentreX() - 46.0f, ruleY, 2.0f );
+        g.drawLine( (float)head.getCentreX() + 46.0f, ruleY, (float)head.getRight() - 10.0f, ruleY, 2.0f );
 
-        g.setColour( palette::text );
-        g.setFont( juce::Font( 13.0f, juce::Font::bold ) );
-        g.drawText( "BANKS", juce::Rectangle<int>( bankA.getX(), 2, bankD.getRight() - bankA.getX(), 16 ), juce::Justification::centred );
+        // Jog housing
+        auto h = navHousing().toFloat();
+        g.setColour( juce::Colour( 0xff111113 ) );
+        g.fillRoundedRectangle( h, 34.0f );
+        g.setColour( juce::Colour( 0xff3a3a3f ) );
+        g.drawRoundedRectangle( h, 34.0f, 2.0f );
+        // Seams between the four key segments
+        g.setColour( juce::Colour( 0xff2a2a2e ) );
+        g.drawLine( h.getCentreX(), h.getY(), h.getCentreX(), h.getY() + 30.0f, 2.0f );
+        g.drawLine( h.getCentreX(), h.getBottom() - 30.0f, h.getCentreX(), h.getBottom(), 2.0f );
     }
 
     void SimulatorMainControl::resized()
     {
-        const int bw = 112, bh = 58, gx = 8, gy = 12;
-        const int top = 22;
+        // All centres in board coordinates, measured from the hardware panel.
+        auto key = [this]( SimButton& b, int cx, int cy, int w = 124, int h = 118 ) {
+            auto p = local( cx, cy );
+            b.setBounds( p.x - w / 2, p.y - 36, w, h );
+        };
 
-        auto place = [&]( SimButton& b, int x, int row ) { b.setBounds( x, top + row * ( bh + gy ), bw, bh ); };
+        // Banks
+        key( bankA, 1197, 931 );
+        key( bankB, 1365, 931 );
+        key( bankC, 1534, 931 );
+        key( bankD, 1704, 931 );
 
-        // Left block: 2 columns x 4 rows
-        int x0 = 10, x1 = x0 + bw + gx;
-        place( mainBtn, x0, 0 );
-        place( browseBtn, x0, 1 );
-        place( trackMixBtn, x0, 2 );
-        place( trackMuteBtn, x0, 3 );
-        place( nextSeqBtn, x1, 0 );
-        place( stepSeqBtn, x1, 1 );
-        place( tapTempoBtn, x1, 2 );
-        place( noteRepeatBtn, x1, 3 );
+        // Row under the banks
+        key( mainBtn, 1197, 1081 );
+        key( browseBtn, 1324, 1081 );
+        key( trackMixBtn, 1451, 1081 );
+        key( trackMuteBtn, 1578, 1081 );
+        key( nextSeqBtn, 1704, 1081 );
 
-        // Right block: 2 columns x 4 rows
-        int x3 = getWidth() - 10 - bw, x2 = x3 - gx - bw;
-        place( tcBtn, x2, 0 );
-        place( samplerBtn, x2, 1 );
-        place( sampleEditBtn, x2, 2 );
-        place( progEditBtn, x2, 3 );
-        place( menuBtn, x3, 0 );
-        place( shiftBtn, x3, 3 );
+        // Left / right of the jog wheel
+        key( tapTempoBtn, 1197, 1234 );
+        key( noteRepeatBtn, 1197, 1389 );
+        key( menuBtn, 1704, 1234 );
+        {
+            auto p = local( 1704, 1389 );
+            shiftBtn.setBounds( p.x - 62, p.y - 42, 124, 100 );
+        }
 
-        // Centre block
-        int cx0 = x1 + bw + 30, cx1 = x2 - 30, cw = cx1 - cx0;
-        int bankW = ( cw - 3 * gx ) / 4;
-        int i     = 0;
-        for( auto* b : getBankButtons() )
-            b->setBounds( cx0 + i++ * ( bankW + gx ), top, bankW, 48 );
+        // Bottom row
+        key( stepSeqBtn, 1197, 1544 );
+        key( tcBtn, 1324, 1544 );
+        key( samplerBtn, 1451, 1544 );
+        key( sampleEditBtn, 1578, 1544 );
+        key( progEditBtn, 1704, 1544 );
 
-        int navTop = top + 48 + 14;
-        int navH   = getHeight() - navTop - 8;
-        int side   = 92;
-        backBtn.setBounds( cx0, navTop + 6, side, 52 );
-        copyBtn.setBounds( cx0, navTop + navH - 58, side, 52 );
-        plusBtn.setBounds( cx1 - side, navTop + 6, side, 52 );
-        minusBtn.setBounds( cx1 - side, navTop + navH - 58, side, 52 );
+        // Jog wheel and its keys (inside the housing corners)
+        auto nav = [this]( SimButton& b, int cx, int cy ) {
+            auto p = local( cx, cy );
+            b.setBounds( p.x - 38, p.y - 27, 76, 56 );
+        };
+        nav( backBtn, 1338, 1188 );
+        nav( copyBtn, 1552, 1188 );
+        nav( minusBtn, 1338, 1430 );
+        nav( plusBtn, 1552, 1430 );
 
-        int jogSize = juce::jmin( navH, cw - 2 * side - 20 );
-        jog.setBounds( juce::Rectangle<int>( jogSize, jogSize ).withCentre( { cx0 + cw / 2, navTop + navH / 2 } ) );
+        auto c = local( 1445, 1309 );
+        jog.setBounds( juce::Rectangle<int>( 188, 188 ).withCentre( c ) );
     }
 }

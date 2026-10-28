@@ -127,6 +127,14 @@ public:
             juce::Rectangle<int> area( 0, 0, 1600, 900 );
             if( auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() )
                 area = display->userArea;
+            // KICKEM_KIOSK=1 (headless server / browser via noVNC): fill the whole display.
+            if( juce::SystemStats::getEnvironmentVariable( "KICKEM_KIOSK", {} ) == "1" )
+            {
+                setUsingNativeTitleBar( false );
+                setTitleBarHeight( 0 );
+                setBounds( area );
+                return;
+            }
             float scale = juce::jmin( 1.0f, area.getWidth() * 0.92f / bw, area.getHeight() * 0.88f / bh );
             centreWithSize( juce::roundToInt( bw * scale ), juce::roundToInt( bh * scale ) );
         }

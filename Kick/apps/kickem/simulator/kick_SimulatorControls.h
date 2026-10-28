@@ -43,6 +43,15 @@ namespace sim
         const juce::Colour text { 0xffe8e8e8 };
         const juce::Colour shiftText { 0xffffb608 };
         const juce::Colour led { 0xffff5c00 };
+
+        // Front-panel look (hardware layout)
+        const juce::Colour panel { 0xff262628 };
+        const juce::Colour cap { 0xff17171a };
+        const juce::Colour capDown { 0xff2c2c31 };
+        const juce::Colour capEdge { 0xff050506 };
+        const juce::Colour legend { 0xffc9c9cc };
+        const juce::Colour unlit { 0xff8a8a90 };
+        const juce::Colour ring { 0xffff2a2a };
     }
 
     ///
@@ -69,12 +78,28 @@ namespace sim
         /// Custom press handler (pressed=true/false). If unset, button messages are sent.
         std::function<void( bool pressed )> onPress;
 
+        /// How the button is drawn.
+        ///  panel: old simulator style (label + shift legend inside a large key)
+        ///  key:   hardware key - small backlit cap at the top of the bounds, SHIFT legend printed below it
+        ///  round: round transport key with an icon, name printed below
+        enum class Style { panel, key, round };
+        enum class Icon { none, rec, overdub, stop, play, playStart, undo, copy, minus, plus };
+        void setStyle( Style s, Icon i = Icon::none ) { style = s; icon = i; repaint(); }
+        /// Cap size in the key / round styles (default 98 x 70).
+        void setCapSize( int w, int h ) { capW = w; capH = h; repaint(); }
+
     protected:
+        juce::Rectangle<float> capArea() const;
+        void drawIcon( juce::Graphics& g, juce::Rectangle<float> area, juce::Colour c ) const;
+
         juce::String label, shiftLabel;
         int          code, shiftCode;
         int          sentCode { DCC::EN_INVALID_ID };
         bool         down { false }, led { false };
         juce::Colour ledColour { palette::led };
+        Style        style { Style::panel };
+        Icon         icon { Icon::none };
+        int          capW { 98 }, capH { 70 };
     };
 
     ///
@@ -110,6 +135,12 @@ namespace sim
         void turn( int steps );
         void pushCentre( bool isDown );
 
+        /// Hardware look: label above the knob (MASTER / REC) instead of below, and MIN / MAX marks.
+        void setLabelAbove( bool above ) { labelAbove = above; repaint(); }
+        void setShowMinMax( bool show ) { showMinMax = show; repaint(); }
+        /// Fixed knob diameter (0 = fit the bounds).
+        void setKnobDiameter( float d ) { knobDiameter = d; repaint(); }
+
         void paint( juce::Graphics& g ) override;
         void mouseDown( const juce::MouseEvent& e ) override;
         void mouseDrag( const juce::MouseEvent& e ) override;
@@ -131,6 +162,8 @@ namespace sim
         int          lastDragY { 0 };
         bool         centrePressed { false };
         double       wheelAccum { 0.0 };
+        bool         labelAbove { false }, showMinMax { false };
+        float        knobDiameter { 0.0f };
     };
 
     ///
