@@ -36,6 +36,11 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 juce_add_gui_app(${TargetName}
         PRODUCT_NAME ${TargetName}
         COMPANY_NAME ${TargetCompany}
+        BUNDLE_ID org.awesomekick.kickray
+        ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/kickray-icon.png
+        # macOS ends an app that opens an audio input without this text (the sampler records)
+        MICROPHONE_PERMISSION_ENABLED TRUE
+        MICROPHONE_PERMISSION_TEXT "Kickray records from your audio input when you sample."
 )
 
 set_target_properties(${TargetName} PROPERTIES

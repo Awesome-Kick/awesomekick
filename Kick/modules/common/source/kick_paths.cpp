@@ -45,7 +45,7 @@ juce::File getAppDirs( DirType T )
         return juce::File( rootP + juce::String( MT_SOURCE_SRCDIR ) + seprator + "logs" + seprator );
     else if( T == MTPrefs )
         return juce::File( rootP + juce::String( MT_SOURCE_SRCDIR ) + seprator + "prefs" + seprator );
-#elif defined( __APPLE_CPP__ ) || defined( __APPLE_CC__ ) || defined( JUCE_MAC )
+#elif ( defined( __APPLE_CPP__ ) || defined( __APPLE_CC__ ) || defined( JUCE_MAC ) ) && !( defined( SIM_BUILD ) && SIM_BUILD )
     if( T == MTAssets )
         return juce::File( "./assets" );
     else if( T == MTSamples )
@@ -60,16 +60,19 @@ juce::File getAppDirs( DirType T )
         return juce::File( "./logs/" );
     else if( T == MTPrefs )
         return juce::File( "./prefs" );
-#elif ( defined( LINUX ) || defined( __linux__ ) ) && defined( SIM_BUILD ) && SIM_BUILD
-    // Simulator on a Linux desktop/server: never touch the hardware paths
+#elif ( defined( LINUX ) || defined( __linux__ ) || defined( __APPLE__ ) ) && defined( SIM_BUILD ) && SIM_BUILD
+    // Simulator on a Linux or macOS desktop/server: never touch the hardware paths
     // (/app, /data, /home/Kick). Read-only data (assets, demos, templates) is
-    // found next to the executable (or a parent folder), or in KICKEM_DATA_DIR.
-    // Everything the simulator writes goes to ~/.local/share/KickEM.
+    // found in KICKEM_DATA_DIR, in the app bundle (Contents/Resources) or next to
+    // the executable (or a parent folder). Everything the simulator writes goes to
+    // ~/.local/share/KickEM (Linux) or ~/Library/Application Support/KickEM (macOS).
     auto findDataRoot = []() -> juce::File
     {
         if( auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_DATA_DIR", {} ); dir.isNotEmpty() )
             return juce::File( dir );
         auto exeDir = juce::File::getSpecialLocation( juce::File::currentExecutableFile ).getParentDirectory();
+        if( auto resources = exeDir.getSiblingFile( "Resources" ); resources.getChildFile( "assets" ).isDirectory() )
+            return resources; // macOS app bundle: Contents/MacOS/<exe> -> Contents/Resources
         auto d      = exeDir;
         for( int i = 0; i < 6 && d.exists(); ++i, d = d.getParentDirectory() )
             if( d.getChildFile( "assets" ).isDirectory() )
@@ -78,7 +81,11 @@ juce::File getAppDirs( DirType T )
     };
     auto userRoot = []( const juce::String& sub ) -> juce::File
     {
+  #if defined( __APPLE__ )
+        auto f = juce::File::getSpecialLocation( juce::File::userApplicationDataDirectory ).getChildFile( "Application Support/KickEM" ).getChildFile( sub );
+  #else
         auto f = juce::File::getSpecialLocation( juce::File::userHomeDirectory ).getChildFile( ".local/share/KickEM" ).getChildFile( sub );
+  #endif
         f.createDirectory();
         return f;
     };

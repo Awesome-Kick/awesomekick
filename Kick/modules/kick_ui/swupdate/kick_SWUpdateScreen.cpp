@@ -1,6 +1,20 @@
 #include "kick_SWUpdateScreen.h"
 namespace kick_ui
 {
+
+    // Firmware-update shell commands (mkdir/mount/tail/reboot). The simulator build never runs them
+    // on the host computer; on Linux the link-time sandbox (kick_SimSandbox.cpp) would catch them too,
+    // this also covers macOS and Windows.
+    static int swuShell( const char* cmd )
+    {
+#if defined( SIM_BUILD ) && SIM_BUILD
+        std::fprintf( stderr, "[Kickray sandbox] blocked system(): %s\n", cmd );
+        return -1;
+#else
+        return system( cmd );
+#endif
+    }
+
     SWUpdateScreen::SWUpdateScreen()
         : kick_ui::IScreen( kick_ui::Screen::SWUpdateWindow )
     {
@@ -133,7 +147,7 @@ namespace kick_ui
             mt::utils::showDialog( "SUCCESS!", warningPopup, [this, warningPopup]( int R ) {
                 if( R == UI::APPLY )
                 {
-                    if( system( "sync && reboot" ) == 0 )
+                    if( swuShell( "sync && reboot" ) == 0 )
                         DBG( "Rebooting the device so new firmware will apply" );
                 }
                 else if( R == UI::CANCEL )

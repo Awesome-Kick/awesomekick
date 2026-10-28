@@ -23,6 +23,19 @@
 
 namespace mt
 {
+
+    // Firmware-update shell commands (mkdir/mount/tail/reboot). The simulator build never runs them
+    // on the host computer; on Linux the link-time sandbox (kick_SimSandbox.cpp) would catch them too,
+    // this also covers macOS and Windows.
+    static int hwShell( const char* cmd )
+    {
+#if defined( SIM_BUILD ) && SIM_BUILD
+        std::fprintf( stderr, "[Kickray sandbox] blocked system(): %s\n", cmd );
+        return -1;
+#else
+        return system( cmd );
+#endif
+    }
     namespace fs = std::filesystem;
 
     const char* FACTORY_RESET_CMD = "/bin/rm -rf /home/Kick/projects* /home/Kick/prefs";
@@ -219,11 +232,11 @@ namespace mt
         std::string imageFormat    = ".swu";
         std::string creatFolderCmd = "mkdir " + path;
         DBG( "FwUpdate ->extractImage->  " << creatFolderCmd );
-        system( creatFolderCmd.c_str() );
+        hwShell( creatFolderCmd.c_str() );
         std::string outFullpath = decrptionDir + decryptedFwname;
         std::string cmd         = "mount -o loop -t ext4  " + outFullpath + " " + extractDir;
         DBG( "FwUpdate ->extractImage->  " << cmd );
-        system( cmd.c_str() );
+        hwShell( cmd.c_str() );
         std::vector<std::string> swuFiles = getSWUFiles( extractDir, imageFormat );
         if( swuFiles.empty() )
         {
@@ -465,7 +478,7 @@ namespace mt
     {
         std::string cmd = "tail -c +" + std::to_string( fw_ver_index ) + " " + fwfilepath + " > " + decrptionDir + fwHeaderFile;
         DBG( "removing Header from image" << cmd );
-        int result = system( cmd.c_str() ); // Execute the command using system call
+        int result = hwShell( cmd.c_str() ); // Execute the command using system call
 
 	if ( result != 0 )
     {
