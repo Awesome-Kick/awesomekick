@@ -252,10 +252,33 @@ namespace ui
         resized();
     }
 
+#if defined( SIM_BUILD ) && SIM_BUILD
+    bool demoHasContent( const juce::File& demo )
+    {
+        return demo.getChildFile( demo.getFileName() + mt::__projectFileSuffix ).loadFileAsString().contains( "<PROGRAM " );
+    }
+
+    juce::File userCopyOfDemo( const juce::File& demo )
+    {
+        auto dest = getAppDirs( MTProjects ).getChildFile( demo.getFileName() );
+        if( dest.isDirectory() )
+            return dest;
+        auto prj  = dest.getChildFile( demo.getFileName() + mt::__projectFileSuffix );
+        auto path = dest.getFullPathName().replace( "&", "&amp;" ).replace( "\"", "&quot;" ).replace( "<", "&lt;" ).replace( ">", "&gt;" );
+        if( !demo.copyDirectoryTo( dest ) || !prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", path ) ) )
+            return {};
+        return dest;
+    }
+#endif
+
     void RecentProject::addDemos()
     {
         juce::File demoPath = getAppDirs( MTDemos );
         demoPath.findChildFiles( demoDirList, juce::File::findDirectories, false );
+#if defined( SIM_BUILD ) && SIM_BUILD
+        // The public firmware's demos have no samples: show only demos with something to play.
+        demoDirList.removeIf( []( const juce::File& d ) { return !demoHasContent( d ); } );
+#endif
         // Sort the list numerically based on the number in the file name
         std::sort( demoDirList.begin(), demoDirList.end(),
                    []( const juce::File& a, const juce::File& b ) {
@@ -279,6 +302,11 @@ namespace ui
             };
             recentItemsPtr->onMouseDown = [&]( int index, juce::File project ) {
                 enableRecentProjVTreeEntry = false;
+#if defined( SIM_BUILD ) && SIM_BUILD
+                // Open the user's own copy: samples included, and the bundled demo stays untouched.
+                if( auto copy = userCopyOfDemo( project ); copy != juce::File() )
+                    project = copy;
+#endif
                 loadProject( project );
             };
 

@@ -2,6 +2,14 @@
 
 namespace ui
 {
+#if defined( SIM_BUILD ) && SIM_BUILD
+    /// Simulator: bundled demos (Kick/demos) carry "@PROJECT_DIR@" instead of their folder in the sample
+    /// paths, because the engine stores absolute paths. Returns the user's copy in the projects folder,
+    /// making it (samples included, real path filled in) if it doesn't exist yet. Empty on failure.
+    juce::File userCopyOfDemo( const juce::File& demo );
+    /// True for a demo that has a program, i.e. something to play (the public firmware demos are empty).
+    bool demoHasContent( const juce::File& demo );
+#endif
     class LongPressComp : public juce::Component
     {
     public:

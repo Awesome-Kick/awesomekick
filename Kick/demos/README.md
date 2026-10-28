@@ -1,8 +1,10 @@
 # Bundled demo projects
 
-Playable projects that the simulator copies into your projects folder on its first start
-(see `installBundledContent()` in `Kick/apps/kickem/simulator/kick_Simulator.cpp`). The project
-files contain `@PROJECT_DIR@` instead of their own folder; the simulator fills in the real path.
+`Demo 01`–`Demo 05` are the firmware's own demos; the public release has no samples for them, so the
+simulator hides them. `AwesomeKick Groove` and `Rusty Kit` are playable: they appear on the start screen,
+and the simulator opens (and on its first start installs) your own copy in the projects folder
+(`ui::userCopyOfDemo()` in `Kick/modules/kick_ui/recent_project/kick_RecentProject.cpp`). Their project
+files contain `@PROJECT_DIR@` instead of their own folder; the copy gets the real path.
 
 | Project | Samples | Source | License |
 |---|---|---|---|

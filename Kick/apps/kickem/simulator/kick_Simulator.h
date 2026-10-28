@@ -70,7 +70,7 @@ namespace sim
         /// KICKEM_SELFTEST=makedemo: build the playable demo projects (see kick_Simulator.cpp)
         /// "AwesomeKick Groove" + "Rusty Kit" (sequence, drum program, 2-bar pattern), save them and quit.
         void startMakeDemo();
-        /// Copies the bundled demo projects (<data>/content) into the projects folder, see kick_Simulator.cpp.
+        /// Copies the playable bundled demos (<data>/demos) into the projects folder, see kick_Simulator.cpp.
         void installBundledContent();
         void timerCallback() override;
         std::vector<std::function<void()>> selfTestSteps;

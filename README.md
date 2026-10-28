@@ -24,7 +24,7 @@ Get the latest build from [Releases](https://github.com/Awesome-Kick/awesomekick
 
 On the first start AwesomeKick installs two playable demo projects and opens **AwesomeKick Groove** – press
 **PLAY**. **Rusty Kit** (an acoustic kit) is in the file browser under *Internal*. Both use free CC0
-samples, see [`Kick/content`](Kick/content/README.md).
+samples, see [`Kick/demos`](Kick/demos/README.md).
 
 The apps are not signed yet, so the system warns once:
 - **macOS:** "AwesomeKick cannot be opened because the developer cannot be verified" → *System Settings →

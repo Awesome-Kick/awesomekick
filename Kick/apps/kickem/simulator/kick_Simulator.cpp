@@ -178,43 +178,32 @@ namespace sim
             c->addKeyListener( this );
     }
 
-    // The playable demo projects in <data>/content (Kick/content in the source tree) carry "@PROJECT_DIR@"
-    // instead of their own folder in the sample paths, because the engine stores absolute paths. Copy each one
-    // the user has not received yet into the projects folder and fill in the real path. On the very first start,
-    // open "AwesomeKick Groove" so that PLAY sounds right away. Deleted demos are not installed again
-    // (prefs/installed-content.txt remembers them).
+    // Copy the playable bundled demos (Kick/demos, see ui::userCopyOfDemo) the user has not received yet into
+    // the projects folder. On the very first start, open "AwesomeKick Groove" so that PLAY sounds right away.
+    // Deleted demos are not installed again (prefs/installed-content.txt remembers them).
     void SimulatorBoard::installBundledContent()
     {
-        const auto content = getAppDirs( MTDemos ).getParentDirectory().getChildFile( "content" );
-        if( !content.isDirectory() )
-            return;
         auto              marker = getAppDirs( MTPrefs ).getChildFile( "installed-content.txt" );
         juce::StringArray installed;
         installed.addLines( marker.loadFileAsString() );
         installed.removeEmptyStrings();
         const bool firstStart = installed.isEmpty();
-        auto       xmlEscape  = []( juce::String t ) {
-            return t.replace( "&", "&amp;" ).replace( "\"", "&quot;" ).replace( "<", "&lt;" ).replace( ">", "&gt;" );
-        };
 
         juce::File openFirst;
-        for( const auto& src : content.findChildFiles( juce::File::findDirectories, false ) )
+        for( const auto& src : getAppDirs( MTDemos ).findChildFiles( juce::File::findDirectories, false ) )
         {
             const auto name = src.getFileName();
-            if( installed.contains( name ) )
+            if( installed.contains( name ) || !ui::demoHasContent( src ) )
                 continue;
-            auto dest = getAppDirs( MTProjects ).getChildFile( name );
-            if( !dest.exists() )
+            const bool existed = getAppDirs( MTProjects ).getChildFile( name ).isDirectory();
+            const auto dest    = ui::userCopyOfDemo( src );
+            if( dest == juce::File() )
             {
-                auto prj = dest.getChildFile( name + mt::__projectFileSuffix );
-                if( !src.copyDirectoryTo( dest )
-                    || !prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", xmlEscape( dest.getFullPathName() ) ) ) )
-                {
-                    SimulatorInterfaceImpl::log( "content: could not install " + name );
-                    continue;
-                }
-                SimulatorInterfaceImpl::log( "content: installed " + dest.getFullPathName() );
+                SimulatorInterfaceImpl::log( "content: could not install " + name );
+                continue;
             }
+            if( !existed )
+                SimulatorInterfaceImpl::log( "content: installed " + dest.getFullPathName() );
             installed.add( name );
             if( firstStart && name == "AwesomeKick Groove" )
                 openFirst = dest;
@@ -983,10 +972,9 @@ namespace sim
         s.push_back( [log] {
             // KICKEM_TOUR_PROJECT: a project in the projects folder or a bundled demo (default "AwesomeKick Groove").
             auto name    = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "AwesomeKick Groove" );
-            auto content = getAppDirs( MTDemos ).getParentDirectory().getChildFile( "content" );
             auto source  = getAppDirs( MTProjects ).getChildFile( name );
             if( !source.isDirectory() )
-                source = content.getChildFile( name );
+                source = getAppDirs( MTDemos ).getChildFile( name );
             if( !source.isDirectory() )
                 source = getAppDirs( MTTemp ).getChildFile( "Template 01" );
             // The engine opens <folder>/<folder name>.kickPrj, so keep the project's folder name.

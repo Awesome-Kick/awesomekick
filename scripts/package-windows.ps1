@@ -2,7 +2,7 @@
 #
 #   pwsh scripts/package-windows.ps1 [-BuildDir Kick/build/sim]
 #
-# The firmware looks for assets/, demos/, templates/ and content/ next to KT_KickEM.exe and writes projects,
+# The firmware looks for assets/, demos/ and templates/ next to KT_KickEM.exe and writes projects,
 # preferences and logs there too (see kick_paths.cpp), so unzip it to a folder you can write to.
 param( [string]$BuildDir = "" )
 $ErrorActionPreference = "Stop"
@@ -17,7 +17,7 @@ $Out = Join-Path $Dist "AwesomeKick"
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Out, (Join-Path $Dist "AwesomeKick-Windows.zip")
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 Copy-Item $Exe.FullName (Join-Path $Out "KT_KickEM.exe")
-foreach( $d in "assets", "demos", "templates", "content" ) {
+foreach( $d in "assets", "demos", "templates" ) {
     Copy-Item -Recurse (Join-Path $Repo "Kick/$d") (Join-Path $Out $d)
 }
 Compress-Archive -Path $Out -DestinationPath (Join-Path $Dist "AwesomeKick-Windows.zip")
