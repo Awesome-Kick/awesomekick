@@ -1605,10 +1605,17 @@ namespace ui
     void FileLeftEntry::resized()
     {
         auto b = getLocalBounds();
+        if( b.isEmpty() )
+            return;
         imageButton.setBoundsRelative( 0.06f, 0.3396f, width / b.getWidth(), height / b.getHeight() );
         file.setBoundsRelative( 0.126f, 0.188f, 0.671f, 0.622f );
-        ejectButton.setBoundsRelative( 0.867f, 0.188f, 0.102f, 0.641f );
-        formatButton.setBoundsRelative( 0.73f, 0.188f, 0.102f, 0.641f );
+        // eject/format are only added for external devices (format not at all);
+        // without a parent setBoundsRelative() falls back to the primary display,
+        // which can be null right after start-up (crash on Xvfb)
+        if( ejectButton.getParentComponent() == this )
+            ejectButton.setBoundsRelative( 0.867f, 0.188f, 0.102f, 0.641f );
+        if( formatButton.getParentComponent() == this )
+            formatButton.setBoundsRelative( 0.73f, 0.188f, 0.102f, 0.641f );
     }
 
     void FileLeftEntry::paint( juce::Graphics& g )

@@ -17,7 +17,11 @@ namespace ui
 
         bool getSdCardStatus()
         {
-#if defined( LINUX ) || defined( __linux__ )
+#if defined( SIM_BUILD ) && SIM_BUILD
+            // Simulator on a PC: /dev/sda or /dev/mmcblk1 is the host's own disk,
+            // not a USB stick / SD card plugged into the KICK.
+            return false;
+#elif defined( LINUX ) || defined( __linux__ )
             const char* sdCardDevicePath = "/dev/mmcblk1";
             if( access( sdCardDevicePath, F_OK ) != -1 )
                 return true;
@@ -29,7 +33,11 @@ namespace ui
 
         bool getUsbStatus()
         {
-#if defined( LINUX ) || defined( __linux__ )
+#if defined( SIM_BUILD ) && SIM_BUILD
+            // Simulator on a PC: /dev/sda or /dev/mmcblk1 is the host's own disk,
+            // not a USB stick / SD card plugged into the KICK.
+            return false;
+#elif defined( LINUX ) || defined( __linux__ )
             const char* usbDevicePath = "/dev/sda";
             if( access( usbDevicePath, F_OK ) != -1 )
                 return true;
