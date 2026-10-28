@@ -1,8 +1,9 @@
-# AwesomeKick – KICK simulator on Linux
+# AwesomeKick – KICK simulator for macOS, Windows and Linux
 
 **AwesomeKick** is a community project around the open-sourced KICK groovebox firmware.
-This branch builds and runs the simulator (`KT_KickEM`) on **Ubuntu / Debian** – on a desktop or on a
-**headless server**, played from any browser in your network.
+It runs the real KICK firmware as a simulator – **Kickray** – with the front panel laid out like the
+hardware: as a native app on **macOS** and **Windows** (download and play, sound straight from your
+computer), and on **Ubuntu / Debian** on a desktop or a **headless server**, played from any browser in your network.
 
 <p align="center">
   <img src="docs/images/kickem-linux.png" alt="AwesomeKick simulator on Linux, front panel laid out like the hardware" width="720">
@@ -12,7 +13,29 @@ This branch builds and runs the simulator (`KT_KickEM`) on **Ubuntu / Debian** �
 > It builds on the `desktop-build` branch by [chillbeast](https://github.com/chillbeast/0700-AAM)
 > and on the original source at [MusicTribeOpenSource/0700-AAM](https://github.com/MusicTribeOpenSource/0700-AAM).
 
-## Quick start
+## Download: macOS and Windows
+
+Get the latest build from [Releases](https://github.com/Awesome-Kick/awesomekick/releases):
+
+| System | File | Start |
+|---|---|---|
+| macOS 12+ (Apple Silicon and Intel) | `Kickray-macOS.zip` | unzip, move **Kickray** to *Applications*, open it |
+| Windows 10/11 (x64) | `Kickray-Windows.zip` | unzip to a folder you can write to (e.g. *Documents*), run `KT_KickEM.exe` |
+
+On the first start Kickray installs two playable demo projects and opens **Kickray Groove** – press
+**PLAY**. **Rusty Kit** (an acoustic kit) is in the file browser under *Internal*. Both use free CC0
+samples, see [`Kick/content`](Kick/content/README.md).
+
+The apps are not signed yet, so the system warns once:
+- **macOS:** "Kickray cannot be opened because the developer cannot be verified" → *System Settings →
+  Privacy & Security* → **Open Anyway** (or in Terminal: `xattr -dr com.apple.quarantine /Applications/Kickray.app`).
+  macOS asks for the microphone: allow it if you want to sample, sound output works either way.
+- **Windows:** SmartScreen "Windows protected your PC" → **More info** → **Run anyway**.
+
+For the lowest latency choose your audio interface and a small buffer in Kickray's audio settings
+(macOS: 64–128 samples; Windows: *Windows Audio (Exclusive Mode)*).
+
+## Quick start (Linux)
 
 ```bash
 git clone -b linux https://github.com/Awesome-Kick/awesomekick.git
