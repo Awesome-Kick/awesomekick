@@ -74,7 +74,7 @@ namespace sim
         // "BANK" heading with rules either side
         auto head = juce::Rectangle<int>( local( 1150, 862 ).x, local( 1150, 862 ).y, 610, 30 );
         g.setColour( palette::legend );
-        g.setFont( juce::Font( 22.0f, juce::Font::bold ) );
+        g.setFont( juce::Font( 28.0f, juce::Font::bold ) );
         g.drawText( "BANK", head, juce::Justification::centred );
         auto ruleY = (float)head.getCentreY();
         g.drawLine( (float)head.getX() + 10.0f, ruleY, (float)head.getCentreX() - 46.0f, ruleY, 2.0f );

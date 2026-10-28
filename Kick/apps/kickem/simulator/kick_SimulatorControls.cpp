@@ -192,7 +192,7 @@ namespace sim
             {
                 // Backlit legend on the cap
                 g.setColour( led ? lit.brighter( 0.25f ) : lit );
-                const auto fontH = juce::jmin( 19.0f, face.getHeight() * 0.3f );
+                const auto fontH = juce::jmin( 24.0f, face.getHeight() * 0.38f );
                 g.setFont( juce::Font( fontH, juce::Font::bold ) );
                 const int lines = label.containsChar( ' ' ) && label.length() > 6 ? 2 : 1;
                 g.drawFittedText( lines == 2 ? label.replaceFirstOccurrenceOf( " ", "\n" ) : label, face.reduced( 4.0f, 3.0f ).toNearestInt(),
@@ -206,7 +206,7 @@ namespace sim
             {
                 const bool shiftOn = style == Style::key && ShiftLatch::isLatched();
                 g.setColour( shiftOn ? palette::shiftText : palette::legend );
-                g.setFont( juce::Font( juce::jmin( 18.0f, below.getHeight() * 0.8f ), style == Style::round ? juce::Font::plain : juce::Font::bold ) );
+                g.setFont( juce::Font( juce::jmin( 23.0f, below.getHeight() * 0.95f ), style == Style::round ? juce::Font::plain : juce::Font::bold ) );
                 g.drawFittedText( text, below.toNearestInt(), juce::Justification::centredTop, 1, 0.75f );
             }
             return;
@@ -228,16 +228,16 @@ namespace sim
         {
             auto top = textArea.removeFromTop( textArea.getHeight() * 0.58f );
             g.setColour( palette::text );
-            g.setFont( juce::Font( juce::jmin( 15.0f, top.getHeight() * 0.6f ), juce::Font::bold ) );
+            g.setFont( juce::Font( juce::jmin( 19.0f, top.getHeight() * 0.75f ), juce::Font::bold ) );
             g.drawFittedText( label, top.toNearestInt(), juce::Justification::centredBottom, 1 );
             g.setColour( ShiftLatch::isLatched() ? palette::shiftText : palette::shiftText.withAlpha( 0.6f ) );
-            g.setFont( juce::Font( juce::jmin( 12.0f, textArea.getHeight() * 0.8f ) ) );
+            g.setFont( juce::Font( juce::jmin( 15.0f, textArea.getHeight() * 0.9f ) ) );
             g.drawFittedText( shiftLabel, textArea.toNearestInt(), juce::Justification::centredTop, 1 );
         }
         else
         {
             g.setColour( palette::text );
-            g.setFont( juce::Font( juce::jmin( 15.0f, textArea.getHeight() * 0.45f ), juce::Font::bold ) );
+            g.setFont( juce::Font( juce::jmin( 19.0f, textArea.getHeight() * 0.55f ), juce::Font::bold ) );
             g.drawFittedText( label, textArea.toNearestInt(), juce::Justification::centred, 2 );
         }
     }
@@ -393,21 +393,21 @@ namespace sim
             g.setColour( palette::legend );
             if( label.isNotEmpty() )
             {
-                g.setFont( juce::Font( 21.0f, juce::Font::bold ) );
+                g.setFont( juce::Font( 26.0f, juce::Font::bold ) );
                 auto strip = labelAbove ? juce::Rectangle<float>( 0.0f, 0.0f, (float)getWidth(), 30.0f )
-                                        : juce::Rectangle<float>( 0.0f, k.getBottom() + 8.0f, (float)getWidth(), 28.0f );
+                                        : juce::Rectangle<float>( 0.0f, k.getBottom() + 6.0f, (float)getWidth(), 30.0f );
                 g.drawText( label, strip, juce::Justification::centred );
             }
             if( showMinMax )
             {
-                g.setFont( juce::Font( 15.0f, juce::Font::bold ) );
+                g.setFont( juce::Font( 19.0f, juce::Font::bold ) );
                 auto y     = k.getBottom() + 4.0f;
                 auto left  = c.getPointOnCircumference( r + 6.0f, juce::degreesToRadians( -135.0f ) );
                 auto right = c.getPointOnCircumference( r + 6.0f, juce::degreesToRadians( 135.0f ) );
                 g.fillEllipse( juce::Rectangle<float>( 5.0f, 5.0f ).withCentre( left ) );
                 g.fillEllipse( juce::Rectangle<float>( 5.0f, 5.0f ).withCentre( right ) );
-                g.drawText( "MIN", juce::Rectangle<float>( left.x - 40.0f, y + 10.0f, 80.0f, 20.0f ), juce::Justification::centred );
-                g.drawText( "MAX", juce::Rectangle<float>( right.x - 40.0f, y + 10.0f, 80.0f, 20.0f ), juce::Justification::centred );
+                g.drawText( "MIN", juce::Rectangle<float>( left.x - 40.0f, y + 9.0f, 80.0f, 24.0f ), juce::Justification::centred );
+                g.drawText( "MAX", juce::Rectangle<float>( right.x - 40.0f, y + 9.0f, 80.0f, 24.0f ), juce::Justification::centred );
             }
             return;
         }
@@ -448,8 +448,8 @@ namespace sim
         if( label.isNotEmpty() )
         {
             g.setColour( palette::text );
-            g.setFont( juce::Font( juce::jmin( 14.0f, getHeight() * 0.14f ), juce::Font::bold ) );
-            g.drawText( label, getLocalBounds().removeFromBottom( (int)juce::jmin( 20.0f, getHeight() * 0.18f ) ), juce::Justification::centred );
+            g.setFont( juce::Font( juce::jmin( 18.0f, getHeight() * 0.17f ), juce::Font::bold ) );
+            g.drawText( label, getLocalBounds().removeFromBottom( (int)juce::jmin( 25.0f, getHeight() * 0.21f ) ), juce::Justification::centred );
         }
     }
 
@@ -653,11 +653,11 @@ namespace sim
     {
         // Pad numbers printed under the bottom-left corner of each pad, as on the hardware.
         g.setColour( palette::legend );
-        g.setFont( juce::Font( 18.0f, juce::Font::bold ) );
+        g.setFont( juce::Font( 23.0f, juce::Font::bold ) );
         for( int i = 0; i < 16; ++i )
         {
             auto pb = pads[(size_t)i]->getBounds();
-            g.drawText( juce::String( i + 1 ), juce::Rectangle<int>( pb.getX() + 8, pb.getBottom() + 4, 60, 24 ), juce::Justification::centredLeft );
+            g.drawText( juce::String( i + 1 ), juce::Rectangle<int>( pb.getX() + 8, pb.getBottom() + 3, 60, 28 ), juce::Justification::centredLeft );
         }
     }
 

@@ -9,8 +9,9 @@ namespace sim
     namespace
     {
         // Board coordinates of the hardware panel (see SimulatorBoard::boardWidth).
-        const juce::Rectangle<int> screenRect { 385, 140, 1024, 600 };
-        const juce::Rectangle<int> bezelRect { 300, 52, 1190, 747 };
+        // The firmware screen is 1024x600; it is shown scaled up to fill the bezel (screenRect).
+        const juce::Rectangle<int> screenRect { 325, 75, 1214, 711 };
+        const juce::Rectangle<int> bezelRect { 300, 52, 1266, 790 };
         const juce::Rectangle<int> cameraRect { 57, 52, 178, 77 };
         const juce::Rectangle<int> linkRect { 57, 641, 191, 156 };
 
@@ -1710,7 +1711,7 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
 
         // Community name under the screen (no manufacturer logo)
         g.setColour( palette::legend.withAlpha( 0.75f ) );
-        g.setFont( juce::Font( 30.0f, juce::Font::bold ) );
+        g.setFont( juce::Font( 34.0f, juce::Font::bold ) );
         g.drawText( "AwesomeKick", juce::Rectangle<int>( bezelRect.getX(), screenRect.getBottom() + 6, bezelRect.getWidth(), bezelRect.getBottom() - screenRect.getBottom() - 10 ),
                     juce::Justification::centred );
     }
@@ -1718,7 +1719,9 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
     void SimulatorBoard::resized()
     {
         // All positions in board units, measured from the hardware panel.
-        screen.setBounds( screenRect );
+        screen.setBounds( 0, 0, 1024, 600 );
+        screen.setTransform( juce::AffineTransform::scale( (float)screenRect.getWidth() / 1024.0f )
+                                 .translated( (float)screenRect.getX(), (float)screenRect.getY() ) );
 
         // Upper left: MASTER and REC pots, LINK
         masterKnob.setBounds( 127 - 90, 279 - 94, 180, 196 );

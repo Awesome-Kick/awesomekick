@@ -49,8 +49,8 @@ namespace sim
         const juce::Colour cap { 0xff17171a };
         const juce::Colour capDown { 0xff2c2c31 };
         const juce::Colour capEdge { 0xff050506 };
-        const juce::Colour legend { 0xffc9c9cc };
-        const juce::Colour unlit { 0xff8a8a90 };
+        const juce::Colour legend { 0xffdcdcde };
+        const juce::Colour unlit { 0xffb8b8bc };
         const juce::Colour ring { 0xffff2a2a };
     }
 
