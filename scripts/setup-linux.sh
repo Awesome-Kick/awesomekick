@@ -7,6 +7,7 @@
 #      bash scripts/setup-linux.sh              # pick the mode automatically
 #      bash scripts/setup-linux.sh --desktop    # normal window on this desktop
 #      bash scripts/setup-linux.sh --headless   # virtual display + browser (noVNC)
+#      add --password to protect the browser view with a password (it is open to your network otherwise)
 #
 #  1. installs the build dependencies (asks for the sudo password once)
 #  2. builds the simulator with all CPU cores
@@ -35,11 +36,14 @@ fail() { printf '\n\033[1;31m!!! %s\033[0m\n' "$*" >&2; exit 1; }
 
 # --- mode ---------------------------------------------------------------------
 MODE=""
+NO_PASSWORD=1
 for arg in "$@"; do
   case "$arg" in
     --desktop)  MODE=desktop ;;
     --headless) MODE=headless ;;
-    -h|--help)  sed -n '2,19p' "$0"; exit 0 ;;
+    --password) NO_PASSWORD=0 ;;
+    --no-password) NO_PASSWORD=1 ;;
+    -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
     *)          fail "Unknown option: $arg (use --desktop or --headless)" ;;
   esac
 done
@@ -113,6 +117,16 @@ cd "$(dirname "$BIN")"
 exec "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null
 EOF
 
+# Browser access: open by default (meant for a home network); --password protects it.
+# (x11vnc itself only listens on localhost, the browser reaches it through websockify on $WEB_PORT.)
+if [ "$NO_PASSWORD" = 1 ]; then
+  VNC_AUTH="-nopw"
+  PASSWORD_INFO="none (use --password to set one)"
+else
+  VNC_AUTH="-rfbauth \"$CONF_DIR/vncpass\""
+  PASSWORD_INFO="\$(cat \"$CONF_DIR/vncpass.txt\")"
+fi
+
 cat > "$DEV_DIR/kickem-start.sh" <<EOF
 #!/usr/bin/env bash
 # Start the AwesomeKick simulator on the virtual display :$DISPLAY_NUM and share it to the browser:
@@ -140,7 +154,7 @@ setsid nohup python3 -I "$REPO_DIR/scripts/awesomekick-audio.py" --port $AUDIO_P
 cd "$(dirname "$BIN")"
 DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 KICKEM_AUDIO_TYPE=JACK setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
 setsid nohup x11vnc -display :$DISPLAY_NUM -rfbport $VNC_PORT -localhost -forever -shared \\
-      -rfbauth "$CONF_DIR/vncpass" -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
+      $VNC_AUTH -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
 # Web root: noVNC plus our index.html (noVNC view + "Sound on" button), so http://<host>:$WEB_PORT/ is all you need
 WEB="$DEV_DIR/novnc-web"; mkdir -p "\$WEB"
 for f in /usr/share/novnc/*; do ln -sfn "\$f" "\$WEB/\$(basename "\$f")"; done
@@ -151,7 +165,7 @@ IP=\$(hostname -I | awk '{print \$1}')
 echo
 echo "AwesomeKick simulator is running."
 echo "  Open in a browser: http://\$IP:$WEB_PORT/"
-echo "  Password:          \$(cat "$CONF_DIR/vncpass.txt")"
+echo "  Password:          $PASSWORD_INFO"
 echo "  Sound:             click \"Sound on\" at the bottom right of the page"
 echo "  Stop:              $DEV_DIR/kickem-stop.sh"
 echo "  Logs:              \$LOG/"
@@ -189,13 +203,17 @@ chmod +x "$DEV_DIR"/kickem-*.sh
 ok "Scripts: kickem-desktop.sh | kickem-start.sh | kickem-stop.sh | kickem-rebuild.sh"
 
 if [ "$MODE" = headless ]; then
-  if [ ! -f "$CONF_DIR/vncpass" ]; then
-    VNC_PW="$(openssl rand -hex 4)"
-    x11vnc -storepasswd "$VNC_PW" "$CONF_DIR/vncpass" >/dev/null 2>&1
-    echo "$VNC_PW" > "$CONF_DIR/vncpass.txt"
-    chmod 600 "$CONF_DIR/vncpass" "$CONF_DIR/vncpass.txt"
+  if [ "$NO_PASSWORD" = 1 ]; then
+    ok "Browser access without password (--password to set one)"
+  else
+    if [ ! -f "$CONF_DIR/vncpass" ]; then
+      VNC_PW="$(openssl rand -hex 4)"
+      x11vnc -storepasswd "$VNC_PW" "$CONF_DIR/vncpass" >/dev/null 2>&1
+      echo "$VNC_PW" > "$CONF_DIR/vncpass.txt"
+      chmod 600 "$CONF_DIR/vncpass" "$CONF_DIR/vncpass.txt"
+    fi
+    ok "Browser password stored in $CONF_DIR/vncpass.txt"
   fi
-  ok "Browser password stored in $CONF_DIR/vncpass.txt"
 else
   APPS="$HOME/.local/share/applications"; mkdir -p "$APPS"
   cat > "$APPS/awesomekick.desktop" <<EOF

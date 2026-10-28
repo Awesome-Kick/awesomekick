@@ -62,18 +62,21 @@ cd Kick/build/sim/apps/kickem/KT_KickEM_artefacts/Release && ./KT_KickEM
 ### On a server without a screen: in the browser
 
 On a headless machine (no desktop, e.g. a home server you reach via SSH), the simulator runs on
-a virtual display and is shared to your browser. At the end the script prints a link and a
-password:
+a virtual display and is shared to your browser. At the end the script prints the link:
 
 ```
 AwesomeKick simulator is running.
   Open in a browser: http://<server-ip>:6080/
-  Password:          ********
+  Password:          none (use --password to set one)
+  Sound:             click "Sound on" at the bottom right of the page
 ```
 
-The simulator still runs on the server – the browser only shows the picture and sends your
-clicks, so **sound comes out of the server**, not out of the computer with the browser.
+The simulator still runs on the server. The page shows its picture, sends your clicks and plays its
+sound after you click **Sound on** (streamed on port 6081 – open it in your firewall, e.g.
+`sudo ufw allow from 192.168.0.0/16 to any port 6081 proto tcp`). Expect about 0.1 s delay: fine for
+listening, for playing the pads use the native app.
 
+The browser view has no password, so anyone in your network can open it. Add `--password` to protect it.
 Force a mode with `bash scripts/setup-linux.sh --desktop` or `--headless`.
 
 ### Afterwards
@@ -143,9 +146,11 @@ the panel. The look is our own – no manufacturer logo or branding; the bezel s
 ### Headless / browser mode
 - `KICKEM_KIOSK=1` makes the window fill the whole display.
 - In headless mode `setup-linux.sh` runs the simulator on a virtual display (Xvfb, 1600×1600), shares it with
-  x11vnc (localhost only, password protected) and serves it via noVNC on port 6080.
+  x11vnc (localhost only) and serves it via noVNC on port 6080 – without a password unless you pass `--password`.
+- Sound in headless mode: the simulator plays into a JACK server without hardware; `scripts/awesomekick-audio.py`
+  streams it to the browser page on port 6081.
 - On a desktop the simulator simply opens as a window (`--desktop`, automatic when a desktop is running).
-- Sound always comes out of the machine the simulator runs on.
+- On a desktop and in the native apps the sound comes straight out of your computer.
 
 ## Useful environment variables
 
