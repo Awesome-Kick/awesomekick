@@ -151,11 +151,12 @@ namespace AudIO
         void stopRecording();
         void startPreview( double FromTimeInSeconds );
         void stopPreview();
-        void saveRecording( const std::string& FilePath );
+        bool saveRecording( const std::string& FilePath );
 
         bool  isRecording() const noexcept { return recording.load(); }
         bool  isPreviewing() const noexcept { return previewing.load(); }
         float readProgress() const noexcept;
+        void copyThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate);
 
     protected:
         void process( Buffer<float>& Buf ) override;

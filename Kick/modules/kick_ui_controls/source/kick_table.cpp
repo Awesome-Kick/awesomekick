@@ -344,8 +344,6 @@ namespace ui
     void KickTableView::refresh()
     {
         auto bounds = getLocalBounds();
-        if( bounds.isEmpty() )
-            return;
 
         hdrComponents.ensureStorageAllocated( 1 );
         if( bShowHeader )
@@ -362,6 +360,7 @@ namespace ui
 
         // Resize to hold components...
         auto num = getNumRows();
+        if( rowComponents.size() > num ) rowComponents.removeRange( num, rowComponents.size() - num );
         rowComponents.ensureStorageAllocated( num );
 
         // Get the components...
@@ -370,7 +369,8 @@ namespace ui
                 rowComponents.set( i, provider.cellComponent( i, rowComponents[i] ) );
 
         // Check if selection is out of bounds.
-        if( canvas.selectedRow.size() && ( 1 < num ) )
+        if( num == 0 ) canvas.selectedRow.clear();
+        if( canvas.selectedRow.size() && num > 0 )
         {
             for( auto& i : canvas.selectedRow )
                 i = juce::jlimit( 0, num - 1, i );

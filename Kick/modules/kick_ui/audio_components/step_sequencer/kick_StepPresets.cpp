@@ -58,7 +58,7 @@ namespace kick_ui
         // Default toggle state.
         enablePreset.setToggleState( false, juce::sendNotification );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             enablePreset.setToggleButtonText( "Presets", "Presets" );
         } );
     }

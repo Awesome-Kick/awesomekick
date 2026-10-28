@@ -22,19 +22,21 @@ namespace mt
 
     void MTSamplePlayer::setSource( juce::File source )
     {
-        pos        = 0;
-        sourceFile = source;
         transportSource.stop();
-        if( sourceFile != juce::File{} )
+        devmgr.removeAudioCallback( &player );
+        auto replacement = std::unique_ptr<juce::AudioFormatReader>(formatManager.createReaderFor(source));
         {
-            devmgr.removeAudioCallback( &player );
-            reader.reset( formatManager.createReaderFor( sourceFile ) );
-            devmgr.addAudioCallback( &player );
+            const juce::ScopedLock guard(sourceLock);
+            pos = length = regionStart = regionEnd = 0;
+            sourceFile = source;
+            reader = std::move(replacement);
+            looping = false;
         }
-        else
+        transportSource.setSource(nullptr);
+        if( reader )
         {
-            devmgr.removeAudioCallback( &player );
-            reader.reset();
+            transportSource.setSource(this, 0, nullptr, reader->sampleRate);
+            devmgr.addAudioCallback(&player);
         }
     }
 
@@ -56,8 +58,11 @@ namespace mt
 
     void MTSamplePlayer::start( const MTSampleRegion& r, MTSamplePlayMode pm )
     {
-        playingBackwords = false;
         transportSource.stop();
+        {
+        const juce::ScopedLock guard(sourceLock);
+        if( !reader || reader->lengthInSamples <= 0 ) return;
+        playingBackwords = false;
 
         region      = r;
         playMode    = pm;
@@ -91,11 +96,11 @@ namespace mt
             {
                 playingBackwords = true;
                 length           = region.end;
-                pos              = length - samplesPerBlock;
+                pos              = length;
             }
             else if( playMode == MTSamplePlayMode::samplePlayModeCue )
             {
-                int previewOffSet = static_cast<int>( ( reader->sampleRate * cuePreviewLengthInMs ) / 60 );
+                int previewOffSet = static_cast<int>( ( reader->sampleRate * cuePreviewLengthInMs ) / 1000 );
                 pos               = region.getStart();
                 length            = pos + previewOffSet;
                 pos               = pos - previewOffSet;
@@ -115,11 +120,18 @@ namespace mt
 
         looping = ( playMode == MTSamplePlayMode::samplePlayModeLoopForward || playMode == MTSamplePlayMode::samplePlayModeLoopBackward || playMode == MTSamplePlayMode::samplePlayModeLoopBidirectional );
 
+        pos = juce::jlimit<juce::int64>(0, reader->lengthInSamples, pos);
+        length = juce::jlimit<juce::int64>(pos, reader->lengthInSamples, length);
+        regionStart = juce::jlimit<juce::int64>(0, length, regionStart);
+        regionEnd = juce::jlimit<juce::int64>(regionStart, length, regionEnd);
+        if( pos == length && !playingBackwords ) return;
+        }
         transportSource.start();
     }
 
     juce::int64 MTSamplePlayer::getNextReadPosition() const
     {
+        const juce::ScopedLock guard(sourceLock);
         if( pos == length )
             return length + 2;
         return pos;
@@ -127,41 +139,42 @@ namespace mt
 
     juce::int64 MTSamplePlayer::getTotalLength() const
     {
+        const juce::ScopedLock guard(sourceLock);
         return length;
     }
 
     bool MTSamplePlayer::isLooping() const
     {
+        const juce::ScopedLock guard(sourceLock);
         return looping;
     }
 
     void MTSamplePlayer::prepareToPlay( int samplesPerBlockExpected, double /*sr*/ )
     {
-        if( reader )
-        {
-            samplesPerBlock = samplesPerBlockExpected;
-            reader.reset( formatManager.createReaderFor( sourceFile ) );
-            broadcastElapsedSamples = static_cast<int>( ( reader->sampleRate * broadcastMessageLengthInMs ) / 60 );
-        }
+        const juce::ScopedLock guard(sourceLock);
+        samplesPerBlock = samplesPerBlockExpected;
+        if( reader ) broadcastElapsedSamples = juce::jmax(1, static_cast<int>(reader->sampleRate * broadcastMessageLengthInMs / 1000));
     }
 
     void MTSamplePlayer::releaseResources() {}
 
     void MTSamplePlayer::getNextAudioBlock( const juce::AudioSourceChannelInfo& bufferToFill )
     {
+        const juce::ScopedLock guard(sourceLock);
         bufferToFill.clearActiveBufferRegion();
+        if( !reader ) return;
         int sampleCopySize = 0;
         if( playingBackwords )
         {
-            sampleCopySize = ( pos - regionStart < bufferToFill.numSamples ) ? static_cast<int>( pos - regionStart ) : bufferToFill.numSamples;
-            reader->read( bufferToFill.buffer, 0, sampleCopySize, pos, true, true );
-            bufferToFill.buffer->reverse( 0, sampleCopySize );
+            sampleCopySize = ( pos - regionStart < bufferToFill.numSamples ) ? static_cast<int>( juce::jmax<juce::int64>(0, pos - regionStart) ) : bufferToFill.numSamples;
+            reader->read( bufferToFill.buffer, bufferToFill.startSample, sampleCopySize, pos - sampleCopySize, true, true );
+            bufferToFill.buffer->reverse( bufferToFill.startSample, sampleCopySize );
             pos -= sampleCopySize;
         }
         else
         {
-            sampleCopySize = ( length - pos < bufferToFill.numSamples ) ? static_cast<int>( length - pos ) : bufferToFill.numSamples;
-            reader->read( bufferToFill.buffer, 0, sampleCopySize, pos, true, true );
+            sampleCopySize = ( length - pos < bufferToFill.numSamples ) ? static_cast<int>( juce::jmax<juce::int64>(0, length - pos) ) : bufferToFill.numSamples;
+            reader->read( bufferToFill.buffer, bufferToFill.startSample, sampleCopySize, pos, true, true );
             pos += sampleCopySize;
         }
 
@@ -192,7 +205,7 @@ namespace mt
                 }
                 else
                 {
-                    pos              = length - samplesPerBlock;
+                    pos              = length;
                     playingBackwords = true;
                 }
             }
@@ -201,6 +214,7 @@ namespace mt
 
     double MTSamplePlayer::getSampleRate()
     {
+        const juce::ScopedLock guard(sourceLock);
         if( reader )
             return reader->sampleRate;
 

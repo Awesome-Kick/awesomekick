@@ -23,43 +23,20 @@
 
 namespace mt{
     class MTSampleEditorActionsInterface;
-    /**
-    * MTSampleEditUndoAction is the class used to wrap actions derived from MTSampleEditorActionsInterface and perform undo and redo.
-    * before performing a action MTSampleEditUndoAction copies the original region being edited to a undo file and then performs action.
-    * MTSampleEditorFromDestFileAction is the action used to copy the original content from undo file to the main file in undo function.
-    * MTSampleEditorFromDestFileAction can handle restoring of samples modified by processBetweenRegion, processOutofRegion process types.
-    * if in future MTSampleEditorFromDestFileAction cannot handle all the undo functionality of different actions. other undo actions can be
-    * implemented to suit the new action requirments.
-    **/
-    class MTSampleEditUndoAction : public juce::UndoableAction{
+    // Each edit owns complete before/after snapshots. Replacements are checked and
+    // atomic; history eviction destroys only that action's temporary snapshots.
+    class MTSampleEditUndoAction : public juce::UndoableAction
+    {
     public:
-        explicit MTSampleEditUndoAction( MTSampleEditorActionsInterface* action );
-        ~MTSampleEditUndoAction();
+        explicit MTSampleEditUndoAction(MTSampleEditorActionsInterface* action);
+        ~MTSampleEditUndoAction() override = default;
         bool perform() override;
         bool undo() override;
-        static void setClearHistory( bool setClear );
         int getSizeInUnits() override;
-        static void setUndoActions( std::list<MTSampleEditUndoAction*>* actions ){ undoActions = actions; }
-        void reduceSize( juce::int64 noSamples );
-        static void cleanup();
-
     private:
-        void backupOriginalSample();
-        void removeOriginalSampleFromBackup();
-        juce::int64 getTotalSizeInSamples();
-
-    private:
-        std::unique_ptr<MTSampleEditorActionsInterface> actionImp = nullptr;
-        static juce::File undoFile;
-        // start and of sample in temp file whee the original undo segment is stored. in case of out of region processing start and end of first and last segment
-        juce::int64 startOfSample = -1;
-        juce::int64 endOfSample = -1;
-        juce::int64 startOfSample1 = -1;
-        juce::int64 endOfSample1 = -1;
-        static bool clearHistory;
-        static int bitDeapth;
-        static int numChannels;
-        static std::list<MTSampleEditUndoAction*>* undoActions;
+        bool restore(const juce::File& snapshot);
+        std::unique_ptr<MTSampleEditorActionsInterface> actionImp;
+        std::unique_ptr<juce::TemporaryFile> before, after;
     };
     /**
     * MTSampleEditorActionsInterface is the interface all the sample editor actions like normalize, gain change have to implement. the main functions of the interface are
@@ -118,8 +95,9 @@ namespace mt{
         int read( juce::AudioSampleBuffer& buffer, juce::int64 startSample, juce::int64 endSample, juce::AudioFormatReader* r, juce::int64 current );
         void executeprocessOutofRegion();
         void executeprocessBetweenRegion();
-        void cleanupReaderWriter( juce::String& tempPath );
+        bool cleanupReaderWriter( juce::String& tempPath );
         void initializeReaderWriter( juce::String& tempPath );
+        virtual std::unique_ptr<juce::OutputStream> createEditOutputStream(const juce::File& file) { return file.createOutputStream(); }
         juce::String checkForDuplicateAndConstructNewPath( const juce::String path );
         bool extractFromSample( juce::int64 startSample, juce::int64 endSample, const juce::String& destFileName );
 
@@ -127,6 +105,7 @@ namespace mt{
         virtual bool performAction( juce::AudioSampleBuffer& buffer, int& numSamples ) = 0;
 
     protected:
+        bool writeFailed{ false };
         MTSampleRegion region;
         juce::AudioFormatManager formatManager;
         juce::File sourceFile;

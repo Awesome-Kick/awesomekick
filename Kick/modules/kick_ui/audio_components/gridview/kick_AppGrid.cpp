@@ -393,7 +393,7 @@ namespace kick_ui
             updatePlayhead();
         } );*/
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_Grid" );
         } );
     }
@@ -950,8 +950,8 @@ namespace kick_ui
                             openWarningPopUp( "No Events Are Present To Split" );
                     }
 
-                    if( p ) delete p;
                 }
+                if( p ) delete p;
             },
             ui::layout::warningPopup );
     }

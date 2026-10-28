@@ -67,7 +67,7 @@ namespace kick_ui
             mt::utils::showOptions( "TRACK MUTE AUTOMATION SETTINGS", p, [p, this]( int R ) { delete p; } );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             trackMute.setToggleButtonText( "Track Mute", "Track Mute" );
             trackGroup.setToggleButtonText( "Track Group", "Track Group" );
             header.setIcon( "Icon_TrackMute" );
@@ -255,7 +255,7 @@ namespace kick_ui
             pads->setBank( Bank );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             soloBtn.setToggleButtonText( "Solo", "Solo" );
             groups.setContent( groupNumbers, groupActiveNumbers, groups.getSelectedIndex() );
         } );

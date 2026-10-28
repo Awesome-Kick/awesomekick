@@ -53,6 +53,28 @@
 
 namespace Controls
 {
+    class SerialFrameBuffer
+    {
+    public:
+        void append(const unsigned char* bytes, size_t size) { pending.insert(pending.end(), bytes, bytes + size); }
+        bool pop(std::vector<unsigned char>& frame)
+        {
+            while( pending.size() >= 2 )
+            {
+                if( pending[0] != 'M' || pending[1] != 'T' ) { pending.erase(pending.begin()); continue; }
+                if( pending.size() < 6 ) return false;
+                const size_t size = size_t(pending[5]) + 7;
+                if( pending.size() < size ) return false;
+                frame.assign(pending.begin(), pending.begin() + size);
+                pending.erase(pending.begin(), pending.begin() + size);
+                return true;
+            }
+            return false;
+        }
+    private:
+        std::vector<unsigned char> pending;
+    };
+
     struct InputEvents
     {
         static void initialize();

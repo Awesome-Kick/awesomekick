@@ -149,7 +149,7 @@ namespace mt
         auto audioSource = [&]() {
             auto srcFile = sourceFile.load();
 
-            setSource( getAudioSoundCache().getOrLoad( srcFile ) );
+            setSource( getAudioSoundCache().getOrLoad( srcFile ), source != nullptr );
         };
 
         semi.onValueChanged       = centsCalculator;
@@ -196,13 +196,17 @@ namespace mt
         vTree = EMPTY::VTState;
     }
 
-    void ASoundSlice::setSource( ASound::Ptr Source )
+    void ASoundSlice::setSource( ASound::Ptr Source, bool ResetLoopPoints )
     {
         if( source != Source )
         {
-            // Clear out loop points.
-            loopStart = 0;
-            loopEnd   = INT_MAX;
+            // Binding a saved/copied slice preserves its trim. Only an explicit
+            // source replacement resets the region.
+            if( ResetLoopPoints )
+            {
+                loopStart = 0;
+                loopEnd   = INT_MAX;
+            }
             // Update source.
             source = Source;
             refresh();
@@ -213,13 +217,7 @@ namespace mt
     {
         if( source.get() )
         {
-            setEnd( loopEnd() );
-            setStart( loopStart() );
-        }
-        else
-        {
-            setEnd( 0 );
-            setStart( 0 );
+            setLoopPoints( loopStart(), loopEnd() );
         }
 
         const auto sourceSampleRate = source.get() ? source->getSampleRate() : AUDIO_SAMPLE_RATE;
@@ -253,14 +251,15 @@ namespace mt
     void ASoundSlice::setLoopPoints( int Start, int End ) noexcept
     {
         const auto sourceLength = getSourceLength();
-        loopStart               = juce::jmax( static_cast<int>( 0 ), Start );
-        loopEnd                 = juce::jmin( static_cast<int>( sourceLength ), End );
+        const int end           = juce::jlimit( 0, (int)sourceLength, End );
+        loopStart               = juce::jlimit( 0, end, Start );
+        loopEnd                 = end;
     }
 
     void ASoundSlice::setStart( int Start ) noexcept
     {
         auto end   = loopEnd();
-        auto start = juce::jmin( Start, end );
+        auto start = juce::jlimit( 0, juce::jmax( 0, end ), Start );
         loopStart  = start;
     }
 

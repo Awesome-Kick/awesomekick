@@ -12,7 +12,7 @@ namespace kick_ui
         mt::utils::setValueJustification( juce::Justification::centred, padLabel, barLabel, nudgeText );
         mt::utils::setValueColour( ui::Theme::textColour( 1 ), barLabel, padLabel, clearpad, clearbar, padSelect, nudgeText );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             leftNudgeButton.setImages( "Minus", "Minus_Active" );
             rightNudgeButton.setImages( "Plus", "Plus_Active" );
             barMinus.setImages( "Minus", "Minus_Active" );

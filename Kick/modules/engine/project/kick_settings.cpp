@@ -249,6 +249,7 @@ namespace mt
     {
         setupBase( VT, Undo );
 
+        externalClock.attachTo(vTree, juce::Identifier("externalMidiClock"), Undo, false);
         ipTrackState.attachTo( vTree, IDs::midiInputTrackState, Undo, false );
         opTrackState.attachTo( vTree, IDs::midiOutputTrackState, Undo, false );
 

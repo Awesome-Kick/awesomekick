@@ -136,7 +136,7 @@ namespace mt
             setFine( Fine );
         }
 
-        void setSource( ASound::Ptr Source );
+        void setSource( ASound::Ptr Source, bool ResetLoopPoints = false );
         void setReSampleRate( double SampleRate ) noexcept;
 
         void refresh() noexcept;

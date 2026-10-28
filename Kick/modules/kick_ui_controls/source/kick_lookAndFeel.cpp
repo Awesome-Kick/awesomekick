@@ -32,7 +32,7 @@ namespace ui
         };
 
         // Load image assets...
-        ui::themeChanged.connect( [svgSetter]() { svgSetter(); } );
+        themeConnection = ui::themeChanged.connect( [svgSetter]() { svgSetter(); } );
 
         svgSetter();
     }

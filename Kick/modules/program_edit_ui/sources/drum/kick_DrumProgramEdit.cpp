@@ -44,7 +44,7 @@ namespace kick_ui
         pads.push_back( 0 );
         mainButton.triggerClick();
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             mainButton.setToggleButtonText( "Main", "Main" );
             samplesButton.setToggleButtonText( "Samples", "Samples" );
             layerMixButton.setToggleButtonText( "Layer Mix", "Layer Mix" );
@@ -132,7 +132,7 @@ namespace kick_ui
         pad.setColours( ui::Theme::textColour( 2 ), ui::Theme::textColour( 1 ) );
         pad.setValueBackgroundColour( ui::Theme::backgroundColour( 13 ) );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             flattenPads.setImages( "PgmEdit_FP" );
             editZone.setImages( "PgmEdit_EZ" );
             convertToKG.setImages( "PgmEdit_ConvertKG" );

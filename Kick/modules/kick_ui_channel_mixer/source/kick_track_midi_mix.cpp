@@ -27,7 +27,7 @@ namespace kick_ui
         setupProvider();
         setMargin( 0, 6, 2, 0 );
 
-        mt::signals::midiInputsChanged.connect( [&]() {
+        midiInputsConnection = mt::signals::midiInputsChanged.connect( [&]() {
             refresh();
         } );
     }
@@ -35,7 +35,8 @@ namespace kick_ui
     void TrackMidiMixer::setupProvider()
     {
         provider.onRowSelected = [&]( int Row ) {
-            ae.setSelectedTrack( Row );
+            const auto tracks = ae.getMidiTrackIndexes( aeSel.sequence );
+            if( juce::isPositiveAndBelow( Row, tracks.size() ) ) ae.setSelectedTrack( tracks[Row] );
         };
 
         provider.numRows = [&]() -> int {
@@ -99,6 +100,7 @@ namespace kick_ui
     {
         auto& rowComp       = getRowComponents();
         auto  comp1         = dynamic_cast<TrackMidiMixerDisplay*>( rowComp[0] );
+        if( !comp1 || getNumRows() == 0 ) return;
         auto  elementBounds = comp1->getElementBounds( ( knob - 1 ) % 4 + 1 );
         auto  numRows       = getNumRows();
         auto  rows          = getRowNumbers( 3, ( ( knob - 1 ) / 4 ) + 1, elementBounds.getX(), elementBounds.getWidth(), 50 );
@@ -169,7 +171,10 @@ namespace kick_ui
     void TrackMidiMixer::visibilityChanged()
     {
         IRowView::visibilityChanged();
-        selectRow( ae.getSelectedTrack() );
+        const auto tracks = ae.getMidiTrackIndexes( aeSel.sequence );
+        const auto selectedTrack = ae.getSelectedTrack();
+        for( int row = 0; row < tracks.size(); ++row )
+            if( tracks[row] == selectedTrack ) { selectRow( row ); break; }
         refreshSoloMute();
     }
 
@@ -254,7 +259,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             armButton.setImages( "Arm_normal" );
             monitorButton.setImages( "Monitor_normal", "Monitor_active" );
             soloButton.setImages( "Solo_normal", "Solo_active" );

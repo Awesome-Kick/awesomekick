@@ -9,7 +9,7 @@ namespace kick_ui
         mt::utils::addAndMakeVisible( this, *table, back, status, deviceName, updateLabel, header, apply );
         mt::utils::addChildComponents( this, latestVersionlabel, checkLabel );
         header.showOptions( false, false );
-        header.onBackButtonPressed = [this]( bool ) { closeScreen(); };
+        header.onBackButtonPressed = [this]( bool ) { mt::USBFunctionFS::getUSBInstance().setUsbcallback({}); mt::USBFunctionFS::getUSBInstance().stop(); closeScreen(); };
         table->setRowHeight( 100 );
         table->setRowSpacing( 10 );
         table->setRowBackgroundColour( ui::Theme::backgroundColour( 9 ) );
@@ -97,7 +97,7 @@ namespace kick_ui
         };
 
         provider.cellComponent = [&]( int Row, juce::Component* Existing ) -> juce::Component* {
-            if( juce::isPositiveAndBelow( Row, 3 ) )
+            if( juce::isPositiveAndBelow( Row, deviceData.size() ) )
             {
                 auto comp = static_cast<SWUpdateContent*>( Existing );
                 if( comp == nullptr )
@@ -108,11 +108,13 @@ namespace kick_ui
 
                 comp->setProperties( deviceData[Row] );
                 comp->updateBtnCallback = [&]( int row ) {
+                    if( !juce::isPositiveAndBelow(row, deviceData.size()) ) return;
+                    const auto deviceName = deviceData[row].deviceName;
                     auto popup = new SWUpdatePopup( row );
-                    mt::utils::showDialog( "WARNING!", popup, [&, popup, row]( int R ) {
+                    mt::utils::showDialog( "WARNING!", popup, [this, popup, row, deviceName]( int R ) {
                         if( R == UI::APPLY )
                         {
-                            juce::String            deviceName = deviceData[row].deviceName;
+
                             bool                    flag       = true;
                             mt::SwUpdateErrorCode_t statusCode = mt::FirmwareUpdate::getSwupdateInstance().setSwUpdateMode( mt::FirmwareUpdate::getSwupdateInstance().getSwUpdateModeFromString( deviceName ) );
                             if( statusCode == mt::SwUpdateErrorCode_t::SW_SUCCESS )
@@ -140,7 +142,7 @@ namespace kick_ui
                                             info = "Image Invalid";
 
                                         auto warningPopup = new ui::FilePopup( info, true, false, false );
-                                        mt::utils::showDialog( "WARNING!", warningPopup, [&]( int R ) {
+                                        mt::utils::showDialog( "WARNING!", warningPopup, [this, warningPopup]( int R ) {
                                             if( R == UI::CANCEL )
                                             {
                                                 if( auto dw = getCurrentlyModalComponent() )
@@ -153,7 +155,7 @@ namespace kick_ui
                                 else
                                 {
                                     auto warningPopup = new ui::FilePopup( message, true, false, false );
-                                    mt::utils::showDialog( "WARNING!", warningPopup, [&]( int R ) {
+                                    mt::utils::showDialog( "WARNING!", warningPopup, [this, warningPopup]( int R ) {
                                         if( R == UI::CANCEL )
                                         {
                                             if( auto dw = getCurrentlyModalComponent() )
@@ -214,74 +216,37 @@ namespace kick_ui
 
     void SWUpdateView::visibilityChanged()
     {
-        if( isVisible() )
+        auto& usb = mt::USBFunctionFS::getUSBInstance();
+        if( !isVisible() )
         {
-            if( thread == nullptr )
-            {
-                DBG( "Thread Created " );
-                thread = std::make_unique<kick_ui::ImageCheckingThread>();
-            }
-
-            mt::USBFunctionFS::getUSBInstance().setUsbcallback(
-                std::bind( &SWUpdateView::getUsbupdateStatus, this, std::placeholders::_1 ) );
-
-            mt::utils::LoadAnimation::getInstance().startAnimation();
-
-            thread->startThread();
-
-            thread->onThreadEnd = [&]() {
-                DBG( "Thread end" );
-                mt::utils::LoadAnimation::getInstance().stopAnimation();
-
-                // Ensure all UI updates are done on the Message Thread
-                juce::MessageManager::callAsync( [this]() {
-                    refresh();
-                    table->refresh();
-                    setupProvider();
-                } );
-
-                // Stop the thread and safely delete it
-                juce::MessageManager::callAsync( [&]() {
-                    if( thread != nullptr )
-                    {
-                        deviceData.clear();
-                        thread->signalThreadShouldExit(); // Signal the thread to exit
-                        thread->waitForThreadToExit( 1000 ); // Wait for the thread to exit (1 second)
-                        thread.reset(); // Reset (delete) the thread instance
-                    }
-                } );
-            };
+            usb.setUsbcallback({});
+            if( mt::FirmwareUpdate::getSwupdateInstance().getSwUpdateMode() != mt::SwUpdateMode_t::PC ) usb.stop();
+            return;
         }
-    }
-    /*
-    void SWUpdateView::visibilityChanged()
-    {
-	    if( isVisible() )
-	    {
-		    if(thread==nullptr)
-		    {
-			    thread = std::make_unique<kick_ui::ImageCheckingThread>();
-		    }
-		    mt::USBFunctionFS::getUSBInstance().setUsbcallback( std::bind( &SWUpdateView::getUsbupdateStatus, this, std::placeholders::_1 ) );
-		    auto p = std::make_shared<mt::utils::LoadAnimation>();
-		    p->startAnimation();
-		    thread->startThread();
-		    thread->onThreadEnd = [&, p]() {
-			    DBG( "Thread end" );
-			    if( p ) p->stopAnimation();
-			    juce::MessageManager::callAsync( [&]() {
-					    refresh();
-					    table->refresh();
-					    } );
-		    };
-
-		// Stop the thread and safely delete it
-            juce::MessageManager::callAsync([this]() {
-                thread.reset();       // Reset the unique_ptr to delete the thread instance
+        juce::Component::SafePointer<SWUpdateView> safe(this);
+        usb.setUsbcallback([safe](mt::usbmsg_t& status) {
+            juce::MessageManager::callAsync([safe, status]() mutable {
+                if( safe && safe->isVisible() ) safe->getUsbupdateStatus(status);
             });
-
-	    }
-    }*/
+        });
+        if( thread && thread->isThreadRunning() ) return;
+        thread = std::make_unique<kick_ui::ImageCheckingThread>();
+        deviceData.clear();
+        table->refresh();
+        mt::utils::LoadAnimation::getInstance().startAnimation();
+        thread->onThreadEnd = [safe] {
+            juce::MessageManager::callAsync([safe] {
+                if( !safe ) return;
+                mt::utils::LoadAnimation::getInstance().stopAnimation();
+                if( safe->isVisible() )
+                {
+                    safe->refresh();
+                    safe->table->refresh();
+                }
+            });
+        };
+        thread->startThread();
+    }
 
     void SWUpdateView::getUsbupdateStatus( mt::usbmsg_t& data )
     {

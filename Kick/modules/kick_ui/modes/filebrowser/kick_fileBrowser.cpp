@@ -1,7 +1,17 @@
 #pragma once
+#include <filesystem>
 
 namespace ui
 {
+    namespace
+    {
+        juce::File resolvedBrowserPath(const juce::File& file)
+        {
+            std::error_code error;
+            const auto resolved = std::filesystem::weakly_canonical(std::filesystem::u8path(file.getFullPathName().toRawUTF8()), error);
+            return error ? file.getLinkedTarget() : juce::File(juce::String::fromUTF8(resolved.u8string().c_str()));
+        }
+    }
     FileBrowser::FileBrowser()
         : kick_ui::IScreen( kick_ui::Screen::MenuFileBrowser ), ae( mt::getAudioInterface() ), fileList( ae.getFiles() ), dirList( ae.getDirectories() ), sampleAnimation( std::make_unique<LoadSamplesAndAnimation>() )
     {
@@ -339,7 +349,7 @@ namespace ui
         left.table->enableSetFocus( false );
         setupProvider();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             auto i = 5;
             for( auto& it : grpNum )
             {
@@ -519,55 +529,40 @@ namespace ui
                 comp->setInterceptsMouseClicks( false, true );
             }
             auto t3 = juce::Time::currentTimeMillis();
-            if( tempList[Row].exists() )
+            if( juce::isPositiveAndBelow(Row, tempList.size()) && tempList[Row].exists() )
             {
                 auto t5 = juce::Time::currentTimeMillis();
 
-                std::vector<std::pair<juce::File, int>> fileWithNumbers;
-
-                for( const auto& file : tempList )
-                {
-                    int num = file.getFileName().retainCharacters( "0123456789" ).getIntValue();
-                    fileWithNumbers.emplace_back( file, num );
-                }
-
-                // Sort based on the precomputed numeric values
-                std::sort( fileWithNumbers.begin(), fileWithNumbers.end(),
-                           []( const auto& a, const auto& b ) {
-                               return a.second < b.second;
-                           } );
-
-                auto t6       = juce::Time::currentTimeMillis();
-                auto callback = [this, comp, Row]( juce::int64 totalSize ) {
+                const auto file = tempList[Row];
+                comp->setName(file.getFullPathName());
+                juce::Component::SafePointer<FileBrowser> owner(this);
+                juce::Component::SafePointer<FileRightEntry> row(comp);
+                auto callback = [owner, row, file, Row](juce::int64 totalSize) {
+                    if(!owner || !row || row->getName() != file.getFullPathName() || !juce::isPositiveAndBelow(Row, owner->tempList.size()) || owner->tempList[Row] != file) return;
+                    auto* self = owner.getComponent();
+                    auto* comp = row.getComponent();
                     auto         t1         = juce::Time::currentTimeMillis();
-                    juce::String sizeString = juce::File::descriptionOfSizeInBytes( totalSize );
+                    juce::String sizeString = totalSize < 0 ? "..." : juce::File::descriptionOfSizeInBytes(totalSize);
                     if( comp )
                     {
-                        if( bottom.allButton.getToggleState() )
+                        if( self->bottom.allButton.getToggleState() )
                         {
-                            if( tempList[Row].isDirectory() )
-                                comp->setProperties( "Vector", true, 22.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
-                            else if( tempList[Row].hasFileExtension( projectFileList ) )
-                                comp->setProperties( "Icon_ProjectFile", false, 14.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
-                            else if( tempList[Row].hasFileExtension( sampleFileList ) )
-                                comp->setProperties( "Icon_SampleFile", false, 14.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                            if( self->tempList[Row].isDirectory() )
+                                comp->setProperties( "Vector", true, 22.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                            else if( self->tempList[Row].hasFileExtension( self->projectFileList ) )
+                                comp->setProperties( "Icon_ProjectFile", false, 14.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                            else if( self->tempList[Row].hasFileExtension( self->sampleFileList ) )
+                                comp->setProperties( "Icon_SampleFile", false, 14.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
                             else
-                                comp->setProperties( "Icon_DefaultFile", true, 22.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                                comp->setProperties( "Icon_DefaultFile", true, 22.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
                         }
-                        else if( bottom.sampleButton.getToggleState() )
-                            comp->setProperties( "Icon_SampleFile", false, 14.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                        else if( self->bottom.sampleButton.getToggleState() )
+                            comp->setProperties( "Icon_SampleFile", false, 14.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
 
-                        else if( bottom.projectButton.getToggleState() )
-                            comp->setProperties( "Icon_ProjectFile", false, 14.0f, 16.0f, tempList[Row].getFileName(), tempList[Row].getLastModificationTime().toString( true, false, false, false ), tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
+                        else if( self->bottom.projectButton.getToggleState() )
+                            comp->setProperties( "Icon_ProjectFile", false, 14.0f, 16.0f, self->tempList[Row].getFileName(), self->tempList[Row].getLastModificationTime().toString( true, false, false, false ), self->tempList[Row].getLastModificationTime().toString( false, true, false, true ), sizeString );
 
-                        DBG( "Num Rows " << numRows << " temp size  " << tempList.size() );
-                        if( numRows++ == tempList.size() )
-                        {
-                            DBG( "sizeCalculationEnd" );
-                            numRows = 1;
-                            if( sizeCalculationEnd )
-                                sizeCalculationEnd();
-                        }
+
                     }
                 };
                 startFolderSizeCalculation( tempList[Row], callback );
@@ -633,11 +628,13 @@ namespace ui
 
     void FileBrowser::startFolderSizeCalculation( const juce::File& folder, std::function<void( juce::int64 )> callback )
     {
-        auto totalSize = fileUtils::calculateFolderSize( folder );
-
-        juce::MessageManager::callAsync( [=]() {
-            callback( totalSize );
-        } );
+        if(!folder.isDirectory()) { callback(folder.getSize()); return; }
+        callback(-1); // Bind row metadata immediately; fill in its size when the job finishes.
+        static juce::ThreadPool sizingJobs(2);
+        sizingJobs.addJob([folder, callback = std::move(callback)] {
+            const auto totalSize = fileUtils::calculateFolderSize(folder);
+            juce::MessageManager::callAsync([callback, totalSize] { callback(totalSize); });
+        });
     }
 
     void FolderSizeCalculator::calculateFolderSize()
@@ -820,8 +817,8 @@ namespace ui
                         {
                             p->close();
                             renameImplementation( p->getInputText() );
-                            delete p;
                         }
+                        delete p;
                     },
                     ui::layout::warningPopup );
             }
@@ -899,7 +896,7 @@ namespace ui
         juce::String pwdParentPath = ae.getCurrentDir().getParentDirectory().getFullPathName();
         pwdParentPath == root ? right.backButton.setEnabled( false ) : right.backButton.setEnabled( true );
         right.table->refresh();
-        if( !tempList.size() && sizeCalculationEnd )
+        if( sizeCalculationEnd )
             sizeCalculationEnd();
         if( tempList.size() ) //safety check
         {
@@ -1072,8 +1069,10 @@ namespace ui
     {
         for( auto sel : selectedFile )
         {
-            juce::String currProj = juce::File( mt::getSettings().projects.currentProject() ).getFileNameWithoutExtension();
-            if( sel.getFileNameWithoutExtension() == currProj )
+            const auto currentPath = mt::getSettings().projects.currentProject();
+            const auto current = currentPath.isNotEmpty() ? resolvedBrowserPath(juce::File(currentPath)) : juce::File();
+            const auto candidate = resolvedBrowserPath(sel);
+            if(currentPath.isNotEmpty() && (candidate == current || current.isAChildOf(candidate) || (candidate.getParentDirectory() == current && candidate.hasFileExtension("kickPrj"))))
             {
                 auto p = new FilePopup{ "Current Project is not allowed to Cut/Delete/Rename", false, false };
                 mt::utils::showDialog(
@@ -1139,21 +1138,20 @@ namespace ui
                 mt::utils::showDialog(
                     "DELETE CONFIRMATION", popup, [popup]( int R ) { delete popup; }, ui::layout::warningPopup, ui::Theme::backgroundColour( 1 ), ui::Theme::titleColour( 1 ), ui::Theme::backgroundColour( 2 ) );
 
-                popup->button1.onClick = [&]() {
-                    popup->close();
-                };
-                popup->button2.onClick = [&]() {
-                    popup->close();
-                    for( auto sel : selectedFile )
-                    {
-                        settings.projects.removeProject( sel );
-                        sel.deleteRecursively();
-                    }
-                    enterDirectory( -1 );
-                    selectedFile = juce::File( tempList[right.table->getSelectedRow()] );
+                juce::Component::SafePointer<FileLeftEntryPopup> dialog(popup);
+                const auto filesToDelete = selectedFile;
+                popup->button1.onClick = [dialog]() { if(dialog) dialog->close(); };
+                popup->button2.onClick = [this, dialog, filesToDelete]() {
+                    // The project or selection may have changed while the confirmation was open.
+                    selectedFile = filesToDelete;
+                    if(checkIsCurrProj()) return;
+                    for(auto file : filesToDelete)
+                        if(file.deleteRecursively()) settings.projects.removeProject(file);
+                    enterDirectory(-1);
                     right.table->clearSelection();
                     selectedFile.clear();
-                    right.table->selectRow( 0 );
+                    if(!tempList.isEmpty()) right.table->selectRow(0);
+                    if(dialog) dialog->close();
                 };
             }
 
@@ -1168,6 +1166,14 @@ namespace ui
 
     void FileBrowser::createProject( juce::String value )
     {
+        const auto destination = getAppDirs(MTProjects).getChildFile(value);
+        if(value.isEmpty() || value != value.trim() || value == "." || value == ".." || value.containsAnyOf("/\\:")
+            || juce::File::createLegalFileName(value) != value || destination.exists())
+        {
+            auto* warning = new FilePopup("Choose a valid project name that does not already exist.", true, false, false);
+            mt::utils::showDialog("NEW PROJECT", warning, [warning](int) { delete warning; }, ui::layout::warningPopup);
+            return;
+        }
         auto nChild = settings.projects.getNumChildren();
         for( auto i = 0; i < nChild; i++ )
         {
@@ -1331,7 +1337,7 @@ namespace ui
         table->setRowSpacing( 0 );
         table->enableScrollBar( false );
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             places.setImages( "Places" );
             content.setImages( "Content" );
             expansion.setImages( "Expansion" );
@@ -1394,7 +1400,7 @@ namespace ui
         timeStamp.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
         size.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             backButton.setImages( "Back_Browser" );
         } );
     }
@@ -1446,7 +1452,7 @@ namespace ui
             resized();
         };
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             searchButton.setImages( "Search_Browser", "Search_BrowserActive" );
             backButton.setImages( "Back_Browser", "Back_Browser", "Back_BrowserActive", "Back_Browser_Disabled" );
             projectButton.setImages( "Project_Browser", "Project_BrowserActive" );
@@ -1518,7 +1524,7 @@ namespace ui
             kick_ui::signals::sigScreenOpen( kick_ui::Screen::MenuAssignSample );
         };
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             projectButton.setImages( "Project_Browser", "Project_BrowserActive" );
             sampleButton.setImages( "Sample_Browser", "Sample_BrowserActive" );
             allButton.setImages( "All_Browser", "All_BrowserActive" );
@@ -1583,7 +1589,7 @@ namespace ui
                 ui::layout::warningPopup, ui::Theme::backgroundColour( 1 ), ui::Theme::titleColour( 1 ), ui::Theme::backgroundColour( 2 ) );
         };
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             ejectButton.setImages( "Eject", "Eject", "Eject_Active" );
             formatButton.setImages( "Format", "Format", "Format_Active" );
         } );
@@ -1642,7 +1648,7 @@ namespace ui
         date.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
         date.setFontHeight( 18.0f );
         image == "" ? y = 123 : y = 48;
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             button1.setImages( "No" );
             button2.setImages( "Yes" );
             folder.setImages( "Vector-1" );

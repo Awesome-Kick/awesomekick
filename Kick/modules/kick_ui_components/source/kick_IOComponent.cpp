@@ -46,7 +46,7 @@ namespace ui
         };
 
         // Theme
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             gainMeter.setKnobImage( "Icon_Fader" );
             recordB.setImages( "Looper_rec", "Looper_rec_active" );
             monitor.setImages( "sampler_Monitor", "sampler_Monitor_active" );

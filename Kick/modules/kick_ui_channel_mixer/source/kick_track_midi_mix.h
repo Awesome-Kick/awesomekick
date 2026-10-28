@@ -40,6 +40,7 @@ namespace kick_ui
         std::array<TrackSoloMuteData, 128> soloMuteData;
 
     private:
+        sigslot::scoped_connection midiInputsConnection;
         void                             setupProvider() override;
         void                             meterUpdate() override;
         void                             visibilityChanged() override;

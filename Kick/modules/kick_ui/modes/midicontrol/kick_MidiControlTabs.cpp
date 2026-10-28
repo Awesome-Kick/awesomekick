@@ -2384,7 +2384,7 @@ namespace kick_ui
             saveData( rightComp.table->getSelectedRow() );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             add.setImages( "Add_normal", "Add_normal", "Add_active" );
         } );
     }
@@ -2519,6 +2519,13 @@ namespace kick_ui
     }
     void MidiControlMidiLearn::parameterMapping( const juce::MidiMessage& message )
     {
+        if( !juce::MessageManager::getInstance()->isThisTheMessageThread() )
+        {
+            juce::Component::SafePointer<MidiControlMidiLearn> safe( this );
+            juce::MessageManager::callAsync( [safe, message] { if( safe ) safe->parameterMapping(message); } );
+            return;
+        }
+        if( !message.isController() ) return;
         int   ccValue   = message.getControllerValue();
         int   seqNum    = ae.getSelectedSequence();
         auto  trackData = ae.getTrackData( seqNum, ae.getSelectedTrack() );
@@ -2553,19 +2560,19 @@ namespace kick_ui
             auto trkName = trackData ? trackData->name.get() : "";
             if( trackName == trkName )
             {
-                juce::MessageManager::callAsync( [&]() {
+                [&]() {
                     if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Mute" )
                         ae.setTrackMute( seqNum, trackNum, ( trackMute ) ? false : true );
                     if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "solo" )
                         ae.setTrackSolo( seqNum, trackNum, ( trackSolo ) ? false : true );
                     if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Volume" )
                         ae.setTrackLevel( seqNum, trackNum, ccValue );
-                } );
+                }();
             }
         }
-        if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && leftComp.sourceList.getSelected() == "Program" && midilearn.getChild( selectedRow ).getProperty( "Controller" ) == "Mixer" )
+        if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && program && leftComp.sourceList.getSelected() == "Program" && midilearn.getChild( selectedRow ).getProperty( "Controller" ) == "Mixer" )
         {
-            juce::MessageManager::callAsync( [&]() {
+            [&]() {
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Volume" )
                     program->setLevel( ccValue );
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Mute" )
@@ -2590,9 +2597,9 @@ namespace kick_ui
                     program->setSendGain( 2, ccValue );
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Send 4" )
                     program->setSendGain( 3, ccValue );
-            } );
+            }();
         }
-        if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && leftComp.sourceList.getSelected() == "Program" && midilearn.getChild( selectedRow ).getProperty( "Controller" ) == "Program" )
+        if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && program && leftComp.sourceList.getSelected() == "Program" && midilearn.getChild( selectedRow ).getProperty( "Controller" ) == "Program" )
         {
             auto  selected        = leftComp.pgm.getSelectedValue();
             auto* selectedProgram = ae.getProgram( selected );
@@ -2600,7 +2607,8 @@ namespace kick_ui
             if( type == mt::MTProgramType::Drum )
             {
                 pDrum = dynamic_cast<mt::MTDrumProgram*>( ae.getProgram( pgmNumber ) );
-                juce::MessageManager::callAsync( [&, actualPad, ccValue]() {
+                [&, actualPad, ccValue]() {
+                    if( !pDrum ) return;
                     if( isSetAll && midilearn.getChild( selectedRow ).hasProperty( "CC" ) )
                     {
                         if( value == "Filter Attack" )
@@ -2662,7 +2670,7 @@ namespace kick_ui
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == " Global FineTune" )
                             pDrum->setFine( ccValue );
                     }
-                } );
+                }();
             }
             if( type == mt::MTProgramType::Midi )
             {
@@ -2685,11 +2693,12 @@ namespace kick_ui
             }
             if( type == mt::MTProgramType::Clip )
             {
-                juce::MessageManager::callAsync( [&, selectedRow, value, ccValue, isSetAll, selBank, selPadNum]() {
+                [&, selectedRow, value, ccValue, isSetAll, selBank, selPadNum]() {
                     if( isSetAll )
                     {
                         int actualPad = static_cast<int>( selPadNum ) - 1;
                         pClip         = dynamic_cast<mt::MTClipProgram*>( ae.getProgram( pgmNumber ) );
+                        if( !pClip ) return;
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "SemiTune" )
                             pClip->setNoteSemi( actualPad, ccValue );
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "FineTune" )
@@ -2708,12 +2717,12 @@ namespace kick_ui
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == " Global FineTune" )
                             selectedProgram->setFine( ccValue );
                     }
-                } );
+                }();
             }
         }
         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && leftComp.sourceList.getSelected() == "Return" )
         {
-            juce::MessageManager::callAsync( [&]() {
+            [&]() {
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Pan" )
                     busMgr.setBusPan( busNameReturn, ccValue );
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Volume" )
@@ -2723,11 +2732,11 @@ namespace kick_ui
                     auto state = busMgr.isBusMuted( busNameReturn );
                     busMgr.setBusMute( busNameReturn, state ? false : true ); //mute state
                 }
-            } );
+            }();
         }
         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && leftComp.sourceList.getSelected() == "Submix" )
         {
-            juce::MessageManager::callAsync( [&]() {
+            [&]() {
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Pan" )
                     busMgr.setBusPan( busNameSubmix, ccValue );
                 if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Mute" )
@@ -2740,7 +2749,7 @@ namespace kick_ui
                     auto state = busMgr.isBusSolo( busNameSubmix );
                     busMgr.setBusSolo( busNameSubmix, ccValue ); //mute state
                 }
-            } );
+            }();
         }
         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && leftComp.sourceList.getSelected() == "Main" )
         {
@@ -2756,7 +2765,7 @@ namespace kick_ui
             {
                 if( busName == list )
                 {
-                    juce::MessageManager::callAsync( [&]() {
+                    [&]() {
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Volume" )
                             busMgr.setBusGain( busName, ccValue );
                         if( midilearn.getChild( selectedRow ).hasProperty( "CC" ) && value == "Pan" )
@@ -2766,7 +2775,7 @@ namespace kick_ui
                             auto state = busMgr.isBusSolo( busName );
                             busMgr.setBusMute( busName, ccValue ); // mute state
                         }
-                    } );
+                    }();
                 }
             }
         }

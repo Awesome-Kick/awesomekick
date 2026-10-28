@@ -142,7 +142,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             selectedProgram->setupHeader( header );
         } );
     }

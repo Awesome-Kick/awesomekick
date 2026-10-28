@@ -130,7 +130,7 @@ namespace kick_ui
             setupScreen.setXYCoordinateValues( xCoord, yCoord );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             latch.setToggleButtonText( "Latch", "Latch" );
             setup.setToggleButtonText( "Setup", "Setup" );
             on_off.setToggleButtonText( "Off", "On" );

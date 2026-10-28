@@ -56,7 +56,7 @@ AppSequenceDisplay::AppSequenceDisplay( int Index )
     seqGlobal.onClick        = [&]() { if( pSeq ) pSeq->isMasterBPM = seqGlobal.getToggleState(); };
     transpose.onValueChanged = [&]( double Value ) { if( pSeq ) pSeq->transpose = Value; };
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         loop.setImages( "Loop_normal", "Loop_active" );
     } );
 
@@ -163,7 +163,7 @@ AppSequenceComponent::AppSequenceComponent( int Index, juce::String Name )
 
     seq.onSeqChange = [&]( int SeqNo ) { srNo.setText( juce::String( SeqNo + 1 ) ); };
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         srNo.setImage( "ID_sequence" );
         options.setImages( "editOptions" );
     } );

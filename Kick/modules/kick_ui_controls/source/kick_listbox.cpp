@@ -512,6 +512,7 @@ namespace ui
 
     void KickListBox::setListOptions( const std::vector<juce::String>& Options, int SelectedIndex )
     {
+        ++selectionRevision;
         list.setContent( Options, SelectedIndex, juce::sendNotificationAsync );
     }
 
@@ -550,18 +551,28 @@ namespace ui
 
     void KickListBox::setSelected( const juce::String& O, juce::NotificationType notification )
     {
-        juce::MessageManager::callAsync( [this, O, notification] {
-            list.setSelected( O, notification );
-            value.setText( list.getSelected(), juce::dontSendNotification );
-        } );
+        const auto revision = ++selectionRevision;
+        juce::Component::SafePointer<KickListBox> safe( this );
+        auto apply = [safe, O, notification, revision] {
+            if( !safe || safe->selectionRevision != revision ) return;
+            safe->list.setSelected( O, notification );
+            if( safe ) safe->value.setText( safe->list.getSelected(), juce::dontSendNotification );
+        };
+        if( juce::MessageManager::getInstance()->isThisTheMessageThread() ) apply();
+        else juce::MessageManager::callAsync( std::move( apply ) );
     }
 
     void KickListBox::setSelected( int O, juce::NotificationType notification )
     {
-        juce::MessageManager::callAsync( [this, O, notification] {
-            list.setSelected( O, notification );
-            value.setText( list.getSelected(), juce::dontSendNotification );
-        } );
+        const auto revision = ++selectionRevision;
+        juce::Component::SafePointer<KickListBox> safe( this );
+        auto apply = [safe, O, notification, revision] {
+            if( !safe || safe->selectionRevision != revision ) return;
+            safe->list.setSelected( O, notification );
+            if( safe ) safe->value.setText( safe->list.getSelected(), juce::dontSendNotification );
+        };
+        if( juce::MessageManager::getInstance()->isThisTheMessageThread() ) apply();
+        else juce::MessageManager::callAsync( std::move( apply ) );
     }
 
     std::vector<juce::String> KickListBox::getListOptions()

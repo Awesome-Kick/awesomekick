@@ -152,7 +152,7 @@ namespace mt
         {
             const auto childrenToAdd = MAX_LAYERS - numChildren;
             for( auto i = 0; i < childrenToAdd; ++i )
-                layerVTree.getOrCreateChildWithName( IDs::LAYER, nullptr );
+                layerVTree.appendChild( juce::ValueTree{ IDs::LAYER }, nullptr );
         }
 
         // Connect MTILayer

@@ -263,7 +263,7 @@ namespace ipc
 		return data->executors[processIdentifier]->join();
 	}
 
-    const juce::String& MTIPCProcessManager::processName( const int processIdentifier )
+    juce::String MTIPCProcessManager::processName( const int processIdentifier )
     {
 
         if( data->configurations.contains( processIdentifier ) )

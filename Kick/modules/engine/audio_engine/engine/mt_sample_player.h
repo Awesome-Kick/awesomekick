@@ -15,7 +15,7 @@ namespace mt{
         //void setPosition(double p);
         void start( const MTSampleRegion& region, MTSamplePlayMode playMode = MTSamplePlayMode::samplePlayFromStart);
 
-        virtual void setNextReadPosition( juce::int64 newPosition ) override{ pos = newPosition; }
+        virtual void setNextReadPosition( juce::int64 newPosition ) override{ const juce::ScopedLock guard(sourceLock); pos = juce::jlimit<juce::int64>(0, length, newPosition); }
 
         /** Returns the position from which the next block will be returned.
 
@@ -66,6 +66,7 @@ namespace mt{
         void changeListenerCallback( ChangeBroadcaster* source );
 
     private:
+        mutable juce::CriticalSection sourceLock;
         juce::AudioSourcePlayer player;
         juce::AudioTransportSource transportSource;
         juce::AudioDeviceManager& devmgr{ getAudioInterface().getAudioDeviceManager() };

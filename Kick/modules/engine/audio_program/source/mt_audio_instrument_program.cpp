@@ -59,23 +59,24 @@ namespace mt
     void MTInstrumentProgram::noteProcess( juce::Array<juce::MidiMessage>& Msgs )
     {
         const bool muted = isProgramEffectivelyMuted();
-        for( const auto& m : Msgs )
+        juce::Array<juce::MidiMessage> single;
+        single.ensureStorageAllocated(1);
+        for(const auto& message : Msgs)
         {
-            if( m.isAllNotesOff() || m.isAllSoundOff() || m.isResetAllControllers() )
-                object->allNotesOff();
-            else if( m.isPitchWheel() )
-                object->pitchBend( 2.f * ( m.getPitchWheelValue() - 8192 ) / 8192.f ); // +-2 semitones
-            else if( m.isControllerOfType( 1 ) )
-                object->modWheel( m.getControllerValue() / 127.f );
-            else if( m.isAftertouch() )
-                object->aftertouch( m.getNoteNumber(), m.getAfterTouchValue() );
-            else if( m.isChannelPressure() )
-                object->channelPressure( m.getChannelPressureValue() );
-            else if( muted && m.isNoteOff() )
-                object->noteOff( m.getNoteNumber() ); // the base class drops everything while muted
+            // Preserve controller/note ordering even when a producer submits a batch.
+            if(message.isAllNotesOff() || message.isAllSoundOff() || message.isResetAllControllers()) object->allNotesOff();
+            else if(message.isPitchWheel()) object->pitchBend(2.f * (message.getPitchWheelValue() - 8192) / 8192.f);
+            else if(message.isControllerOfType(64)) object->sustain(message.getControllerValue() >= 64);
+            else if(message.isControllerOfType(1)) object->modWheel(message.getControllerValue() / 127.f);
+            else if(message.isAftertouch()) object->aftertouch(message.getNoteNumber(), message.getAfterTouchValue());
+            else if(message.isChannelPressure()) object->channelPressure(message.getChannelPressureValue());
+            else if(muted && message.isNoteOff()) object->noteOff(message.getNoteNumber());
+            else
+            {
+                single.set(0, message);
+                MTIProgram::noteProcess(single);
+            }
         }
-
-        MTIProgram::noteProcess( Msgs );
     }
 
     void MTInstrumentProgram::valueTreePropertyChanged( juce::ValueTree& Tree, const juce::Identifier& Property )

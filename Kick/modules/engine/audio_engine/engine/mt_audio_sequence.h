@@ -187,6 +187,7 @@ namespace mt
         std::vector<juce::String>             trackList;
 
         juce::CriticalSection lock;
+        sigslot::scoped_connection trackNameConnection;
         juce::ValueTree       vTree{ IDs::SEQUENCE };
         juce::MidiFile        mFile;
         juce::File            seqMidiFile;

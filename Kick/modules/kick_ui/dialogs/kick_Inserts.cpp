@@ -17,7 +17,7 @@ namespace kick_ui
         header.onBackButtonPressed = [this]( bool ) { closeScreen(); };
         header.showOptions( true, true );
 
-        ui::themeChanged.connect( [&]() { header.setIcon( "Icon_Mixer" ); } );
+        ui::connectTheme( *this, [&]() { header.setIcon( "Icon_Mixer" ); } );
 
         list.onInsertChanged = [&]( int i, const juce::String& name, bool value ) { onInsertChanged( i, name, value ); };
         list.onInsertDelete  = [&]( int i, const juce::String& name, bool value ) { onInsertDelete( i, name, value ); };

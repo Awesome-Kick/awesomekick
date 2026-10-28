@@ -55,7 +55,7 @@ namespace kick_ui
                 addLayerOptions( LayerType::L4 );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             editL1.setImages( "effect1" );
             editL2.setImages( "effect1" );
             editL3.setImages( "effect1" );

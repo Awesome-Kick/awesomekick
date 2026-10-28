@@ -216,7 +216,7 @@ namespace kick_ui
                 pProg->solo = soloButton.getToggleState();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             armButton.setImages( "Arm_normal" );
             monitorButton.setImages( "Monitor_normal", "Monitor_active" );
             soloButton.setImages( "Solo_normal", "Solo_active" );

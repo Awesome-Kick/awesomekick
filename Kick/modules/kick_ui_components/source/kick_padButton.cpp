@@ -94,7 +94,7 @@ namespace ui
                 onPanChanged( button, Val );
         };
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             solo.setImages( "solo_mini", "solo_mini_active" );
             mute.setImages( "mute_mini", "mute_mini_active" );
             rec.setImages( "Arm_normal" );

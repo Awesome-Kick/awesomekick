@@ -29,7 +29,7 @@ namespace kick_ui
             dynamic_cast<KeyGroupSampleTab2*>( comps[2].get() )->selectLayer( SelectedLayer );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             mainButton.setToggleButtonText( "Main", "Main" );
             samplesButton.setToggleButtonText( "Samples", "Samples" );
             layerMixButton.setToggleButtonText( "Layer Mix", "Layer Mix" );

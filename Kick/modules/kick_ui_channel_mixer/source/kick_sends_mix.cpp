@@ -26,7 +26,7 @@ namespace kick_ui
     {
         setupProvider();
         setMargin( 0, 6, 2, 0 );
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             refresh();
         } );
     }
@@ -161,7 +161,7 @@ namespace kick_ui
         sends3.onValueChanged = [&]( double Value ) { if( pProg ) pProg->send3 = CommonUtils::midiToGain( Value ); };
         sends4.onValueChanged = [&]( double Value ) { if( pProg ) pProg->send4 = CommonUtils::midiToGain( Value ); };
 
-        ui::themeChanged.connect( [&]() { updateData(); } );
+        ui::connectTheme( *this, [&]() { updateData(); } );
     };
 
     void SendsMixerDisplay::setNumber( int ProgNo )

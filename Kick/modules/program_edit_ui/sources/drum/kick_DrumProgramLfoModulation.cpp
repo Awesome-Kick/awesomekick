@@ -82,7 +82,7 @@ namespace kick_ui
                 pDrum->setLFOFrequency( pads[0], Value );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             num.setImages( "num_Header" );
         } );
     }

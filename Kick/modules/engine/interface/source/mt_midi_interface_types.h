@@ -39,7 +39,9 @@ namespace mt
 
     struct MTMidiMessage : juce::ReferenceCountedObject
     {
-        juce::MidiInput*  source;
+        juce::MidiInput*  source{nullptr};
+        double receivedAtMilliseconds{0.0};
+        juce::String sourceName; // stable after the input device is unplugged
         juce::MidiMessage message;
         using Ptr = juce::ReferenceCountedObjectPtr<MTMidiMessage>;
     };

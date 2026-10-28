@@ -74,7 +74,7 @@ namespace kick_ui
             auto p = new PadMuteSettings();
             mt::utils::showOptions( "PAD MUTE AUTOMATION SETTINGS", p, [p, this]( int R ) { delete p; } );
         };
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             padMute.setToggleButtonText( "Pad Mute", "Pad Mute" );
             padGroup.setToggleButtonText( "Pad Group", "Pad Group" );
             header.setIcon( "Icon_PadMute" );
@@ -261,7 +261,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             soloBtn.setToggleButtonText( "Solo", "Solo" );
             groups.setContent( groupNumbers, groupActiveNumbers, groups.getSelectedIndex() );
         } );

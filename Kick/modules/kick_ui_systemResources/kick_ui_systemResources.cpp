@@ -94,7 +94,7 @@ namespace kick_ui
             mt::utils::exitDialog( this, UI::APPLY );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             purgeAll.setImages( "purge" );
             purgeUnused.setImages( "purgeused" );
             ok.setImages( "ok_resource" );

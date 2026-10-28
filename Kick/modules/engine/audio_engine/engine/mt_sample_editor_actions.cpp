@@ -7,210 +7,39 @@ namespace mt
     ///////////////////////////////////////////
     /// ///////// MTSampleEditUndoAction
     //////////////////////////////////////////
-    bool MTSampleEditUndoAction::clearHistory = false;
-    int MTSampleEditUndoAction::bitDeapth = 0;
-    int MTSampleEditUndoAction::numChannels = 0;
-    juce::File MTSampleEditUndoAction::undoFile = juce::File{};
-    std::list<MTSampleEditUndoAction*>* MTSampleEditUndoAction::undoActions = nullptr;
+    MTSampleEditUndoAction::MTSampleEditUndoAction(MTSampleEditorActionsInterface* action)
+        : actionImp(action) {}
 
-    MTSampleEditUndoAction::MTSampleEditUndoAction( MTSampleEditorActionsInterface* action )
+    bool MTSampleEditUndoAction::restore(const juce::File& snapshot)
     {
-        actionImp.reset( action );
-        if( !undoFile.exists() )
-        {
-            undoFile = actionImp->getSourceFile().getSiblingFile( "undo_sampleeditor.wav" );
-        }
-    }
-
-    MTSampleEditUndoAction::~MTSampleEditUndoAction()
-    {
-        juce::int64 totalSamplesToRemove = getTotalSizeInSamples();
-        if( !clearHistory )
-        {
-            if( this != *undoActions->begin() )
-                jassertfalse;
-
-            undoActions->erase( undoActions->begin() );
-            removeOriginalSampleFromBackup();
-            for( auto it = undoActions->begin(); it != undoActions->end(); it++ )
-                (*it)->reduceSize( totalSamplesToRemove );
-        }
-    }
-
-    void MTSampleEditUndoAction::removeOriginalSampleFromBackup()
-    {
-        juce::int64 totalSamplesToRemove = getTotalSizeInSamples();
-
-        juce::String fName = undoFile.getFileNameWithoutExtension() + "_temp" + undoFile.getFileExtension();
-        juce::File tempFile = undoFile.getSiblingFile( fName );
-
-        juce::AudioFormatReader* undoReader = actionImp->getFormatManager().createReaderFor( undoFile );
-        if( !undoReader )
-        {
-            jassertfalse;
-        }
-        juce::WavAudioFormat format;
-        juce::FileOutputStream* outStream = new juce::FileOutputStream( tempFile );
-        juce::AudioFormatWriter* undoWriter = format.createWriterFor( outStream, undoReader->sampleRate, undoReader->numChannels, (int)undoReader->bitsPerSample, {}, 0 );
-        if( !undoWriter )
-            jassertfalse;
-
-        undoWriter->writeFromAudioReader( *undoReader, totalSamplesToRemove, undoReader->lengthInSamples - totalSamplesToRemove );
-        undoWriter->flush();
-        delete undoReader;
-        delete undoWriter;
-
-        undoFile.deleteFile();
-        tempFile.copyFileTo( undoFile );
-    }
-
-    juce::int64 MTSampleEditUndoAction::getTotalSizeInSamples()
-    {
-        juce::int64 totalSamples = (endOfSample - startOfSample);
-        if( actionImp->getProcessType() == MTSampleEditorActionsInterface::processOutofRegion )
-            totalSamples += (endOfSample1 - startOfSample1);
-
-        return totalSamples;
-    }
-
-    void MTSampleEditUndoAction::backupOriginalSample()
-    {
-        juce::String fName = undoFile.getFileNameWithoutExtension() + "_temp" + undoFile.getFileExtension();
-        juce::File tempFile = undoFile.getSiblingFile( fName );
-
-        bool undoFileExists = false;
-        juce::AudioFormatWriter* undoWriter = nullptr;
-        juce::AudioFormatReader* undoReader = actionImp->getFormatManager().createReaderFor( undoFile );
-
-        juce::AudioFormatReader* sourceReader = actionImp->getFormatManager().createReaderFor( actionImp->getSourceFile() );
-        bitDeapth = (int)sourceReader->bitsPerSample / 8;
-        numChannels = (int)sourceReader->numChannels;
-
-        startOfSample = 0;
-        if( undoReader )
-        {
-            undoFileExists = true;
-            startOfSample = undoReader->lengthInSamples;
-            juce::FileOutputStream* outStream = new juce::FileOutputStream( tempFile );
-            juce::WavAudioFormat format;
-            undoWriter = format.createWriterFor( outStream, undoReader->sampleRate, undoReader->numChannels, (int)undoReader->bitsPerSample, {}, 0 );
-            undoWriter->writeFromAudioReader( *undoReader, 0, undoReader->lengthInSamples );
-            undoWriter->flush();
-        } else
-        {
-            juce::WavAudioFormat format;
-            juce::FileOutputStream* outStream = new juce::FileOutputStream( undoFile );
-            undoWriter = format.createWriterFor( outStream, sourceReader->sampleRate, sourceReader->numChannels, (int)sourceReader->bitsPerSample, {}, 0 );
-        }
-        delete undoReader;
-
-        // copy modified regions to undo file
-        if( actionImp->getProcessType() == MTSampleEditorActionsInterface::processBetweenRegion )
-        {
-            juce::int64 startSample = actionImp->getRegion().getStart();
-            juce::int64 endSample = actionImp->getRegion().getEnd();
-            endOfSample = startOfSample + (endSample - startSample);
-            undoWriter->writeFromAudioReader( *sourceReader, startSample, endSample - startSample );
-            undoWriter->flush();
-        } else if( actionImp->getProcessType() == MTSampleEditorActionsInterface::processOutofRegion )
-        {
-            juce::int64 startSample = 0;
-            juce::int64 endSample = actionImp->getRegion().getStart();
-            endOfSample = startOfSample + (endSample - startSample);
-            undoWriter->writeFromAudioReader( *sourceReader, startSample, endSample - startSample );
-            undoWriter->flush();
-
-            startOfSample1 = endOfSample;
-            startSample = actionImp->getRegion().getEnd();
-            endSample = sourceReader->lengthInSamples;
-            endOfSample1 = startOfSample1 + (endSample - startSample);
-            undoWriter->writeFromAudioReader( *sourceReader, startSample, endSample - startSample );
-            undoWriter->flush();
-        } else
-        {
-            jassertfalse;
-        }
-
-        delete undoWriter;
-        delete sourceReader;
-
-        if( undoFileExists )
-        {
-            undoFile.deleteFile();
-            tempFile.moveFileTo( undoFile );
-        }
+        juce::TemporaryFile replacement(actionImp->getSourceFile());
+        return snapshot.copyFileTo(replacement.getFile()) && replacement.overwriteTargetFileWithTemporary();
     }
 
     bool MTSampleEditUndoAction::perform()
     {
-        if( actionImp->hasState() && (startOfSample > 0 || endOfSample > 0) )
-            return false;
-
-        if( actionImp->hasState() )
-            backupOriginalSample();
-
-        return actionImp->execute();
+        if(after) return restore(after->getFile());
+        const auto source = actionImp->getSourceFile();
+        before = std::make_unique<juce::TemporaryFile>(source);
+        if(!source.copyFileTo(before->getFile())) return false;
+        if(!actionImp->execute()) return false;
+        after = std::make_unique<juce::TemporaryFile>(source);
+        if(source.copyFileTo(after->getFile())) return true;
+        // Snapshot failure must not leave a changed sample behind a failed command.
+        before->overwriteTargetFileWithTemporary();
+        after.reset();
+        return false;
     }
 
     bool MTSampleEditUndoAction::undo()
     {
-        if( actionImp->hasState() && (startOfSample < 0 || endOfSample < 0) )
-            return false;
-
-        if( actionImp->hasState() )
-        {
-            MTSampleEditorFromDestFileAction actionRestore( startOfSample, endOfSample, startOfSample1, endOfSample1, actionImp->getTotalSamples(), undoFile );
-            actionRestore.setProcessType( actionImp->getProcessType() );
-            std::list<juce::var> params;
-            actionRestore.initialize( actionImp->getRegion(), params, actionImp->getSourceFile() );
-            actionRestore.setProcessType( actionImp->getProcessType() );
-            actionRestore.execute();
-        } else
-        {
-            actionImp->execute();
-        }
-
-        startOfSample = -1;
-        endOfSample = -1;
-        startOfSample1 = -1;
-        endOfSample1 = -1;
-        return true;
+        return before && restore(before->getFile());
     }
 
     int MTSampleEditUndoAction::getSizeInUnits()
     {
-        int sizeOfObj = (int)sizeof( *this );
-        if( !actionImp->hasState() )
-            return sizeOfObj;
-
-        sizeOfObj += static_cast<int>(bitDeapth * (endOfSample - startOfSample) * numChannels);
-        if( actionImp->getProcessType() == MTSampleEditorActionsInterface::processOutofRegion )
-        {
-            sizeOfObj += static_cast<int>(bitDeapth * (endOfSample1 - startOfSample1));
-        }
-        return sizeOfObj;
-    }
-
-    void MTSampleEditUndoAction::reduceSize( juce::int64 noSamples )
-    {
-        startOfSample -= noSamples;
-        endOfSample -= noSamples;
-        if( startOfSample1 != -1 && endOfSample1 != -1 )
-        {
-            startOfSample1 -= noSamples;
-            endOfSample1 -= noSamples;
-        }
-    }
-
-    void MTSampleEditUndoAction::cleanup()
-    {
-        undoFile.deleteFile();
-    }
-
-    void MTSampleEditUndoAction::setClearHistory( bool /*setClear*/ )
-    {
-        if( clearHistory )
-            undoFile.deleteFile();
+        const auto bytes = (before ? before->getFile().getSize() : 0) + (after ? after->getFile().getSize() : 0);
+        return (int)juce::jlimit<juce::int64>(sizeof(*this), std::numeric_limits<int>::max(), bytes + sizeof(*this));
     }
 
     //////////////////////////////////////////////
@@ -224,18 +53,24 @@ namespace mt
     void MTSampleEditorActionsInterface::initializeReaderWriter( juce::String& tempPath )
     {
         currentSample = 0;
+        writeFailed = false;
         reader = formatManager.createReaderFor( sourceFile );
+        if( !reader ) return;
         startSample = region.getStart();
         endSample = region.getEnd();
         totalSmaples = reader->lengthInSamples;
+        startSample = juce::jlimit<juce::int64>(0, totalSmaples, startSample);
+        endSample = juce::jlimit<juce::int64>(startSample, totalSmaples, endSample);
 
         juce::String fName = sourceFile.getFileNameWithoutExtension() + "_temp" + sourceFile.getFileExtension();
-        juce::File tempFile = sourceFile.getSiblingFile( fName );
+        juce::File tempFile = sourceFile.getSiblingFile( fName ).getNonexistentSibling();
         tempPath = tempFile.getFullPathName();
 
-        juce::FileOutputStream* outStream = new juce::FileOutputStream( tempFile );
+        auto outStream = createEditOutputStream(tempFile);
+        if(!outStream) return;
         juce::WavAudioFormat format;
-        writer = format.createWriterFor( outStream, reader->sampleRate, reader->numChannels, (int)reader->bitsPerSample, {}, 0 );
+        writer = format.createWriterFor(outStream.get(), reader->sampleRate, reader->numChannels, (int)reader->bitsPerSample, {}, 0);
+        if(writer) outStream.release();
     }
 
     juce::String MTSampleEditorActionsInterface::checkForDuplicateAndConstructNewPath( const juce::String file )
@@ -257,14 +92,12 @@ namespace mt
         juce::WavAudioFormat format;
         juce::FileOutputStream* outStream = new juce::FileOutputStream( copyPath );
         juce::AudioFormatWriter* writerTmp = format.createWriterFor( outStream, reader->sampleRate, reader->numChannels, (int)reader->bitsPerSample, {}, 0 );
-        if( !writerTmp )
-            jassertfalse;
-
-        writerTmp->writeFromAudioReader( *reader, firstSample, lastSample - firstSample );
-        writerTmp->flush();
+        if( !writerTmp ) { delete outStream; writeFailed = true; copyPath.deleteFile(); return false; }
+        const bool complete = writerTmp->writeFromAudioReader(*reader, firstSample, lastSample - firstSample) && writerTmp->flush();
         delete writerTmp;
-
-        return false;
+        if( !complete ) copyPath.deleteFile();
+        writeFailed |= !complete;
+        return complete;
     }
 
     void MTSampleEditorActionsInterface::executeprocessBetweenRegion()
@@ -273,17 +106,17 @@ namespace mt
         regionProcessing = 1;
         juce::AudioSampleBuffer bufferTmp;
         int copySampleSize = sampleEditorBufferSize;
-        writer->writeFromAudioReader( *reader, 0, startSample );
+        writeFailed |= !writer->writeFromAudioReader( *reader, 0, startSample );
 
         currentSample = startSample;
-        while( performAction( bufferTmp, copySampleSize ) )
+        while( !writeFailed && performAction( bufferTmp, copySampleSize ) )
         {
             currentSample += copySampleSize;
             if( bufferTmp.getNumSamples() == copySampleSize )
-                writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
+                writeFailed |= !writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
         }
 
-        writer->writeFromAudioReader( *reader, endSample, (totalSmaples - endSample) );
+        writeFailed |= !writer->writeFromAudioReader( *reader, endSample, (totalSmaples - endSample) );
     }
 
     int MTSampleEditorActionsInterface::read( juce::AudioSampleBuffer& buffer, juce::int64 /*startS*/, juce::int64 endS, juce::AudioFormatReader* r, juce::int64 current )
@@ -301,7 +134,7 @@ namespace mt
         }
 
         buffer.setSize( (int)r->numChannels, numSamples );
-        r->read( &buffer, 0, numSamples, currentSample, true, true );
+        writeFailed |= !r->read( &buffer, 0, numSamples, current, true, true );
 
         return numSamples;
     }
@@ -312,41 +145,36 @@ namespace mt
         regionProcessing = 0;
         juce::AudioSampleBuffer bufferTmp;
         int copySampleSize = sampleEditorBufferSize;
-        while( performAction( bufferTmp, copySampleSize ) )
+        while( !writeFailed && performAction( bufferTmp, copySampleSize ) )
         {
             currentSample += copySampleSize;
             if( bufferTmp.getNumSamples() == copySampleSize )
-                writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
+                writeFailed |= !writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
         }
 
         // process from startSample to endSample
-        writer->writeFromAudioReader( *reader, startSample, (endSample - startSample) );
+        writeFailed |= !writer->writeFromAudioReader( *reader, startSample, (endSample - startSample) );
 
         //process from endSample to totalSamples
         currentSample += endSample - startSample;
         regionProcessing = 2;
-        while( performAction( bufferTmp, copySampleSize ) )
+        while( !writeFailed && performAction( bufferTmp, copySampleSize ) )
         {
             currentSample += copySampleSize;
             if( bufferTmp.getNumSamples() == copySampleSize )
-                writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
+                writeFailed |= !writer->writeFromAudioSampleBuffer( bufferTmp, 0, copySampleSize );
         }
     }
 
-    void MTSampleEditorActionsInterface::cleanupReaderWriter( juce::String& tempPath )
+    bool MTSampleEditorActionsInterface::cleanupReaderWriter( juce::String& tempPath )
     {
-        juce::File tempFile( tempPath );
+        const bool complete = !writeFailed && writer && writer->flush();
         delete writer;
         writer = nullptr;
         delete reader;
         reader = nullptr;
-
-        if( !sourceFile.deleteFile() )
-        {
-            jassertfalse;
-        }
-
-        tempFile.moveFileTo( sourceFile );
+        juce::TemporaryFile temporary(sourceFile, juce::File(tempPath));
+        return complete && temporary.overwriteTargetFileWithTemporary();
     }
 
     void MTSampleEditorActionsInterface::initialize( const MTSampleRegion& r, const std::list<juce::var>& p, juce::File& source )
@@ -362,10 +190,9 @@ namespace mt
         initializeReaderWriter( tempPath );
         if( reader == nullptr || writer == nullptr )
         {
-            if( reader )
-                delete reader;
-            if( writer )
-                delete writer;
+            delete reader; reader = nullptr;
+            delete writer; writer = nullptr;
+            if( tempPath.isNotEmpty() ) juce::File(tempPath).deleteFile();
 
             return false;
         }
@@ -374,8 +201,11 @@ namespace mt
         int copySampleSize = sampleEditorBufferSize;
         if( type == noProcessing )
         {
-            while( performAction( bufferTmp, copySampleSize ) ) {}
-            return true;
+            while( !writeFailed && performAction( bufferTmp, copySampleSize ) ) {}
+            delete reader; reader = nullptr;
+            delete writer; writer = nullptr;
+            juce::File(tempPath).deleteFile();
+            return !writeFailed;
         }
         if( type == processBetweenRegion )
         {
@@ -385,8 +215,7 @@ namespace mt
             executeprocessOutofRegion();
         }
 
-        cleanupReaderWriter( tempPath );
-        return true;
+        return cleanupReaderWriter( tempPath );
     }
 
     ///////////////////////////////////////////
@@ -406,7 +235,7 @@ namespace mt
         reverseCurrentSample = reverseCurrentSample - sampleEditorBufferSize <= startSample ? startSample : reverseCurrentSample - sampleEditorBufferSize;
         buffer.setSize( (int)reader->numChannels, numSamples );
 
-        reader->read( &buffer, 0, numSamples, reverseCurrentSample, true, true );
+        writeFailed |= !reader->read( &buffer, 0, numSamples, reverseCurrentSample, true, true );
         buffer.reverse( 0, numSamples );
 
         return true;
@@ -422,11 +251,12 @@ namespace mt
 
         startSample = region.getStart();
         endSample = region.getEnd();
+        if( !readerTmp ) { gainFactor = 1.0f; return; }
         float lmin, lmax, rmin, rmax;
         readerTmp->readMaxLevels( startSample, endSample - startSample, lmin, lmax, rmin, rmax );
 
         auto maxLevel = juce::jmax( -lmin, lmax, -rmin, rmax );
-        gainFactor = CommonUtils::dbToGain( float( 0.0 ) ) / maxLevel;
+        gainFactor = maxLevel > 0.0f ? CommonUtils::dbToGain( float( 0.0 ) ) / maxLevel : 1.0f;
 
         delete readerTmp;
     }
@@ -439,7 +269,7 @@ namespace mt
         numSamples = static_cast<int>(endSample - startSample);
         buffer.setSize( (int)reader->numChannels, numSamples );
 
-        reader->read( &buffer, 0, numSamples, currentSample, true, true );
+        writeFailed |= !reader->read( &buffer, 0, numSamples, currentSample, true, true );
         buffer.applyGain( gainFactor );
 
         return true;
@@ -455,7 +285,7 @@ namespace mt
 
         numSamples = static_cast<int>(endSample - startSample);
         buffer.setSize( (int)reader->numChannels, numSamples );
-        reader->read( &buffer, 0, numSamples, currentSample, true, true );
+        writeFailed |= !reader->read( &buffer, 0, numSamples, currentSample, true, true );
 
         int inputCurveType = *params.begin();
         //AudioFadeCurve::Type curveType = AudioFadeCurve::linear;
@@ -485,7 +315,7 @@ namespace mt
 
         numSamples = static_cast<int>(endSample - startSample);
         buffer.setSize( (int)reader->numChannels, numSamples );
-        reader->read( &buffer, 0, numSamples, currentSample, true, true );
+        writeFailed |= !reader->read( &buffer, 0, numSamples, currentSample, true, true );
 
         int curveTypeInput = *params.begin();
         //AudioFadeCurve::Type curveType = AudioFadeCurve::linear;
@@ -770,16 +600,16 @@ namespace mt
             {
                 juce::AudioSampleBuffer buff( 1, copySize );
                 if( copyType == 0 )
-                    reader->read( &buff, 0, copySize, currentSample, true, false );
+                    writeFailed |= !reader->read( &buff, 0, copySize, currentSample, true, false );
                 else
-                    reader->read( &buff, 0, copySize, currentSample, false, true );
+                    writeFailed |= !reader->read( &buff, 0, copySize, currentSample, false, true );
                 writerTmp->writeFromAudioSampleBuffer( buff, 0, copySize );
             } else
             {
                 juce::AudioSampleBuffer buff1( 1, copySize );
                 juce::AudioSampleBuffer buff2( 1, copySize );
-                reader->read( &buff1, 0, copySize, currentSample, true, false );
-                reader->read( &buff2, 0, copySize, currentSample, false, true );
+                writeFailed |= !reader->read( &buff1, 0, copySize, currentSample, true, false );
+                writeFailed |= !reader->read( &buff2, 0, copySize, currentSample, false, true );
                 buff1.addFrom( 0, 0, buff2, 0, 0, copySize );
 
                 writerTmp->writeFromAudioSampleBuffer( buff1, 0, copySize );

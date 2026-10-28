@@ -55,15 +55,26 @@ namespace mt
 
         void setUsbcallback( UsbStatus func )
         {
-            usbCallback = func;
+            const juce::ScopedLock guard(callbackLock);
+            usbCallback = std::move(func);
         }
 
     private:
+        void notifyStatus(usbmsg_t& status)
+        {
+            UsbStatus callback;
+            { const juce::ScopedLock guard(callbackLock); callback = usbCallback; }
+            if(callback) callback(status);
+        }
+        juce::CriticalSection callbackLock;
         UsbStatus         usbCallback;
+        size_t downloadedSize{0};
+        bool transferFailed{false};
+        std::string pendingDownload, completedDownload;
         std::string       rFilePath;
         size_t            tfilesize        = 0;
-        bool              timerRunning     = false; // Define timerRunning as a member variable
-        bool              responseReceived = false;
+        std::atomic<bool> timerRunning{false}; // Define timerRunning as a member variable
+        std::atomic<bool> responseReceived{false};
         int               g_ep_write       = -1;
         int               g_ep_read        = -1;
         int               write_filefd     = -1; //linux will be writing to this file

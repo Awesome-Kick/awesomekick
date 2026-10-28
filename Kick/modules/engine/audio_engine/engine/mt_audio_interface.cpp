@@ -1946,7 +1946,7 @@ namespace mt
 
     const std::vector<juce::String>& MTAudioInterface::getAssets( AssetTypes Type ) { return manager->getAssets( Type ); }
     std::vector<juce::String>        MTAudioInterface::getAssetNames( AssetTypes Type ) { return manager->getAssetNames( Type ); }
-    const juce::String&              MTAudioInterface::getAssetName( AssetTypes Type, int Index ) { return manager->getAssetName( Type, Index ); }
+    juce::String                     MTAudioInterface::getAssetName( AssetTypes Type, int Index ) { return manager->getAssetName( Type, Index ); }
     const juce::String&              MTAudioInterface::getAsset( AssetTypes Type, int Index ) { return manager->getAsset( Type, Index ); }
     int                              MTAudioInterface::addAsset( const juce::String& File, AssetTypes Type ) { return manager->add( File, Type ); }
     void                             MTAudioInterface::removeAsset( const juce::String& File, AssetTypes Type ) { return manager->remove( File, Type ); }
@@ -1982,7 +1982,7 @@ namespace mt
     void MTAudioInterface::startRecorder( int Mode, bool ForwardDirection, bool FromBeginging ) { manager->startRecorder( Mode, ForwardDirection, FromBeginging ); }
     void MTAudioInterface::stopRecorder() { manager->stopRecorder(); }
     void MTAudioInterface::clearRecording() { manager->clearRecording(); }
-    void MTAudioInterface::saveRecording( const std::string& FilePath ) { manager->saveRecording( FilePath ); }
+    bool MTAudioInterface::saveRecording( const std::string& FilePath ) { return manager->saveRecording( FilePath ); }
 
     float MTAudioInterface::getRecorderMode() { return manager->getRecorderMode(); }
     float MTAudioInterface::getRecorderGain() { return manager->getRecorderGain(); }
@@ -2003,6 +2003,7 @@ namespace mt
 
     void                      MTAudioInterface::startRecorderPreview( double fromStartTimeInSeconds ) { manager->startRecorderPreview( fromStartTimeInSeconds ); }
     void                      MTAudioInterface::stopRecorderPreview() { manager->stopRecorderPreview(); }
+    void MTAudioInterface::copyRecorderThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate) { manager->copyRecorderThumbnailBlock(start, destination, totalFrames, rate); }
     juce::AudioBuffer<float>& MTAudioInterface::getRecorderAudioBuffer() { return manager->getRecorderAudioBuffer(); }
 
     void MTAudioInterface::setRecorderListener( MTRecorderListener& Listener ) { manager->setRecorderListener( Listener ); }
@@ -2158,6 +2159,81 @@ namespace mt
 
     void       MTAudioInterface::createSong( const juce::String& Name ) { manager->createSong( Name ); }
     void       MTAudioInterface::deleteSong( const juce::String& Name ) { manager->deleteSong( Name ); }
+    void MTAudioInterface::setExternalMidiClock(bool enabled)
+    {
+        manager->stop();
+        getSettings().midiControl.externalClock = enabled;
+        getMidiClock().setClockSyncMode(enabled ? CMidiClock::SyncMode::EXTERNAL_CLOCK : CMidiClock::SyncMode::INTERNAL_CLOCK);
+    }
+
+    bool MTAudioInterface::exportSongMidi(const juce::String& songName, const juce::File& destination)
+    {
+        const juce::ScopedLock guard(manager->getSequenceLock());
+        const auto song = manager->getSongInfo(songName);
+        if(song.steps.empty()) return false;
+        juce::MidiFile file;
+        file.setTicksPerQuarterNote(defaultPPQN);
+        juce::MidiMessageSequence tempoTrack, notesTrack;
+        double offset = 0;
+        for(const auto& step : song.steps)
+        {
+            auto* sequence = manager->getSequence(step.seqNo);
+            if(!sequence || step.repeatCount < 1) return false;
+            const int begin = sequence->getLoopingState() ? (int)sequence->getTicksUpto(sequence->getLoopStart()) : 0;
+            const int end = sequence->getLoopingState() ? (int)sequence->getTicksUpto(sequence->getLoopEnd()) : (int)sequence->getLengthInTicks();
+            if(end <= begin) return false;
+            const double bpm = sequence->getBPM();
+            tempoTrack.addEvent(juce::MidiMessage::tempoMetaEvent((int)(60000000.0 / juce::jmax(1.0, bpm))), offset);
+            tempoTrack.addEvent(juce::MidiMessage::timeSignatureMetaEvent(sequence->getNumerator(), sequence->getDenominator()), offset);
+            for(int repeat = 0; repeat < step.repeatCount; ++repeat)
+            {
+                sequence->forAllTracks([&](MTTrack* track) {
+                    if(!track || track->isTrackEffectivelyMuted() || !track->getProgram() || track->getProgram()->isAudio()) return;
+                    const int period = (int)track->getLengthInTicks();
+                    if(period <= 0) return;
+                    const int channel = juce::jlimit(1,16,track->getMidiOutChannel());
+                    for(auto noteTree : track->getNoteListVT())
+                    {
+                        MTNoteRO note(noteTree);
+                        const int number = track->getEffectiveNoteNo(note.number());
+                        if(!CommonUtils::isValidMidiNote(number)) continue;
+                        const int velocity = juce::jlimit(1,127,track->getEffectiveNoteVelocity(note.velocity()));
+                        const int parts = juce::jmax(1,note.ratchet());
+                        const int length = juce::jmax(1,note.length());
+                        for(int cycle = 0; cycle + note.start() < end; cycle += period)
+                        {
+                            const int start = cycle + note.start();
+                            if(start < begin) continue;
+                            for(int part = 0; part < parts; ++part)
+                            {
+                                const auto on = offset + start - begin + double(length) * part / parts;
+                                const auto off = juce::jmin(offset + end - begin, offset + start - begin + double(length) * (part + 1) / parts);
+                                if(off <= on) continue;
+                                notesTrack.addEvent(juce::MidiMessage::noteOn(channel, number, (juce::uint8)velocity), on);
+                                notesTrack.addEvent(juce::MidiMessage::noteOff(channel, number), off);
+                            }
+                        }
+                    }
+                });
+                offset += end - begin;
+            }
+        }
+        tempoTrack.addEvent(juce::MidiMessage::endOfTrack(), offset);
+        notesTrack.updateMatchedPairs();
+        notesTrack.addEvent(juce::MidiMessage::endOfTrack(), offset);
+        file.addTrack(tempoTrack);
+        file.addTrack(notesTrack);
+        if(destination.getParentDirectory().createDirectory().failed()) return false;
+        juce::TemporaryFile temporary(destination);
+        {
+            juce::FileOutputStream stream(temporary.getFile());
+            if(!stream.openedOk() || !file.writeTo(stream)) return false;
+            stream.flush();
+            if(stream.getStatus().failed()) return false;
+        }
+        return temporary.overwriteTargetFileWithTemporary();
+    }
+
     MTSongInfo MTAudioInterface::getSongInfo( const juce::String& SongName ) { return manager->getSongInfo( SongName ); }
     void       MTAudioInterface::addSongStep( const juce::String& SongName, MTSongStepInfo& Step, int AtIndex ) { manager->addSongStep( SongName, Step, AtIndex ); }
     void       MTAudioInterface::editSongStep( const juce::String& SongName, MTSongStepInfo& Step, int AtIndex ) { manager->editSongStep( SongName, Step, AtIndex ); }

@@ -29,7 +29,7 @@ namespace mt
     {
     public:
         explicit MTNoteList( const juce::ValueTree& VT, juce::UndoManager* UM, MTSequence& Seq );
-        virtual ~MTNoteList() = default;
+        virtual ~MTNoteList();
 
         allNotesChanedFn onAllNotesChanedFn;
 
@@ -142,12 +142,8 @@ namespace mt
         int  copyNotesTo( const track::copyTrackNotes& Info );
 
         inline juce::ValueTree&             getNoteListVT() { return vTree; };
-        inline juce::HashMap<int, MTNote*>* getNotesAtPos( int start )
-        {
-            if( notes.contains( start ) )
-                return notes[start];
-            return nullptr;
-        }
+        struct PlaybackNote { int number, velocity, probability, ratchet, start, length; };
+        std::vector<PlaybackNote> getNotesAtPos( int start ) const;
         inline juce::Array<juce::ValueTree>& getSelectedNoteList() { return selected; };
 
     private:
@@ -184,6 +180,10 @@ namespace mt
 
     private:
         void sort();
+        void syncPlaybackNote( const juce::ValueTree& note, bool remove = false );
+        void valueTreePropertyChanged( juce::ValueTree& tree, const juce::Identifier& );
+        void valueTreeChildAdded( juce::ValueTree& parentTree, juce::ValueTree& child );
+        void valueTreeChildRemoved( juce::ValueTree& parentTree, juce::ValueTree& child, int );
         int  selectNote( juce::ValueTree Note, bool Select );
         int  updateNote( MTNote& Note, int Start, int Length = 0 );
 
@@ -195,9 +195,17 @@ namespace mt
         }
 
     private:
+        struct NoteListener : juce::ValueTree::Listener
+        {
+            MTNoteList& owner;
+            explicit NoteListener(MTNoteList& list) : owner(list) {}
+            void valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property) override { owner.valueTreePropertyChanged(tree, property); }
+            void valueTreeChildAdded(juce::ValueTree& tree, juce::ValueTree& child) override { owner.valueTreeChildAdded(tree, child); }
+            void valueTreeChildRemoved(juce::ValueTree& tree, juce::ValueTree& child, int index) override { owner.valueTreeChildRemoved(tree, child, index); }
+        } noteListener{ *this };
         MTSequence&           seq;
         juce::UndoManager*    um{ nullptr };
-        juce::CriticalSection lock;
+        mutable juce::CriticalSection lock;
         juce::ValueTree       parent;
         juce::ValueTree       vTree;
 
@@ -205,7 +213,8 @@ namespace mt
         juce::Array<juce::ValueTree> temp;
 
         juce::MidiMessageSequence*                       pMidiSeq{ nullptr };
-        juce::HashMap<int, juce::HashMap<int, MTNote*>*> notes;
+        std::map<int, std::map<int, PlaybackNote>> notes;
+        std::map<int, int> notePositions;
         int                                              uniqueNoteId{ 0 };
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR( MTNoteList );

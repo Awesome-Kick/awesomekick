@@ -110,7 +110,7 @@ namespace kick_ui
                 p->getClip( selectedPad )->muteGroup = Value - 1;
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             wrap.setToggleButtonText( "Wrap", "Wrap" );
             reverse.setToggleButtonText( "Reverse", "Reverse" );
             fade.setToggleButtonText( "Fade", "Fade" );

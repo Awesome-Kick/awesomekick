@@ -156,7 +156,7 @@ namespace kick_ui
             } );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             plusButton.setImages( "Plus", "Plus", "Plus_Active" );
             minusButton.setImages( "Minus", "Minus", "Minus_Active" );
             header.setIcon( "sEdit_Icon" );

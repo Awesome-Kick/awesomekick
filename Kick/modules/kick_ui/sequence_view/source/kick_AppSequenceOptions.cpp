@@ -489,7 +489,7 @@ namespace kick_ui
             seq.updateData();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             srNo.setImage( "ID_sequence" );
             close.setImages( "Edit_Close" );
         } );

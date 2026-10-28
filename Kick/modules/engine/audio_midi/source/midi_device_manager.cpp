@@ -291,7 +291,9 @@ namespace mt
         const juce::ScopedLock sl( midiMonitorLock );
         MTMidiMessage          msg;
         msg.source  = source;
+        msg.sourceName = source ? source->getName() : juce::String();
         msg.message = message;
+        msg.receivedAtMilliseconds = juce::Time::getMillisecondCounterHiRes();
         incomingMessages.add( msg );
         triggerAsyncUpdate();
     }
@@ -309,6 +311,8 @@ namespace mt
         {
             onMidiMessage( m );
         }
+
+        midiMessages.clearQuick(); // this batch must never return to the producer queue
 
         //midiMonitor.insertTextAtCaret( messageText );
     }

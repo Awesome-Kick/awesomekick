@@ -153,7 +153,7 @@ namespace mt
             cancel.onClick      = [&]() { utils::exitDialog( this, UI::CANCEL ); };
             closeButton.onClick = [&]() { utils::exitDialog( this, UI::CANCEL ); };
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 closeButton.setImages( "Icon Close" );
             } );
 

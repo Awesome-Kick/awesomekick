@@ -53,7 +53,7 @@ namespace kick_ui
         addComponent( fwUpdate, 5, 2, 1, 1 );
         addComponent( rDefaults, 5, 3, 1, 1 );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             logo.setImage( "LOGO" );
         } );
 
@@ -118,7 +118,7 @@ namespace kick_ui
         info.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
         info.setValueJustification( juce::Justification::centred );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             no.setImages( "No" );
             yes.setImages( "Yes" );
         } );

@@ -35,7 +35,7 @@ namespace kick_ui
 
         type.setColours( ui::Theme::textColour( 2 ), ui::Theme::textColour( 1 ) );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
 
         } );
     }

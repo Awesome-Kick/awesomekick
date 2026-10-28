@@ -132,10 +132,10 @@ namespace mt
         {
             auto startNote = (int)getChannelNoteMap( channel );
             auto checkCent = (int)( centValue - ( startNote * 100 ) );
-            auto noteIndex = centValue / 100;
+            auto noteIndex = checkCent / 100;
             if( juce::isPositiveAndBelow( checkCent, 6000 ) )
             {
-                uint16_t regValue = claibValue[noteIndex] + ( claibValue[noteIndex + 1] - claibValue[noteIndex] ) * std::fmod( centValue, 100 ) / 100;
+                uint16_t regValue = claibValue[noteIndex] + ( claibValue[noteIndex + 1] - claibValue[noteIndex] ) * (checkCent % 100) / 100.0;
                 uint8_t  buffer[3];
                 buffer[0] = ( 0x30 | ( toChannelmap( channel ) ) );
                 buffer[1] = ( regValue >> 4 ) & 0xFF;

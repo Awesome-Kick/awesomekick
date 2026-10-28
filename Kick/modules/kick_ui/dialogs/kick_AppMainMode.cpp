@@ -69,7 +69,7 @@ namespace kick_ui
             apply.onClick  = [&]() { mt::utils::exitDialog( this, UI::APPLY ); };
             cancel.onClick = [&]() { mt::utils::exitDialog( this, UI::CANCEL ); };
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 drum.setImages( "Drum", "Drum_Active" );
                 keygroup.setImages( "Piano", "Piano_Active" );
                 audio.setImages( "Movie", "Movie_Active" );
@@ -249,7 +249,7 @@ namespace kick_ui
             tBar.redo.setToggleState( false, juce::dontSendNotification );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             tabButtons[0].setToggleButtonText( "Sequence", "Sequence" );
             tabButtons[1].setToggleButtonText( "Track", "Track" );
             tabButtons[2].setToggleButtonText( "Program", "Program" );

@@ -62,9 +62,9 @@ namespace mt
         void setSampleLength( int, int );
 
         juce::ValueTree getClipTree( int Start );
-        MTIAudio*       getAudioClip( int Start );
+        std::unique_ptr<MTIAudio> getAudioClip( int Start );
         ASoundSlice*    getAudioSlice( int Start );
-        MTIAudio*       getAudioSample( int Start );
+        std::unique_ptr<MTIAudio> getAudioSample( int Start );
 
         juce::Array<std::unique_ptr<MTIAudio>> getAudioClipsData();
 

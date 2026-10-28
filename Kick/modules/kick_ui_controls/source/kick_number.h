@@ -363,7 +363,7 @@ namespace ui
             }
             slider.setSelectionEnabled( false );
 
-            themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 num1.setImages( "numPad_1", "numPad_1", "numPad_1_Active" );
                 num2.setImages( "numPad_2", "numPad_2", "numPad_2_Active" );
                 num3.setImages( "numPad_3", "numPad_3", "numPad_3_Active" );

@@ -36,6 +36,10 @@ namespace kick_ui
         ui::KickGrid::setBackgroundColour( juce::Colours::transparentBlack );
         setRowTitles( { "", "MidiInput", "MidiOutput" } );
 
+        addComponent(clockSource, 3, 1);
+        clockSource.onSelectionChanged = [&](int index, juce::String) {
+            mt::getAudioInterface().setExternalMidiClock(index == 1);
+        };
         addComponent( inputList, 1, 1 );
         addComponent( itrack, 1, 2 );
         addComponent( icontrol, 1, 3 );
@@ -76,6 +80,7 @@ namespace kick_ui
 
     void SettingsMidiSync::refresh()
     {
+        clockSource.setSelected(settings.midiControl.externalClock() ? 1 : 0, juce::dontSendNotification);
         auto inputIndex  = inputList.getSelectedIndex();
         auto outputIndex = outputList.getSelectedIndex();
 

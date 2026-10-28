@@ -28,6 +28,8 @@ namespace mt
         {
             const juce::SpinLock::ScopedLockType lock( engineLock );
             std::swap( engine, Engine );
+            sustainDown = false;
+            sustained.fill(false);
             sounding.fill( -1 ); // the new engine has no notes
             numDeferredOffs = 0;
         }
@@ -50,6 +52,7 @@ namespace mt
         push( { Event::Type::NoteOn, Note, juce::jlimit( 0.f, 1.f, Velocity / 127.f ) } );
     }
     void InstrumentObject::noteOff( int Note ) { push( { Event::Type::NoteOff, Note, 0.f } ); }
+    void InstrumentObject::sustain(bool Down) { push({Event::Type::Sustain, 0, Down ? 1.f : 0.f}); }
     void InstrumentObject::allNotesOff() { push( { Event::Type::AllNotesOff, 0, 0.f } ); }
     void InstrumentObject::setParam( int Index, float Value ) { push( { Event::Type::Param, Index, Value } ); }
     void InstrumentObject::pitchBend( float Semitones ) { push( { Event::Type::PitchBend, 0, Semitones } ); }
@@ -70,7 +73,12 @@ namespace mt
 
         const juce::SpinLock::ScopedLockType lock( engineLock );
         if( engine )
+        {
+            engine->reset();
             engine->prepare( SampleRate, (int)BlockSize );
+        }
+        sustainDown = false;
+        sustained.fill(false);
         sounding.fill( -1 );
         numDeferredOffs = 0;
         prepared        = true;
@@ -101,6 +109,8 @@ namespace mt
                 {
                     if( !juce::isPositiveAndBelow( e.index, 128 ) )
                         break;
+                    numDeferredOffs = (int)( std::remove( deferredOffs.begin(), deferredOffs.begin() + numDeferredOffs, e.index ) - deferredOffs.begin() );
+                    sustained[(size_t)e.index] = false;
                     releaseNote( e.index ); // retrigger
                     // Remember the note actually sent, so the note-off matches even if the
                     // program's transpose changes while it is held.
@@ -117,6 +127,7 @@ namespace mt
                 {
                     if( !juce::isPositiveAndBelow( e.index, 128 ) )
                         break;
+                    if(sustainDown) { sustained[(size_t)e.index] = true; break; }
                     // A note shorter than one block would start and stop before rendering a
                     // sample; keep it for this block and release it at the next.
                     if( startedThisBlock[(size_t)e.index] && numDeferredOffs < (int)deferredOffs.size() )
@@ -125,7 +136,15 @@ namespace mt
                         releaseNote( e.index );
                     break;
                 }
+                case Event::Type::Sustain:
+                    sustainDown = e.value >= 0.5f;
+                    if(!sustainDown)
+                        for(size_t note = 0; note < sustained.size(); ++note)
+                            if(sustained[note]) { releaseNote((int)note); sustained[note] = false; }
+                    break;
                 case Event::Type::AllNotesOff:
+                    sustainDown = false;
+                    sustained.fill(false);
                     engine->allNotesOff();
                     sounding.fill( -1 );
                     numDeferredOffs = 0;

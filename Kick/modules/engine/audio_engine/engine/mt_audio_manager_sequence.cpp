@@ -29,7 +29,7 @@ namespace mt
         sequences.reserve( 64 );
 
         // Connect callbacks...
-        sequenceNameChanged.connect( [&]( MTSequence* ) { updateSequenceList(); } );
+        sequenceNameConnection = sequenceNameChanged.connect( [&]( MTSequence* ) { updateSequenceList(); } );
     }
 
     MTAudioSequenceManager::~MTAudioSequenceManager()
@@ -39,6 +39,7 @@ namespace mt
 
     void MTAudioSequenceManager::close()
     {
+        const juce::ScopedLock guard(getSequenceLock());
         vTree       = juce::ValueTree{ IDs::SEQUENCES };
         undoManager = nullptr;
 
@@ -52,6 +53,7 @@ namespace mt
 
     void MTAudioSequenceManager::setup( juce::ValueTree VT, juce::UndoManager* UM )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         vTree       = VT;
         undoManager = UM;
 
@@ -219,14 +221,15 @@ namespace mt
 
     int MTAudioSequenceManager::deleteSequence( int Index )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( juce::isPositiveAndBelow( Index, sequences.size() ) )
         {
             auto& ptr = sequences[(size_t)Index];
+            manager.detachSequence(ptr.get());
 
             // Stop audio playback, if current sequence is playing...
             if( pSelectedSequence == ptr.get() )
             {
-                manager.stop();
                 pSelectedSequence = nullptr;
             }
 

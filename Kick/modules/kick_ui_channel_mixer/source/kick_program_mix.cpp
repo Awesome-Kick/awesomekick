@@ -80,6 +80,7 @@ namespace kick_ui
     {
         auto& rowComp       = getRowComponents();
         auto  comp1         = dynamic_cast<ProgramMixerDisplay*>( rowComp[0] );
+        if( !comp1 || getNumRows() == 0 ) return;
         auto  elementBounds = comp1->getElementBounds( ( knob - 1 ) % 4 + 1 );
         auto  numRows       = getNumRows();
         auto  rows          = getRowNumbers( 3, ( ( knob - 1 ) / 4 ) + 1, elementBounds.getX(), elementBounds.getWidth(), 50 );
@@ -203,7 +204,7 @@ namespace kick_ui
             kick_ui::signals::sigScreenOpen( kick_ui::Screen::Inserts );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             monitor.setImages( "Monitor_normal", "Monitor_active" );
             solo.setImages( "Solo_normal", "Solo_active" );
             mute.setImages( "Mute_normal", "Mute_active" );

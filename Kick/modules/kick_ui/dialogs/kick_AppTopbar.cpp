@@ -70,7 +70,7 @@ namespace kick_ui
                 ae.setSequencePause();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             menuButton.setImages( "Main_normal", "Main_active" );
             mainModeButton.setImages( "Home_normal", "Home_active" );
             gridButton.setImages( "Main Edit_normal", "Main Edit_active" );

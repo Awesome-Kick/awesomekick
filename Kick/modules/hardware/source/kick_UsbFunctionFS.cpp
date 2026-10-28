@@ -133,14 +133,11 @@ namespace mt
             DBG( "No response from PC app within timeout period" );
             isConnected.store( false );
             signalThreadShouldExit();
-            usbmsg_t data;
+            usbmsg_t data{};
             data.command_status   = mt ::USB_STATUS::U_TIMEOUT;
             data.downloadfilesize = 0;
             data.percentage       = 0;
-            if( usbCallback )
-            {
-                usbCallback( data );
-            }
+            notifyStatus(data);
             timerRunning = false;
             stopTimer();
         }
@@ -157,6 +154,9 @@ namespace mt
 
     void USBFunctionFS::stop()
     {
+        stopTimer();
+        timerRunning.store(false);
+        responseReceived.store(true);
 	    DBG("USB FUnction STop Called");
         if( g_ep_write > 0 && g_ep_read > 0 )
         {
@@ -187,74 +187,39 @@ namespace mt
 
     int USBFunctionFS::writeData( void* p, size_t size )
     {
-        int r = 0;
+        int result = -1;
 #if( JUCE_LINUX || __linux__ )
-        int flags = fcntl( g_ep_write, F_GETFL, 0 );
-        if( flags == -1 )
+        auto* bytes = static_cast<const unsigned char*>(p);
+        size_t sent = 0;
+        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 5000.0;
+        while(sent < size && !threadShouldExit() && juce::Time::getMillisecondCounterHiRes() < deadline)
         {
-            // Handle error
+            const auto count = ::write(g_ep_write, bytes + sent, size - sent);
+            if(count > 0) sent += (size_t)count;
+            else if(count < 0 && errno != EINTR && errno != EAGAIN) return -1;
+            else juce::Thread::sleep(2);
         }
-        flags |= O_NONBLOCK;
-        if( fcntl( g_ep_write, F_SETFL, flags ) == -1 )
-        {
-            // Handle error
-        }
-        r = write( g_ep_write, p, size );
-        if( r < 0 )
-            printf( "failure write to usb ep\n" );
+        result = sent == size ? (int)sent : -1;
 #endif
-        return r;
+        return result;
     }
 
-    int USBFunctionFS::writeFile( int fp, void* p, size_t size )
+    int USBFunctionFS::writeFile(int fp, void* p, size_t size)
     {
 #if( JUCE_LINUX || __linux__ )
-        int            flag;
-        fd_set         rfds;
-        struct timeval tv;
-        ssize_t        sz;
-        uint8_t*       buff = (uint8_t*)p;
-        union FSdata   fm;
-        int            flags;
-
-        tv.tv_sec  = 0;
-        tv.tv_usec = 100000;
-
-        flags = fcntl( fp, F_GETFL );
-        flags |= O_NONBLOCK;
-        if( fcntl( fp, F_SETFL, flags ) )
+        size_t written = 0;
+        const auto* bytes = static_cast<const unsigned char*>(p);
+        while(written < size && !threadShouldExit())
         {
-            printf( "fctl failure\n" );
-            return -1;
+            const auto count = ::write(fp, bytes + written, size - written);
+            if(count > 0) written += (size_t)count;
+            else if(count < 0 && errno == EINTR) continue;
+            else return -1;
         }
-
-        FD_ZERO( &rfds );
-        FD_SET( fp, &rfds );
-
-        while( size > 0 )
-        {
-            sz = write( fp, buff, size );
-
-            if( sz == -1 )
-            {
-                if( errno == EAGAIN )
-                    sz = 0;
-                else
-                    return -errno;
-            }
-
-            buff += sz;
-            size -= sz;
-            fm.key = INFO;
-            writeData( &fm, 4 );
-            select( fp + 1, NULL, &rfds, NULL, &tv );
-        }
-
-        if( size == 0 )
-            return buff - (uint8_t*)p;
-        else
+        return written == size ? (int)written : -1;
+#else
+        return -1;
 #endif
-            return -1;
     }
 
     void USBFunctionFS::readCommandFromUSB( juce::String& command )
@@ -337,114 +302,83 @@ namespace mt
         return 0;
     }
 
-    int USBFunctionFS::handleWFileCommand( std::string& filename, size_t size )
+    int USBFunctionFS::handleWFileCommand(std::string& filename, size_t size)
     {
-        union FSdata fs;
-        usbmsg_t     data;
-        DBG( "In Wfile Command" );
-        std::size_t size_f = size;
-
-#if defined( JUCE_LINUX ) || defined( __linux__ )
-        // Open the file for writing
-        write_filefd = open( filename.c_str(), O_WRONLY | O_CREAT,
-                             S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH );
-#endif
-
-        if( write_filefd < 0 )
-            fs.key = FAIL;
-        else
-            fs.key = OKAY;
-
-        // Send the result back
-        writeData( &fs, 4 );
-        tfilesize             = size;
-        data.totalfilesize    = tfilesize;
-        data.command_status   = mt::USB_STATUS::U_INIT;
-        data.downloadfilesize = 0;
-
-        if( usbCallback )
+        FSdata response{};
+        response.key = FAIL;
+        bool opened = false;
+#if( JUCE_LINUX || __linux__ )
+        // The host chooses a basename; the device owns the staging directory.
+        const auto name = juce::String(filename).replaceCharacter('\\', '/').fromLastOccurrenceOf("/", false, false);
+        const juce::File staging(PCMODE_PATH);
+        if(size > 0 && size <= 2ull * 1024 * 1024 * 1024 && name.endsWithIgnoreCase(".img")
+            && name == juce::File::createLegalFileName(name) && staging.createDirectory().wasOk())
         {
-            usbCallback( data );
+            const int directory = ::open(PCMODE_PATH, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+            if(directory >= 0)
+            {
+                if(write_filefd >= 0) ::close(write_filefd);
+                if(!pendingDownload.empty()) ::unlink(pendingDownload.c_str());
+                const auto temporaryName = "download-" + juce::Uuid().toString() + ".part";
+                write_filefd = ::openat(directory, temporaryName.toRawUTF8(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, S_IRUSR | S_IWUSR);
+                opened = write_filefd >= 0;
+                if(opened)
+                {
+                    pendingDownload = staging.getChildFile(temporaryName).getFullPathName().toStdString();
+                    completedDownload = staging.getChildFile(name).getFullPathName().toStdString();
+                }
+                ::close(directory);
+            }
         }
-
-        // Implement your WFile handling logic here
-        return 0;
+#endif
+        downloadedSize = 0;
+        tfilesize = opened ? size : 0;
+        transferFailed = !opened;
+        if(opened) response.key = OKAY;
+        writeData(&response, 4);
+        usbmsg_t status{};
+        status.command_status = opened ? USB_STATUS::U_INIT : USB_STATUS::U_FAILED;
+        status.totalfilesize = tfilesize;
+        notifyStatus(status);
+        return opened ? 0 : -1;
     }
 
-    int USBFunctionFS::handleWDataCommand( uint32_t data_size )
+    int USBFunctionFS::handleWDataCommand(uint32_t size)
     {
-        union FSdata  fs;
-        usbmsg_t      data;
-        int           rs;
-        int           ret       = 0;
-        uint32_t      status    = OKAY;
-        static size_t dfilesize = 0;
-        int           flags;
+        FSdata response{};
+        response.key = FAIL;
 #if( JUCE_LINUX || __linux__ )
-        void* p = malloc( data_size );
-        if( p )
+        if(transferFailed || write_filefd < 0 || size == 0 || size > 8 * 1024 * 1024 || downloadedSize > tfilesize || size > tfilesize - downloadedSize)
+        { writeData(&response, 4); return -1; }
+        std::vector<unsigned char> bytes(size);
+        response.key = DATA;
+        snprintf((char*)response.data, sizeof(response.data), "%08X", size);
+        if(writeData(&response, 12) != 12) return -1;
+        size_t received = 0;
+        auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
+        while(received < size && !threadShouldExit() && juce::Time::getMillisecondCounterHiRes() < deadline)
         {
-            fs.key = DATA;
+            const auto count = ::read(g_ep_read, bytes.data() + received, size - received);
+            if(count > 0) { received += (size_t)count; deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0; }
+            else if(count < 0 && errno != EAGAIN && errno != EINTR) break;
+            else juce::Thread::sleep(2);
         }
-        else
-        {
-            fs.key = FAIL;
-            writeData( &fs, 4 );
-            return -1;
-        }
-        sprintf( (char*)( fs.data ), "%08X", data_size );
-        writeData( &fs, 4 + strlen( (char*)fs.data ) );
-
-        data.command_status   = mt::USB_STATUS::U_DOWNLOAD;
-        dfilesize             = dfilesize + data_size;
-        data.downloadfilesize = dfilesize;
-
-        if( tfilesize )
-        {
-            data.percentage = ( static_cast<double>( dfilesize ) / tfilesize ) * 100;
-        }
-        DBG( "PERCENTAGE " << juce::String( data.percentage ) );
-        if( usbCallback )
-        {
-            usbCallback( data );
-        }
-        if( read( g_ep_read, p, data_size ) < 0 )
-            status = FAIL;
-
-        ret = writeFile( write_filefd, p, data_size );
-        if( ret < 0 )
-            status = FAIL;
-
-        free( p );
-
-        memset( &fs, 0, sizeof( fs ) );
-        if( stdoutfd >= 0 )
-        {
-            flags = fcntl( stdoutfd, F_GETFL );
-            flags |= O_NONBLOCK;
-            if( fcntl( stdoutfd, F_SETFL, flags ) )
-            {
-                DBG( "fctl failure\n" );
-                return -1;
-            }
-            while( ( ( rs = read( stdoutfd, fs.data, MAX_FRAME_DATA_SIZE ) ) > 0 ) && threadShouldExit() )
-            {
-                fs.key = INFO;
-                writeData( &fs, rs + 4 );
-            }
-        }
-        fs.key = status;
-        if( ret == -EPIPE )
-        {
-            strcpy( (char*)fs.data, "EPIPE" );
-            writeData( &fs, 4 + strlen( "EPIPE" ) );
-        }
-        else
-        {
-            writeData( &fs, 4 );
-        }
+        const bool complete = received == size && writeFile(write_filefd, bytes.data(), received) == (int)received;
+        if(complete) downloadedSize += received;
+        transferFailed |= !complete;
+        response.key = complete ? OKAY : FAIL;
+        writeData(&response, 4);
+        usbmsg_t status{};
+        status.command_status = complete ? USB_STATUS::U_DOWNLOAD : USB_STATUS::U_FAILED;
+        status.totalfilesize = tfilesize;
+        status.downloadfilesize = downloadedSize;
+        status.percentage = tfilesize ? 100.0 * double(downloadedSize) / double(tfilesize) : 0.0;
+        notifyStatus(status);
+        return complete ? 0 : -1;
+#else
+        writeData(&response, 4);
+        return -1;
 #endif
-        return 0;
     }
 
     int USBFunctionFS::handleReadFileCommand( std::string path )
@@ -484,22 +418,28 @@ namespace mt
 
     int USBFunctionFS::handleCloseFileCommand()
     {
-        usbmsg_t     data;
-        union FSdata fs;
+        bool complete = false;
 #if( JUCE_LINUX || __linux__ )
-        close( write_filefd );
-        write_filefd = -1;
-        fs.key       = OKAY;
-        writeData( &fs, 4 );
-#endif
-        data.command_status   = mt::USB_STATUS::U_DONE;
-        data.percentage       = 100.0;
-        data.downloadfilesize = data.totalfilesize;
-        if( usbCallback )
+        if(write_filefd >= 0)
         {
-            usbCallback( data );
+            complete = !transferFailed && tfilesize > 0 && downloadedSize == tfilesize && ::fsync(write_filefd) == 0;
+            complete = (::close(write_filefd) == 0) && complete;
+            write_filefd = -1;
+            if(complete) complete = ::rename(pendingDownload.c_str(), completedDownload.c_str()) == 0;
         }
-        return 0;
+        if(!complete && !pendingDownload.empty()) ::unlink(pendingDownload.c_str());
+#endif
+        pendingDownload.clear();
+        FSdata response{};
+        response.key = complete ? OKAY : FAIL;
+        writeData(&response, 4);
+        usbmsg_t status{};
+        status.command_status = complete ? USB_STATUS::U_DONE : USB_STATUS::U_FAILED;
+        status.totalfilesize = tfilesize;
+        status.downloadfilesize = downloadedSize;
+        status.percentage = complete ? 100.0 : 0.0;
+        notifyStatus(status);
+        return complete ? 0 : -1;
     }
 
     int USBFunctionFS::handlPCstartOpration()
@@ -517,7 +457,7 @@ namespace mt
     int USBFunctionFS::handleCommand( const juce::String& command )
     {
         union FSdata fs;
-        usbmsg_t     data;
+        usbmsg_t     data{};
         // Implement your command handling logic here
         uint32_t status;
         int      flags;
@@ -572,15 +512,24 @@ namespace mt
 
             // Extract the size
             std::string sizeStr( colonPtr + 1 ); // Points to the character after ':'
-            std::size_t size = std::stoul( sizeStr );
-
-            handleWFileCommand( filename, size );
+            try
+            {
+                size_t parsed = 0;
+                const auto size = std::stoull(sizeStr, &parsed);
+                if(parsed != sizeStr.size() || size > 2ull * 1024 * 1024 * 1024) return -1;
+                handleWFileCommand(filename, (size_t)size);
+            }
+            catch(const std::exception&) { return -1; }
         }
         else if( strncmp( buff, "Wdata:", 6 ) == 0 ) //download
         {
             DBG( "In Wdata Command " );
             uint32_t data_size; /* download:0x100000 */
-            data_size = strtoul( buff + 6, NULL, 16 );
+            char* end = nullptr;
+            errno = 0;
+            const auto parsed = strtoull(buff + 6, &end, 16);
+            if(errno || end == buff + 6 || *end != '\0' || parsed > 8 * 1024 * 1024) return -1;
+            data_size = (uint32_t)parsed;
             handleWDataCommand( data_size );
         }
         else if( strncmp( buff, "FirmwareComplete", 16 ) == 0 )

@@ -55,7 +55,7 @@ namespace kick_ui
 
         programSelector.triggerClick();
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             programSelector.setToggleButtonText( "Program", "Program" );
             padSelector.setToggleButtonText( "Pad", "Pad" );
         } );
@@ -109,7 +109,7 @@ namespace kick_ui
         sample.setColours( ui::Theme::textColour( 2 ), ui::Theme::textColour( 1 ) );
         pad.setColours( ui::Theme::textColour( 2 ), ui::Theme::textColour( 1 ) );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             settings.setImages( "Settings_Header" );
         } );
     }

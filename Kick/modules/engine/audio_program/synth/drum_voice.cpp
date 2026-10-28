@@ -181,7 +181,7 @@ namespace mt
                 auto aMod   = rGain * ampAdsr * ( ( 1. - lfoToAmp ) + ( lfoToAmp * lfoOut ) ); // Amplitude modulation factor.
                 auto panMod = ( lfoToPan * lfoOut ) + ( gain.getTargetValue() * ampToPan ); // Pan modulation factor.
                 auto pMod   = pitchAdsr * masterPitchRatio * ( 1.0 - ( lfoToPitch * lfoOut ) ); // Pitch modulation factor.
-                auto fMod   = filtAdsr * pEnv.filter.depth() * ( ( lfoToFilter * lfoOut ) + ( lfoToPitch * lfoOut ) ); // Filter cutoff frequency modulation.
+                auto fMod   = filtAdsr * (pEnv.filter.depth() * MIDI::SCALER) + lfoToFilter * lfoOut; // independent envelope and filter-LFO amounts
 
                 // get next sample.
                 updateFilter( fMod );

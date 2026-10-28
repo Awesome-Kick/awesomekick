@@ -738,7 +738,7 @@ namespace kick_ui
             refresh();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_Stepsequencer" );
         } );
     }

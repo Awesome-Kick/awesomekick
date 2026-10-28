@@ -48,7 +48,7 @@ namespace kick_ui
         mt::utils::setValueFontHeight( 20, bars, syncB, stopB );
         mt::utils::setTitleProportion( .42f, syncB, stopB );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             reverseB.setImages( "Looper_reverse", "Looper_reverse_active" );
             recordB.setImages( "Looper_rec", "Looper_rec_active" );
             replaceB.setImages( "Looper_repeat", "Looper_repeat_active" );
@@ -347,7 +347,7 @@ namespace kick_ui
     {
         // Update play button state.
         reverseB.setEnabled( ae.isLooperPlay() );
-        playB.setToggleState( ae.isLooperReverse(), juce::dontSendNotification );
+        reverseB.setToggleState( ae.isLooperReverse(), juce::dontSendNotification );
         // Update toggle states...
         playB.setToggleState( ae.isLooperPlay(), juce::dontSendNotification );
         recordB.setToggleState( stopB.getToggleState() ? ae.isLooperRecording() : false, juce::dontSendNotification );
@@ -360,7 +360,7 @@ namespace kick_ui
             if( 2 <= values.size() )
                 options.signalStrengthChanged( { values[0].rms, values[1].rms, values[0].peak, values[1].peak } );
             else if( 1 <= values.size() )
-                options.signalStrengthChanged( { values[0].rms, -100.f, values[1].rms, -100.f } );
+                options.signalStrengthChanged( { values[0].rms, -100.f, values[0].peak, -100.f } );
             else
                 options.signalStrengthChanged( {} );
         }

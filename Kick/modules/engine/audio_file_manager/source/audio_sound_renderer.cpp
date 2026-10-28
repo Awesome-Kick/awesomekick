@@ -32,7 +32,6 @@ namespace mt
     ASliceRenderer::ASliceRenderer()
     {
         mutedSample.clear();
-        setupAdvanceFunction();
     }
 
     void ASliceRenderer::setSlice( ASoundSlice* Slice )
@@ -45,12 +44,11 @@ namespace mt
     void ASliceRenderer::reset() noexcept
     {
         inL = inR = nullptr;
-        if( slice && slice->source )
+        if( slice && slice->source && slice->getSourceLength() > 0 )
         {
             inL = (float*)slice->source->getData().getReadPointer( 0 );
             inR = (float*)slice->source->getData().getReadPointer( 1 );
         }
-        setupAdvanceFunction();
 
         curPos = getStartPosition();
         setMute( false );
@@ -59,56 +57,69 @@ namespace mt
 
     void ASliceRenderer::start() noexcept
     {
-        finished.store( ( slice && inL && inR ) ? false : true );
+        finished.store( !( slice && inL && inR && slice->getEnd() > slice->getStart() && slice->getSourceLength() > 0 ) );
     }
 
     void ASliceRenderer::setPosition( double Position )
     {
-        if( !slice )
+        if( !slice || !std::isfinite( Position ) )
         {
             curPos = 0.0;
+            finished = true;
             return;
         }
 
-        const auto loopStart = static_cast<double>( slice->loopStart() );
-        const auto loopEnd   = static_cast<double>( slice->loopEnd() );
+        const auto loopEnd   = juce::jlimit( 0.0, slice->getSourceLength(), (double)slice->loopEnd() );
+        const auto loopStart = juce::jlimit( 0.0, loopEnd, (double)slice->loopStart() );
         const auto isForward = slice->isForward();
         const auto isLooping = slice->isLooping();
 
+        if( loopEnd <= loopStart )
+        {
+            finished = true;
+            curPos = loopStart;
+            return;
+        }
         if( !isLooping )
         {
-            auto end = isForward ? ( Position > loopEnd ) : ( Position < loopStart );
+            auto end = isForward ? ( Position >= loopEnd ) : ( Position < loopStart );
             if( !finished.load() )
                 finished.store( end );
             curPos = std::clamp( Position, loopStart, loopEnd );
         }
         else
         {
-            if( isForward )
-                curPos = Position <= loopEnd ? Position : ( loopStart + ( Position - loopEnd ) );
-            else
-                curPos = Position >= loopStart ? Position : ( loopEnd - ( loopStart - Position ) );
+            const auto length = loopEnd - loopStart;
+            auto offset = std::fmod( Position - loopStart, length );
+            if( offset < 0.0 ) offset += length;
+            curPos = loopStart + offset;
         }
     }
 
     void ASliceRenderer::advance( double PitchRatio, int NumSamples )
     {
-        auto newPos = curPos + ( NumSamples * PitchRatio );
-        setPosition( newPos );
+        step( PitchRatio, NumSamples );
     }
 
     juce::AudioSampleBuffer& ASliceRenderer::getNext( double PitchRatio )
     {
-        advanceOne( PitchRatio );
-
-        const auto muted = finished.load() || isMuted() || slice->isMuted();
-        return muted ? mutedSample : interpolateSample();
+        if( finished.load() || !slice || !inL || !inR ) return mutedSample;
+        const int end = juce::jmin( slice->getEnd(), (int)slice->getSourceLength() );
+        const int begin = juce::jlimit( 0, juce::jmax( 0, end ), slice->getStart() );
+        if( end <= begin ) { finished = true; return mutedSample; }
+        curPos = juce::jlimit( (double)begin, std::nextafter((double)end, (double)begin), curPos );
+        m0 = juce::jlimit( begin, end - 1, (int)std::floor( curPos ) );
+        m1 = juce::jmin( m0 + 1, end - 1 );
+        alpha = curPos - m0;
+        const bool muted = isMuted() || slice->isMuted();
+        auto& result = muted ? mutedSample : interpolateSample();
+        step( PitchRatio );
+        return result;
     }
 
     void ASliceRenderer::getNextBlock( juce::AudioSampleBuffer& Block, double PitchRatio )
     {
-        if( finished.load() )
-            return;
+        if( finished.load() || Block.getNumChannels() == 0 ) { Block.clear(); return; }
 
         const auto numSamples = Block.getNumSamples();
         const auto muted      = isMuted() || slice->isMuted();
@@ -120,13 +131,12 @@ namespace mt
         }
 
         auto out0 = Block.getWritePointer( 0 );
-        auto out1 = Block.getWritePointer( 1 );
+        auto out1 = Block.getNumChannels() > 1 ? Block.getWritePointer( 1 ) : nullptr;
 
         if( out1 )
             for( auto i = 0; i < numSamples; ++i )
             {
-                advanceOne( PitchRatio );
-                auto& sample = finished.load() ? mutedSample : interpolateSample();
+                auto& sample = getNext( PitchRatio );
                 // Copy to Bock.
                 *out0++ = sample.getSample( 0, 0 );
                 *out1++ = sample.getSample( 1, 0 );
@@ -134,127 +144,17 @@ namespace mt
         else
             for( auto i = 0; i < numSamples; ++i )
             {
-                advanceOne( PitchRatio );
-                auto& sample = finished.load() ? mutedSample : interpolateSample();
+                auto& sample = getNext( PitchRatio );
                 // Copy to Bock.
                 *out0++ = sample.getSample( 0, 0 );
             }
     }
 
-    void ASliceRenderer::setupAdvanceFunction()
+    void ASliceRenderer::step( double PitchRatio, int NumSamples )
     {
-        auto moveForward = [&]( double PitchRatio ) {
-            advanceForward( PitchRatio );
-        };
-
-        auto moveForwardLooping = [&]( double PitchRatio ) {
-            advanceForwardLooping( PitchRatio );
-        };
-
-        auto moveReverse = [&]( double PitchRatio ) {
-            advanceReverse( PitchRatio );
-        };
-
-        auto moveReverseLooping = [&]( double PitchRatio ) {
-            advanceReverseLooping( PitchRatio );
-        };
-
-        if( slice )
-        {
-            if( slice->isForward() )
-            {
-                if( slice->isLooping() )
-                    advanceOne = moveForwardLooping;
-                else
-                    advanceOne = moveForward;
-            }
-            else
-            {
-                if( slice->isLooping() )
-                    advanceOne = moveReverseLooping;
-                else
-                    advanceOne = moveReverse;
-            }
-        }
-        else
-            advanceOne = moveForward;
+        if( !slice || finished.load() ) return;
+        const auto distance = slice->getEffectiveResamplerRate() * PitchRatio * NumSamples;
+        setPosition( curPos + ( slice->isForward() ? distance : -distance ) );
     }
-
-    ///##
-    ///## Implementation: Advance One
-    ///##
-
-#define CALC_DIR_CONSTANTS( PitchRatio )                                                 \
-    const auto newPos    = curPos + ( slice->getEffectiveResamplerRate() * PitchRatio ); \
-    const auto loopEnd   = slice->loopEnd() - 1;                                         \
-    const auto loopStart = slice->loopStart();
-
-#define CALC_FORWARD_INTERPOLATOR_COORDINATES()                               \
-    {                                                                         \
-        const int iPos = static_cast<int>( curPos );                          \
-        alpha          = curPos - iPos;                                       \
-        m0             = ( iPos < loopEnd ) ? iPos : loopEnd;                 \
-        m1             = ( ( iPos + 1 ) < loopEnd ) ? ( iPos + 1 ) : loopEnd; \
-    }
-
-#define CALC_REVERSE_INTERPOLATOR_COORDINATES()                                   \
-    {                                                                             \
-        const int iPos = static_cast<int>( curPos );                              \
-        alpha          = curPos - iPos;                                           \
-        m0             = ( iPos > loopStart ) ? iPos : loopStart;                 \
-        m1             = ( ( iPos - 1 ) > loopStart ) ? ( iPos - 1 ) : loopStart; \
-    }
-
-    void ASliceRenderer::advanceForward( double PitchRatio )
-    {
-        CALC_DIR_CONSTANTS( PitchRatio );
-
-        const auto outOfBounds = ( newPos > loopEnd );
-        // Has Finished?
-        finished.store( outOfBounds ? true : finished.load() );
-        // Update position
-        curPos = outOfBounds ? loopEnd : newPos;
-        // Compute interpolater co-ordinates.
-        CALC_FORWARD_INTERPOLATOR_COORDINATES();
-    }
-
-    void ASliceRenderer::advanceForwardLooping( double PitchRatio )
-    {
-        CALC_DIR_CONSTANTS( PitchRatio );
-
-        const auto outOfBounds = ( newPos > loopEnd );
-        // Update position considering looping
-        curPos = outOfBounds ? ( loopStart + ( newPos - loopEnd ) ) : newPos;
-        // Compute interpolater co-ordinates.
-        CALC_FORWARD_INTERPOLATOR_COORDINATES();
-    }
-
-    void ASliceRenderer::advanceReverse( double PitchRatio )
-    {
-        CALC_DIR_CONSTANTS( PitchRatio );
-
-        const auto outOfBounds = ( newPos < loopStart );
-        // Has Finished?
-        finished.store( outOfBounds ? true : finished.load() );
-        // Update position
-        curPos = outOfBounds ? loopStart : newPos;
-        // Compute interpolater co-ordinates.
-        CALC_REVERSE_INTERPOLATOR_COORDINATES();
-    }
-
-    void ASliceRenderer::advanceReverseLooping( double PitchRatio )
-    {
-        CALC_DIR_CONSTANTS( PitchRatio );
-
-        const auto outOfBounds = ( newPos < loopStart );
-        // Update position considering looping
-        curPos = ( newPos < loopStart ) ? ( loopEnd - ( loopStart - newPos ) ) : newPos;
-        // Compute interpolater co-ordinates.
-        CALC_REVERSE_INTERPOLATOR_COORDINATES();
-    }
-
-#undef CALC_DIR_CONSTANTS
-#undef CALC_FORWARD_INTERPOLATOR_COORDINATES
-#undef CALC_REVERSE_INTERPOLATOR_COORDINATES
 
 } // namespace mt

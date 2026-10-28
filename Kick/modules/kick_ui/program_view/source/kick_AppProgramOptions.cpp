@@ -69,7 +69,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             srNo.setImage( "ID_Program" );
             close.setImages( "Edit_Close" );
         } );

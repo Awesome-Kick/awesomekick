@@ -484,7 +484,7 @@ namespace mt
 
         const std::vector<juce::String>& getAssets( AssetTypes Type = AssetTypes::Samples );
         std::vector<juce::String>        getAssetNames( AssetTypes Type = AssetTypes::Samples );
-        const juce::String&              getAssetName( AssetTypes Type, int Index );
+        juce::String                     getAssetName( AssetTypes Type, int Index );
         const juce::String&              getAsset( AssetTypes Type, int Index );
         ASoundSlice*                     getAssetSlice( const juce::String& FileName, int Slice = 0 );
 
@@ -526,7 +526,7 @@ namespace mt
         void startRecorder( int Mode, bool ForwardDirection = true, bool FromBeginging = true );
         void stopRecorder();
         void clearRecording();
-        void saveRecording( const std::string& FilePath );
+        bool saveRecording( const std::string& FilePath );
 
         float getRecorderMode();
         float getRecorderGain();
@@ -550,6 +550,7 @@ namespace mt
         void        setRecorderListener( MTRecorderListener& Listener );
 
         juce::AudioBuffer<float>& getRecorderAudioBuffer();
+        void copyRecorderThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate);
 
         // MIDI device and utilities...
         int                                                     getNumMIDIDevices( bool isInputOrOutput ) const noexcept;
@@ -579,6 +580,8 @@ namespace mt
         void                      createSong( const juce::String& Name );
         void                      deleteSong( const juce::String& Name );
         MTSongInfo                getSongInfo( const juce::String& SongName );
+        void setExternalMidiClock(bool Enabled);
+        bool exportSongMidi(const juce::String& SongName, const juce::File& Destination);
         void                      addSongStep( const juce::String& SongName, MTSongStepInfo& Step, int AtIndex );
         void                      editSongStep( const juce::String& SongName, MTSongStepInfo& Step, int AtIndex );
         void                      deleteSongStep( const juce::String& SongName, int AtIndex );

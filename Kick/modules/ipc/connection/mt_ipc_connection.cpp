@@ -113,7 +113,7 @@ namespace ipc
 			if (!isConnected() || !message) return false;
 
 			juce::String json = juce::JSON::toString(message->getRoot());
-			return sendMessage(juce::MemoryBlock(json.getCharPointer(), json.length()));
+			return sendMessage(juce::MemoryBlock(json.toRawUTF8(), json.getNumBytesAsUTF8()));
 		}
 
 		const std::shared_ptr<juce::var> config()

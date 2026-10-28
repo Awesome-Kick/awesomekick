@@ -97,19 +97,19 @@ namespace mt
         void  setTempoByTime( uint32_t MicrosPerQuarterNote );
 
         // Sync API's
-        void tickExternal();
+        void tickExternal(double ReceivedAtMilliseconds = 0.0);
         void tickInternal();
 
         // Clock Synchronization mode.
-        void        setClockSyncMode( SyncMode tempo_mode ) noexcept { syncMode = tempo_mode; }
+        void        setClockSyncMode( SyncMode mode ) noexcept;
         SyncMode    getClockSyncMode() const noexcept { return syncMode; };
         inline bool isInternalClockSync() const noexcept { return syncMode == SyncMode::INTERNAL_CLOCK; };
         inline bool isExternalClockSync() const noexcept { return syncMode == SyncMode::EXTERNAL_CLOCK; };
 
         // Calculations...
-        static float tempoToMicros( float Tempo ) noexcept { return ( MICROS_IN_MINUTE / Tempo ); }
-        static float microsToTempo( float Micros ) noexcept { return ( MICROS_IN_MINUTE / Micros ); }
-        static float tempoToPPQNMicros( float Tempo, int PPQN ) noexcept { return ( tempoToMicros( Tempo ) / (float)PPQN ); }
+        static float tempoToMicros( float Tempo ) noexcept { return Tempo > 0.f && std::isfinite(Tempo) ? MICROS_IN_MINUTE / Tempo : 0.f; }
+        static float microsToTempo( float Micros ) noexcept { return Micros > 0.f && std::isfinite(Micros) ? MICROS_IN_MINUTE / Micros : 0.f; }
+        static float tempoToPPQNMicros( float Tempo, int PPQN ) noexcept { return PPQN > 0 ? tempoToMicros( Tempo ) / (float)PPQN : 0.f; }
         static float PPQNMicrosToTempo( float Micros, int PPQN ) noexcept { return microsToTempo( Micros * (float)PPQN ); }
 
     private:
@@ -127,7 +127,7 @@ namespace mt
         uint32_t averageOfExternalIntervals() const noexcept;
 
         inline void hiResTimerCallback() final { handlePlatformTimer(); }
-        inline void recomputePPQNFactor() noexcept { intClockPulsesPerExtClockPulse = intPPQN / extPPQN; };
+        inline void recomputePPQNFactor() noexcept { intClockPulsesPerExtClockPulse = juce::jmax(1, int(intPPQN) / juce::jmax(1, int(extPPQN))); };
 
     private:
         static double sTickCounter;
@@ -142,8 +142,8 @@ namespace mt
         bool extClockFirstInterval{ false };
         bool syncTempo{ false };
 
-        ClockState state{ ClockState::STOPPED };
-        SyncMode   syncMode{ SyncMode::INTERNAL_CLOCK };
+        std::atomic<ClockState> state{ ClockState::STOPPED };
+        std::atomic<SyncMode> syncMode{ SyncMode::INTERNAL_CLOCK };
 
         uint32_t microsPerQuarterNote{ 0 };
         uint32_t ticks{ 0 };
@@ -161,7 +161,8 @@ namespace mt
         juce::SmoothedValue<float> tempo{ (float)1.0 };
 
         uint32_t                                extIntervalIdx{ 0 };
-        std::array<uint32_t, MAX_EXT_INTERVALS> extIntervals;
+        std::array<uint32_t, MAX_EXT_INTERVALS> extIntervals{};
+        mutable juce::CriticalSection clockLock;
     };
 
     // Global MIDI Clock Instance

@@ -97,7 +97,7 @@ namespace kick_ui
             };
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             resources.setImages( "Resource" );
             metronome.setImages( "Metronome" );
             automation.setImages( "Automation_Normal" );

@@ -88,7 +88,7 @@ namespace kick_ui
             if( pKeygroup ) pKeygroup->setOutput( OutPutName );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             insertsButton.setToggleButtonText( "INSERTS", "INSERTS" );
         } );
     }

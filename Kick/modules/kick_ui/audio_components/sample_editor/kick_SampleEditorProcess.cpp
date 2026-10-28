@@ -116,7 +116,7 @@ namespace mt
             addAndMakeVisible( toTempo );
             addAndMakeVisible( imageButton );
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 imageButton.setImages( "sEdit_Arrow" );
             } );
         }
@@ -169,7 +169,7 @@ namespace mt
             addAndMakeVisible( label );
             addAndMakeVisible( sampleName );
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 imageBtn.setImages( "sEdit_Gextract" );
             } );
         }
@@ -258,7 +258,7 @@ namespace mt
 
             linear.setToggleState( true, juce::dontSendNotification );
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 imageBtn.setImages( "sEdit_Gfadein" );
             } );
         }

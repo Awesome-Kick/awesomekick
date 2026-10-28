@@ -102,6 +102,56 @@ namespace sim
             s.push_back( [this, i] { pads.getPad( i ).hit( false ); } );
         };
 
+        if(juce::SystemStats::getEnvironmentVariable("KICKEM_SELFTEST", {}) == "audit")
+        {
+            auto failed = std::make_shared<int>(0);
+            auto check = [failed](bool ok, juce::String text) {
+                if(!ok) ++*failed;
+                SimulatorInterfaceImpl::log("SELFTEST " + juce::String(ok ? "PASS " : "FAIL ") + text);
+            };
+            s.push_back([check] {
+                auto selection = std::make_unique<ui::KickListBox>("Audit", std::vector<juce::String>{"A", "B"});
+                selection->setSelected(1, juce::dontSendNotification);
+                check(selection->getSelectedIndex() == 1, "P1: message-thread selection applies synchronously");
+                auto* raw = selection.get();
+                std::thread producer([raw] { raw->setSelected(0, juce::dontSendNotification); });
+                producer.join();
+                selection.reset(); // queued selection must observe the deleted owner
+                for(int i = 0; i < 100; ++i)
+                {
+                    auto control = std::make_unique<ui::KickCyclicStateControl>();
+                    control->setStates({"A", "B"});
+                    control->setNormalized(1.f);
+                }
+                ui::themeChanged();
+                check(true, "P2: theme emission after 100 control destructions is safe");
+                int count = 3;
+                ui::KickTableViewProvider provider;
+                provider.numRows = [&] { return count; };
+                provider.cellComponent = [](int, juce::Component* previous) { return previous ? previous : new juce::Label(); };
+                ui::KickTableView table("Audit", provider);
+                table.setBounds(0, 0, 300, 200);
+                table.refresh();
+                count = 1; table.refresh();
+                check(table.getRowComponents().size() == 1, "U8: shrinking the table destroys stale owned rows");
+                count = 0; table.refresh();
+                check(table.getRowComponents().isEmpty(), "U8: empty table releases every row");
+                kick_ui::ProgramMixer programs;
+                kick_ui::TrackMidiMixer midi;
+                programs.knobCommand(1, 1);
+                midi.knobCommand(1, 1);
+                check(true, "P3: empty program and MIDI mixers accept knob input");
+            });
+            wait(3);
+            s.push_back([failed] {
+                SimulatorInterfaceImpl::log("SELFTEST done: " + juce::String(*failed) + " failures");
+                juce::JUCEApplication::getInstance()->setApplicationReturnValue(*failed);
+                juce::JUCEApplication::getInstance()->systemRequestedQuit();
+            });
+            startTimer(200);
+            return;
+        }
+
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ) == "instrument" )
         {
             startInstrumentTest();

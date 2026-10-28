@@ -74,6 +74,7 @@ namespace mt
         MTIProgram* createProgram( juce::ValueTree& vt, bool addToTree );
 
     private:
+        sigslot::scoped_connection programNameConnection;
         MTSelected&        selected;
         AudIO::DawEngine&  engine;
         juce::ValueTree    vTree{ IDs::PROGRAMS };

@@ -85,7 +85,7 @@ namespace mt::ac
             close();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             cancelBtn.setImages( "Icon_Cancel" );
             applyBtn.setImages( "Icon_Apply" );
         } );
@@ -259,7 +259,7 @@ namespace mt::ac
         };
         updateList();
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             applyBtn.setImages( "Icon_Apply" );
             cancelBtn.setImages( "Icon_Cancel" );
         } );

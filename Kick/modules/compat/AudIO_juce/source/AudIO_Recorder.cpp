@@ -68,11 +68,11 @@ namespace AudIO
         if( !fileHasAudio( copy ) )
             return false;
 
-        File.getParentDirectory().createDirectory();
-        File.deleteFile();
+        if(File.getParentDirectory().createDirectory().failed()) return false;
+        juce::TemporaryFile temporary(File);
 
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::OutputStream> stream( File.createOutputStream() );
+        std::unique_ptr<juce::OutputStream> stream( temporary.getFile().createOutputStream() );
         if( !stream )
             return false;
 
@@ -81,7 +81,9 @@ namespace AudIO
             return false;
 
         stream.release(); // Owned by the writer now.
-        return writer->writeFromAudioSampleBuffer( copy, 0, copy.getNumSamples() );
+        const bool complete = writer->writeFromAudioSampleBuffer(copy, 0, copy.getNumSamples()) && writer->flush();
+        writer.reset();
+        return complete && temporary.overwriteTargetFileWithTemporary();
     }
 
     void Recorder::readInputs( Buffer<float>& Buf, int NumSamples, float* Left, float* Right, float GainL, float GainR ) const noexcept
@@ -245,12 +247,12 @@ namespace AudIO
             notify( onRecorderPreviewStopped );
     }
 
-    void SampleRecorder::saveRecording( const std::string& FilePath )
+    bool SampleRecorder::saveRecording( const std::string& FilePath )
     {
         if( recording.load() )
             stopRecording();
         stopPreview();
-        saveToFile( juce::File( FilePath ) );
+        return saveToFile( juce::File( FilePath ) );
     }
 
     float SampleRecorder::readProgress() const noexcept
@@ -260,6 +262,21 @@ namespace AudIO
             return 0.f;
         const auto written = isForward() ? writePos.load() : ( n - 1 - writePos.load() );
         return juce::jlimit( 0.f, 1.f, (float)written / (float)n );
+    }
+
+    void SampleRecorder::copyThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate)
+    {
+        destination.setSize(2, 16384);
+        const juce::SpinLock::ScopedLockType guard(bufferLock);
+        totalFrames = buffer.getNumSamples();
+        rate = getSampleRate();
+        const int from = juce::jlimit(0, totalFrames, recordedFrom.load());
+        const int to = juce::jlimit(from, totalFrames, recordedTo.load());
+        if(start < from || start > to) start = from;
+        const int frames = juce::jmin(16384, to - start);
+        destination.setSize(buffer.getNumChannels(), frames, false, false, true);
+        for(int channel = 0; channel < destination.getNumChannels(); ++channel)
+            destination.copyFrom(channel, 0, buffer, channel, start, frames);
     }
 
     void SampleRecorder::onAudioThreadEvent()

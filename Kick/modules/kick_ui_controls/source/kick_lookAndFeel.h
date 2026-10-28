@@ -45,6 +45,7 @@ namespace ui
     #endif
 
     private:
+        sigslot::scoped_connection themeConnection;
         void                                drawLabel( juce::Graphics& g, juce::Label& label ) override;
         void                                drawButtonBackground( juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown ) override;
         void                                drawButtonText( juce::Graphics& g, juce::TextButton& button, bool /*shouldDrawButtonAsHighlighted*/, bool /*shouldDrawButtonAsDown*/ ) override;

@@ -77,7 +77,7 @@ namespace kick_ui
             kick_ui::signals::sigScreenOpen( kick_ui::Screen::Inserts );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             exportBtn.setImages( "Song_Export", "Song_Export_Active" );
             clearBtn.setImages( "Song_Clear", "Song_Clear_Active" );
             header.setIcon( "Icon_Looper" );

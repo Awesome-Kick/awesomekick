@@ -406,7 +406,7 @@ namespace mt
         }
 
         // Define buffer to store the version information
-        char version_buffer[20]; // 20 characters for version, 1 for null terminator
+        char version_buffer[21] = {}; // 20 characters for version, 1 for null terminator
 
         // Read the version information from the file
         if( !encrypted_file.read( version_buffer, 20 ) )
@@ -422,7 +422,7 @@ namespace mt
             if( ( version_buffer[i] == 'E' ) || ( version_buffer[i] == 'R' ) )
                 fw_ver_index = ( i + 2 );
 
-        if( fw_ver_index < 0 )
+        if( fw_ver_index < 0 || fw_ver_index > 20 )
         {
             DBG( "Version is not correct" );
             return false;

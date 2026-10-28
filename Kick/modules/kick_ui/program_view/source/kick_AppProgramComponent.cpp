@@ -144,7 +144,7 @@ AppProgramDisplay::AppProgramDisplay( int Index )
         kick_ui::signals::sigScreenClose( kick_ui::Screen::MenuChannelMixer );
     };
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         route.setImages( "ROUTE", "ROUTE_active" );
         assign.setImages( "ASSIGN", "ASSIGN", "ASSIGN_active" );
         setProgram( progNumber );
@@ -334,7 +334,7 @@ AppProgramComponent::AppProgramComponent( int Index )
     srNo.setColours( ui::Theme::textColour( 0 ), ui::Theme::backgroundColour( 6 ), ui::Theme::backgroundColour( 12 ) );
     prg.setProgram( Index );
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         srNo.setImage( "ID_Program" );
         options.setImages( "editOptions" );
     } );

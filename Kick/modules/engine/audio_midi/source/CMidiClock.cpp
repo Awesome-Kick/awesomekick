@@ -94,34 +94,26 @@ namespace mt
 
     void CMidiClock::start( bool ClearCounters ) noexcept
     {
+        stopPlatformTimer();
+        const juce::ScopedLock guard(clockLock);
         clockCounter       = 0;
         intClockSyncPulses = 0;
 
         if( ClearCounters )
             resetCounters();
 
-        if( isExternalClockSync() )
-        {
-            resetCounters();
-            resetExternalClockCounters();
-        }
+        if( isExternalClockSync() ) resetExternalClockCounters();
 
         state = isInternalClockSync() ? ClockState::STARTED : ClockState::STARTING;
         onClockStart();
 
         prevTime = juce::Time::getMillisecondCounterHiRes();
-        startPlatformTimer( microsPerQuarterNote );
+        if(isInternalClockSync()) startPlatformTimer( microsPerQuarterNote );
     }
 
     void CMidiClock::stop() noexcept
     {
         stopPlatformTimer();
-
-        if( isExternalClockSync() )
-        {
-            resetCounters();
-            resetExternalClockCounters();
-        }
 
         state = ClockState::STOPPED;
         onClockStop();
@@ -131,6 +123,7 @@ namespace mt
     void CMidiClock::setInternalPPQN( PPQNResolution resolution )
     {
         stop();
+        if(int(resolution) <= 0) return;
         intPPQN = resolution;
         recomputePPQNFactor();
     }
@@ -138,6 +131,7 @@ namespace mt
     void CMidiClock::setExternalPPQN( PPQNResolution resolution )
     {
         stop();
+        if(int(resolution) <= 0) return;
         extPPQN = resolution;
         recomputePPQNFactor();
     }
@@ -145,6 +139,7 @@ namespace mt
     // Tempo API's
     float CMidiClock::getTempo()
     {
+        const juce::ScopedLock guard(clockLock);
         if( isExternalClockSync() )
         {
             auto averageMicros = averageOfExternalIntervals();
@@ -155,12 +150,14 @@ namespace mt
 
     void CMidiClock::setTempo( float Bpm, double RampLengthInSeconds )
     {
+        if(!std::isfinite(Bpm) || Bpm <= 0.f) return;
+        const juce::ScopedLock guard(clockLock);
         auto numSteps = isInternalClockSync() ? ( RampLengthInSeconds / 0.001 ) : 1;
         tempo.reset( numSteps );
         tempo.setTargetValue( Bpm );
         microsPerQuarterNote = tempoToMicros( Bpm ); // In Micro-Seconds.
 
-        if( isRunning() )
+        if( isRunning() && isInternalClockSync() )
             setPlatformTimerInterval( microsPerQuarterNote );
     }
 
@@ -174,55 +171,47 @@ namespace mt
     }
 
     // Normally expected to be called at 24PPQN
-    void CMidiClock::tickExternal()
+    void CMidiClock::setClockSyncMode(SyncMode mode) noexcept
     {
-        if( isInternalClockSync() )
-            return;
+        if(syncMode.load() == mode) return;
+        stop();
+        const juce::ScopedLock guard(clockLock);
+        syncMode.store(mode);
+        resetExternalClockCounters();
+    }
 
-        switch( state )
+    void CMidiClock::tickExternal(double receivedAtMilliseconds)
+    {
+        if(!isExternalClockSync() || isStopped()) return;
+        const juce::ScopedLock guard(clockLock);
+        const auto now = receivedAtMilliseconds > 0.0 && std::isfinite(receivedAtMilliseconds) ? receivedAtMilliseconds : juce::Time::getMillisecondCounterHiRes();
+        if(state.load() == ClockState::STARTING)
         {
-            default: break; // ClockState::STOPPED:
-
-            case ClockState::STARTING:
-                state                 = ClockState::STARTED;
-                ts                    = juce::Time::getMillisecondCounterHiRes();
-                extClockFirstInterval = true;
-                break;
-
-            case ClockState::STARTED:
-                te = juce::Time::getMillisecondCounterHiRes();
-                ts = te;
-
-                // Increment external ticks count!
-                ++extClockSyncPulses;
-
-                // Accumulate intervals between ticks....
-                auto intervalUs              = te - ts;
-                extIntervals[extIntervalIdx] = intervalUs;
-                if( ++extIntervalIdx >= MAX_EXT_INTERVALS )
-                {
-                    extIntervalIdx = 0;
-                }
-
-                if( extClockFirstInterval )
-                {
-                    extClockFirstInterval = false;
-                    // Synchronize tempo
-                    microsPerQuarterNote = averageOfExternalIntervals();
-                    setTempoByTime( microsPerQuarterNote );
-                }
-
-                if( ++extCounter >= TEMPO_SYNC_INTERVAL )
-                {
-                    extCounter = 0;
-                    syncTempo  = true;
-                }
-                break;
+            state.store(ClockState::STARTED);
+            ts = now;
         }
+        else
+        {
+            const auto interval = (now - ts) * 1000.0;
+            ts = now;
+            if(interval > 0.0 && interval < 5000000.0)
+            {
+                extIntervals[extIntervalIdx] = (uint32_t)interval;
+                extIntervalIdx = (extIntervalIdx + 1) % MAX_EXT_INTERVALS;
+                const auto quarter = averageOfExternalIntervals();
+                if(quarter) setTempoByTime(quarter);
+            }
+        }
+        ++extClockSyncPulses;
+        sTickCounter += double(intPPQN) / double(extPPQN);
+        onTick((uint32_t)sTickCounter);
+        onSync24Callback(extClockSyncPulses, microsPerQuarterNote);
     }
 
     void CMidiClock::tickInternal()
     {
+        if(isStopped() || isExternalClockSync()) return;
+        const juce::ScopedLock guard(clockLock);
         if( tempo.isSmoothing() )
         {
             microsPerQuarterNote = static_cast<uint32_t>( tempoToMicros( tempo.getNextValue() ) ); // In Micro-Seconds.
@@ -312,6 +301,6 @@ namespace mt
                 ++count;
             }
         }
-        return ( ( average * extPPQN ) / count );
+        return count ? uint32_t((uint64_t(average) * uint64_t(extPPQN)) / count) : 0;
     }
 }

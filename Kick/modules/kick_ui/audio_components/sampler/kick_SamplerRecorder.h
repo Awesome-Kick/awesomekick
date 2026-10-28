@@ -109,6 +109,9 @@ namespace kick_ui
         juce::AudioThumbnail      thumbnail{ 512, formatManager, thumbnailCache };
 
     private:
+        int thumbnailNextSample{0}, thumbnailFrames{-1};
+        double thumbnailRate{0.0};
+        juce::AudioBuffer<float> thumbnailBlock;
         mt::MTAudioInterface& ae{ mt::getAudioInterface() };
 
         ui::KickTimerControl timerControl, maxLengthTimerControl;

@@ -75,7 +75,7 @@ namespace kick_ui
             midiMonitor.addMidiMessage( Msg, Port );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_MidiControl" );
             midiLearn.setToggleButtonText( "MIDI Learn", "MIDI Learn" );
             hardware.setToggleButtonText( "Hardware", "Hardware" );

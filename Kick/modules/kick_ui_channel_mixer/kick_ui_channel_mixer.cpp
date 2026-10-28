@@ -92,7 +92,7 @@ namespace kick_ui
         // Defaults...
         headerComp.type.setSelected( 0, juce::sendNotification );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_Mixer" );
         } );
     }

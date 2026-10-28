@@ -30,6 +30,7 @@ namespace AudIO
 
     void Design::prepareToPlay( uint32_t samplerate, uint32_t blocksize )
     {
+        autolock guard{lockerMutex};
         Object::prepareToPlay( samplerate, blocksize );
         pImpl->prepareToPlay( samplerate, blocksize );
         PatchQueue<float>::get().start();
@@ -37,6 +38,14 @@ namespace AudIO
 
     void Design::process( Buffer<float>& Buffer )
     {
+        // Graph mutations already use lockerMutex. Never traverse reallocating
+        // bus buffers or object maps concurrently, and never wait on UI work.
+        std::unique_lock<recursive_mutex> guard(lockerMutex, std::try_to_lock);
+        if(!guard.owns_lock())
+        {
+            Buffer.clearOutputs();
+            return;
+        }
         // Apply ramp to all parameters...
         if( nullptr == pParent )
         {

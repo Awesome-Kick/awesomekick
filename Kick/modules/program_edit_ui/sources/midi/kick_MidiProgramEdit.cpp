@@ -84,7 +84,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             auto id = 0;
             for( auto& it : selectors )
             {

@@ -112,7 +112,7 @@ AppTrackDisplay::AppTrackDisplay( int Seq, int Track )
             pTrack->transpose = Value;
     };
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         updateThemeImages( true );
     } );
 
@@ -335,7 +335,7 @@ AppTrackComponent::AppTrackComponent( int Seq, int Track, juce::String Name )
     };
     setTrack( Seq, Track );
 
-    ui::themeChanged.connect( [&]() {
+    ui::connectTheme( *this, [&]() {
         updateThemeImages( true );
     } );
 }

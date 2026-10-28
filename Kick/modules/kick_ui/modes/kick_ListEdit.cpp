@@ -161,7 +161,7 @@ namespace kick_ui
             updateViewPosition();
         } );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             snapButton.setToggleButtonText( "Snap:On", "Snap:Off" );
             deleteButton.setToggleButtonText( "Delete", "Delete" );
             insertButton.setToggleButtonText( "Insert", "Insert" );

@@ -64,7 +64,7 @@ namespace mt
         void startRecorder( bool FromBeginging );
         void stopRecorder();
         void clearRecording();
-        void saveRecording( const std::string& FilePath );
+        bool saveRecording( const std::string& FilePath );
         void startRecorderPreview( double fromStartTimeInSeconds );
         void stopRecorderPreview();
 
@@ -86,6 +86,7 @@ namespace mt
         inline MTMeterData getRecorderOutputMeter() { return _sampler ? _sampler->readOutputMeter() : MTMeterData{}; }
 
         juce::AudioBuffer<float>& getRecorderAudioBuffer();
+        void copyRecorderThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate);
 
         void setRecorderListener( MTRecorderListener& Listener );
 

@@ -97,7 +97,7 @@ namespace kick_ui
         rightNav.toFront( true );
         bankLabel.toFront( true );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_ColourEdit" );
         } );
 
@@ -457,7 +457,7 @@ namespace kick_ui
             padButtons[i].setColor( ui::Theme::padButtonColour( i ), ui::Theme::padButtonColour( i ) );
         }
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
         } );
     }
 
@@ -518,7 +518,7 @@ namespace kick_ui
         defaultBtn.setValueColour( ui::Theme::textColour( 1 ) );
         defaultBtn.setValueFontHeight( 18 );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             defaultBtn.setToggleButtonText( "Make Default", "Make Default" );
         } );
     }

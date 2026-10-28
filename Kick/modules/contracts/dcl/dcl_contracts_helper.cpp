@@ -34,13 +34,13 @@ namespace contracts
     bool DclContractsHelper::isShiftPressed() { return shiftBtnState.load(); }
     void DclContractsHelper::setHalfLevel( bool state ) { halfLevelState.store( state ); }
     bool DclContractsHelper::isHalfLevel() { return halfLevelState.load(); }
-    bool DclContractsHelper::isButtonMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_BUTTON ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::BtnCmd::EN_BTN_STATUS ); }
-    bool DclContractsHelper::isPadButtonMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_PAD ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::PadCmd::EN_PAD_STATE ); }
-    bool DclContractsHelper::isKnobMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_KNOBS ); }
+    bool DclContractsHelper::isButtonMessage( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() >= 2 && ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_BUTTON ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::BtnCmd::EN_BTN_STATUS ); }
+    bool DclContractsHelper::isPadButtonMessage( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() >= 4 && ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_PAD ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::PadCmd::EN_PAD_STATE ); }
+    bool DclContractsHelper::isKnobMessage( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() >= 3 && ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_KNOBS ); }
     bool DclContractsHelper::isCenterKnobClickMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( isButtonMessage( hwMsg ) && getButtonCode( hwMsg ) == contracts::DeviceControlContracts::BtnLedSequence::EN_KNOB_ENTER ); }
     bool DclContractsHelper::isCenterKnobRotateMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( isKnobMessage( hwMsg ) && getButtonCode( hwMsg ) == contracts::DeviceControlContracts::KnobSequence::EN_KNOB_CENTER ); }
-    bool DclContractsHelper::isSliderMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SLIDER ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SliderCmd::EN_SLIDER_TOUCH_INPUT ); }
-    bool DclContractsHelper::isBankMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_BUTTON ) && ( hwMsg.data[0] < NUM_OF_BANKS ); }
+    bool DclContractsHelper::isSliderMessage( const CPktMgr::HWMsg_t& hwMsg ) { return !hwMsg.data.empty() && ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SLIDER ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SliderCmd::EN_SLIDER_TOUCH_INPUT ); }
+    bool DclContractsHelper::isBankMessage( const CPktMgr::HWMsg_t& hwMsg ) { return isButtonMessage(hwMsg) && ( hwMsg.data[0] < NUM_OF_BANKS ); }
     bool DclContractsHelper::isButtonRelevantForControl( const CPktMgr::HWMsg_t& hwMsg )
     {
         if( isButtonMessage( hwMsg ) )
@@ -67,30 +67,30 @@ namespace contracts
     bool DclContractsHelper::isSystemOrPadMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_PAD ) || ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ); }
     bool DclContractsHelper::isSoftwareVersionMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_GET_SW_VER ); }
     bool DclContractsHelper::isSoftwareUpdateMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_SW_UPDATE ); }
-    bool DclContractsHelper::isSystemCommInit( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_CHECK_COMM_STATUS ) && ( hwMsg.data[0] == 1 ); }
-    bool DclContractsHelper::isSystemCommLive( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_CHECK_COMM_STATUS ) && ( hwMsg.data[0] == 2 ); }
+    bool DclContractsHelper::isSystemCommInit( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_CHECK_COMM_STATUS ) && ( !hwMsg.data.empty() && hwMsg.data[0] == 1 ); }
+    bool DclContractsHelper::isSystemCommLive( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_SYSTEM ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::SysCmd::EN_SYS_CHECK_COMM_STATUS ) && ( !hwMsg.data.empty() && hwMsg.data[0] == 2 ); }
 
     bool DclContractsHelper::isLEDMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_LED ); }
     bool DclContractsHelper::isLEDSingleMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_LED ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::EN_LED_SET_SINGLE_LED ); }
     bool DclContractsHelper::isLEDAllMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_LED ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::EN_LED_SET_ALL ); }
     bool DclContractsHelper::isLEDBlinkMessage( const CPktMgr::HWMsg_t& hwMsg ) { return ( hwMsg.pktType == CPktMgr::enumPacketType::EN_PKT_TYPE_LED ) && ( hwMsg.pktCmd == contracts::DeviceControlContracts::EN_LED_BLINK_SINGLE ); }
 
-    int DclContractsHelper::getButtonCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[0]; }
-    int DclContractsHelper::getButtonState( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[1]; }
+    int DclContractsHelper::getButtonCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 0 ? hwMsg.data[0] : -1; }
+    int DclContractsHelper::getButtonState( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 1 ? hwMsg.data[1] : -1; }
 
-    int DclContractsHelper::getPadNumber( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[0]; }
-    int DclContractsHelper::getPadState( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[1]; }
-    int DclContractsHelper::getPadVelocity( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[2]; }
-    int DclContractsHelper::getPadAftertouch( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[3]; }
+    int DclContractsHelper::getPadNumber( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 0 ? hwMsg.data[0] : -1; }
+    int DclContractsHelper::getPadState( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 1 ? hwMsg.data[1] : -1; }
+    int DclContractsHelper::getPadVelocity( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 2 ? hwMsg.data[2] : -1; }
+    int DclContractsHelper::getPadAftertouch( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 3 ? hwMsg.data[3] : -1; }
 
-    int DclContractsHelper::getKnobCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[0]; }
-    int DclContractsHelper::getKnobDirection( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[1]; }
-    int DclContractsHelper::getKnobRotation( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[2]; }
+    int DclContractsHelper::getKnobCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 0 ? hwMsg.data[0] : -1; }
+    int DclContractsHelper::getKnobDirection( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 1 ? hwMsg.data[1] : -1; }
+    int DclContractsHelper::getKnobRotation( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 2 ? hwMsg.data[2] : -1; }
     int DclContractsHelper::getKnobValue( const CPktMgr::HWMsg_t& hwMsg ) { return ( contracts::DeviceControlContracts::EN_KNOB_CLOCKWISE == getKnobDirection( hwMsg ) ) ? getKnobRotation( hwMsg ) : -( getKnobRotation( hwMsg ) ); }
 
-    int DclContractsHelper::getSliderValue( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[0]; }
+    int DclContractsHelper::getSliderValue( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 0 ? hwMsg.data[0] : -1; }
 
-    int DclContractsHelper::getSwUpdateCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data[0]; }
+    int DclContractsHelper::getSwUpdateCode( const CPktMgr::HWMsg_t& hwMsg ) { return hwMsg.data.size() > 0 ? hwMsg.data[0] : -1; }
 
     void DclContractsHelper::hWMessageToIPCMessage( const CPktMgr::HWMsg_t& hwMessage, std::shared_ptr<ipc::MTIPCJson> ipcMessage )
     {
@@ -111,6 +111,7 @@ namespace contracts
         hwMessage.pktCmd             = ipcMessage->getProperty( contracts::DCL_IPC_KEY_PACKET_COMMAND );
         hwMessage.pktDir             = static_cast<CPktMgr::enumPacketDir>( int( ipcMessage->getProperty( contracts::DCL_IPC_KEY_PACKET_DIRECTION ) ) );
         juce::Array<juce::var>* data = ipcMessage->getProperty( contracts::DCL_IPC_KEY_PACKET_DATA ).getArray();
+        if( !data ) return;
         for( const juce::var& item : *data )
             hwMessage.data.push_back( item );
     }

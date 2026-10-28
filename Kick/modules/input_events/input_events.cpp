@@ -121,8 +121,13 @@ namespace Controls
 
         void messageReceivedFromControlSurface( CPktMgr::HWMsg_t& f_rxMsg )
         {
+            const auto size = f_rxMsg.data.size();
+            if((f_rxMsg.pktType == CPktMgr::EN_PKT_TYPE_BUTTON && size < 2)
+                || (f_rxMsg.pktType == CPktMgr::EN_PKT_TYPE_PAD && f_rxMsg.pktCmd == contracts::DeviceControlContracts::EN_PAD_STATE && size < 4)
+                || (f_rxMsg.pktType == CPktMgr::EN_PKT_TYPE_KNOBS && size < 3)
+                || (f_rxMsg.pktType == CPktMgr::EN_PKT_TYPE_SLIDER && size < 1)) return;
             juce::String log;
-            log += " Data[0] : " + juce::String( f_rxMsg.data[0] ) + " Cmd : " + juce::String( f_rxMsg.pktCmd ) + +" type : " + juce::String( f_rxMsg.pktType );
+            log += " Data[0] : " + juce::String( f_rxMsg.data.empty() ? -1 : f_rxMsg.data[0] ) + " Cmd : " + juce::String( f_rxMsg.pktCmd ) + +" type : " + juce::String( f_rxMsg.pktType );
             juce::Logger::writeToLog( log );
 
             Controls::InputEvents::dispatchHardwareEvent( f_rxMsg );
@@ -157,51 +162,19 @@ namespace Controls
 
         void changeListenerCallback( juce::ChangeBroadcaster* source ) override
         {
-            int rxLength = (int)input->getTotalLength();
-            // DBG("Receive Length: " << rxLength);
-            if( !input->getTotalLength() || input->getTotalLength() < 6 )
-                return;
-
-            juce::MemoryBlock serialData( (size_t)input->getTotalLength(), true );
-            size_t            len = (size_t)input->getTotalLength();
-
-            input->read( serialData.getData(), (int)input->getTotalLength() );
-
-            if( len < 4 )
-            {
-                DBG( "Size is less then 3 bytes" );
-                return;
-            }
-
-            char* byteArray = serialData.begin();
-
+            if( !input ) return;
+            const auto available = juce::jmin<juce::int64>(input->getTotalLength(), 4096);
+            if( available <= 0 ) return;
+            juce::MemoryBlock serialData((size_t)available);
+            const auto count = input->read(serialData.getData(), (int)available);
+            if( count <= 0 ) return;
+            receiveFrames.append(static_cast<const unsigned char*>(serialData.getData()), (size_t)count);
+            std::vector<unsigned char> frame;
             CPktMgr& refobjFrameHdl = ms_objPktMgrUsb;
-
-            while( rxLength )
+            while( receiveFrames.pop(frame) )
             {
-                int pktIndex     = 0;
-                int pktOffset    = 0;
-                int packetLength = byteArray[5 + pktIndex] + 7;
-                // DBG("Packet Length: " << packetLength);
-
-                if( ( rxLength >= packetLength ) && ( byteArray[0] == 'M' ) && ( byteArray[1] == 'T' ) )
-                {
-                    while( packetLength )
-                    {
-                        if( packetLength > 1 )
-                        {
-                            refobjFrameHdl.PushByteToRxFifo( byteArray[0] );
-                        }
-                        byteArray++;
-                        packetLength--;
-                        rxLength--;
-                    }
-                }
-                else
-                {
-                    rxLength = 0;
-                }
-
+                refobjFrameHdl.ClearReceiver();
+                for( size_t i = 0; i + 1 < frame.size(); ++i ) refobjFrameHdl.PushByteToRxFifo(frame[i]);
                 if( refobjFrameHdl.IsFrameRcvComplete() == TRUE )
                 {
                     refobjFrameHdl.SetFrameRcvComplete( FALSE );
@@ -220,7 +193,7 @@ namespace Controls
                     //juce::Logger::writeToLog( "Rx Type: " + juce::String(rxMsg.pktType) + "Rx pktId: " + juce::String(rxMsg.pktCmd) + "Rx size: " + juce::String(size ));
 
                     int index = 0;
-                    while( size - 1 )
+                    while( size > 1 )
                     {
                         rxMsg.data.push_back( (int)refobjFrameHdl.PopUint8FromRxFifo() );
                         index++;
@@ -229,7 +202,7 @@ namespace Controls
                     refobjFrameHdl.ClearReceiver();
                     // DBG("Pad Num: "<<  rxMsg.data[0]);
 
-                    if( rxMsg.pktDir == CPktMgr::enumPacketDir::EN_PKT_REQUEST )
+                    if( rxMsg.pktDir == CPktMgr::enumPacketDir::EN_PKT_REQUEST || contracts::DclContractsHelper::isSoftwareUpdateMessage(rxMsg) )
                     {
                         CPktMgr::HWMsg_t ackTxMsg;
                         //ackTxMsg.pktType = rxMsg.pktType;
@@ -290,6 +263,7 @@ namespace Controls
         }
 
     private:
+        Controls::SerialFrameBuffer receiveFrames;
         juce::WaitableEvent txEvent;
 
         std::unique_ptr<SerialPort>             sPort;

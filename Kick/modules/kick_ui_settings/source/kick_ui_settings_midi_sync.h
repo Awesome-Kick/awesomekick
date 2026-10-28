@@ -37,6 +37,7 @@ namespace kick_ui
     private:
         mt::KickSettings& settings{ mt::getSettings() };
 
+        ui::KickListBox clockSource{ui::KickListBox::withTitleBar, "CLOCK", {"Internal", "MIDI Input"}, 0, 1};
         ui::KickListBox inputList{ ui::KickListBox::withoutTitleBar, "MidiInput", {}, 0, 1 };
         ui::KickListBox outputList{ ui::KickListBox::withoutTitleBar, "MidiOutput", {}, 0, 1 };
 

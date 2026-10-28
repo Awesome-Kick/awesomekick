@@ -105,7 +105,7 @@ namespace kick_ui
             play.getToggleState() ? ae.setSequencePlay( ae.getSelectedSequence(), false, true ) : ae.setSequencePause();
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             pencil.setImages( "Pencil_Normal", "Pencil_Active" );
             erase.setImages( "Erase_Normal", "Erase_Active" );
             select.setImages( "Select", "Select_Normal", "Select_Active" );

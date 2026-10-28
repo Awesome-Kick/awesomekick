@@ -109,6 +109,9 @@ namespace mt
 
     void FirmwareUpdate::updateFirmware()
     {
+        if( updateInProgress.exchange(true) ) return;
+        struct Reset { std::atomic<bool>& flag; ~Reset() { flag.store(false); } } reset{updateInProgress};
+        cancelRequested.store(false);
         bool mcuFwStatus = ( isMCUImagePresent() && mt::HwPref::getHwPref().getSurfaceVersion().isNotEmpty() );
 
 #if defined( __linux__ ) || defined( __linux ) || defined( linux )
@@ -144,16 +147,29 @@ namespace mt
     int FirmwareUpdate::MCUUpdate( juce::String& McuFilePath )
     {
         int               SwUpdateSuccess = -1;
-        mt::swupdatemsg_t data;
+        mt::swupdatemsg_t data{};
 
         DBG( "MCU UPDATE" );
-        static bool        boSwUpdateStartUpCheck = false;
-        static char        binaryData[32]         = { 0 };
-        static int         totalRead              = 0;
-        static juce::int64 currentPos             = 0;
-        static int         hexRecSize             = 43;
-        static juce::int64 fileSize               = 0;
+        bool               boSwUpdateStartUpCheck = false;
+        char               binaryData[32]         = { 0 };
+        int                totalRead              = 0;
+        juce::int64        currentPos             = 0;
+        int                hexRecSize             = 43;
+        juce::int64        fileSize               = 0;
 
+        boDataTransferPending = true;
+        boUpdateComplete = false;
+        // Validate the whole file before sending an initiate command.
+        parser.AddPath(McuFilePath);
+        int validation = 0;
+        do { validation = parser.readNext(binaryData, sizeof(binaryData)); } while( validation > 0 || validation == -2 );
+        if(validation != 0)
+        {
+            data.command_status = RECOVERY_STATUS::FAILURE;
+            notifyStatus(data);
+            return -1;
+        }
+        auto lastActivity = juce::Time::getMillisecondCounterHiRes();
         //if(CheckForVersion() == 1)
         {
             if( !boSwUpdateStartUpCheck )
@@ -161,7 +177,7 @@ namespace mt
                 boSwUpdateStartUpCheck = true;
                 //DBG( "First Time" );
                 parser.AddPath( McuFilePath );
-                fileSize = parser.getSize() / hexRecSize;
+                fileSize = juce::jmax<juce::int64>(1, parser.getSize() / hexRecSize);
                 //DBG("FileSize" << fileSize);
                 if( fileSize == 0 )
                     jassertfalse;
@@ -175,7 +191,11 @@ namespace mt
             while( boDataTransferPending )
             {
                 //DBG("Sw Update State Machine");
-                switch( mcuUpdateState )
+                if( cancelRequested.load() || juce::Time::getMillisecondCounterHiRes() - lastActivity > 10000.0 )
+                    mcuUpdateState.store(MCUUpdateAction::EN_SW_UPDATE_FAILURE);
+                if( mcuUpdateState.load() != MCUUpdateAction::EN_SW_UPDATE_IDLE )
+                    lastActivity = juce::Time::getMillisecondCounterHiRes();
+                switch( mcuUpdateState.load() )
                 {
                     ////////////////////////////////////////
                     case MCUUpdateAction::EN_SW_UPDATE_INITIATE:
@@ -187,8 +207,8 @@ namespace mt
                             auto hwMsg =
                                 contracts::DclContractsHelper::SendSwUpdateCmdMessage( (int)MCUUpdateAction::EN_SW_UPDATE_INITIATE );
 
-                            contracts::DclSignals::sendCommandToDcl( hwMsg );
                             mcuUpdateState = MCUUpdateAction::EN_SW_UPDATE_IDLE;
+                            contracts::DclSignals::sendCommandToDcl( hwMsg );
                             break;
                         }
                     /////////////////////////////////////////////
@@ -210,9 +230,9 @@ namespace mt
 #endif
                             std::vector<int> sendData;
                             sendData.push_back( MCUUpdateAction::EN_SW_UPDATE_DATA );
-                            for( unsigned int i = 0; i <= (unsigned int)totalRead; i++ )
+                            for( unsigned int i = 0; i < (unsigned int)totalRead; i++ )
                             {
-                                sendData.push_back( binaryData[i] );
+                                sendData.push_back( static_cast<unsigned char>(binaryData[i]) );
                             }
                             mcuUpdateState = MCUUpdateAction::EN_SW_UPDATE_IDLE;
                             hwMessage.data = sendData;
@@ -243,8 +263,7 @@ namespace mt
                             DBG( "remaining From Progress" << remainingFromProgress );
                             DBG( "Total Progress with MCU " << totalProgress );
 #endif
-                            if( swupdateStatus )
-                                swupdateStatus( data );
+                            notifyStatus(data);
 
                             break;
                         }
@@ -284,8 +303,7 @@ namespace mt
                             SwUpdateSuccess        = 1;
                             data.command_status    = mt::RECOVERY_STATUS::SUCCESS;
                             data.totalper          = 100.0;
-                            if( swupdateStatus )
-                                swupdateStatus( data );
+                            notifyStatus(data);
 
                             break;
                         }
@@ -297,7 +315,7 @@ namespace mt
                             DBG( "Ack" );
 #endif
                             totalRead      = parser.readNext( binaryData );
-                            mcuUpdateState = getMcuUpdateState( totalRead );
+                            mcuUpdateState = totalRead == -3 ? MCUUpdateAction::EN_SW_UPDATE_FAILURE : getMcuUpdateState( totalRead );
 
                             break;
                         }
@@ -305,7 +323,7 @@ namespace mt
                     case MCUUpdateAction::EN_SW_UPDATE_IDLE:
                         ///////////////////////////////////
                         {
-                            //DBG("Idle");
+                            mcuStateChanged.wait(20);
                             break;
                         }
                     ///////////////////////////////////
@@ -316,8 +334,7 @@ namespace mt
                             boSwUpdateStartUpCheck = false;
                             boDataTransferPending  = false;
                             data.command_status    = mt::RECOVERY_STATUS::FAILURE;
-                            if( swupdateStatus )
-                                swupdateStatus( data );
+                            notifyStatus(data);
                             DBG( "Failure" );
                             break;
                         }
@@ -347,77 +364,60 @@ namespace mt
         return false;
     }
 
-    int FirmwareUpdate::HexParser::readNext( char redData[] )
+    int FirmwareUpdate::HexParser::readNext( char redData[], size_t capacity )
     {
-        if( !fileStream->getStatus().wasOk() || fileStream->isExhausted() )
-            return -1;
-
-        char tmp = fileStream->readByte();
-        while( tmp == '\r' || tmp == '\n' )
-            tmp = fileStream->readByte();
-
-        if( tmp != ':' )
-            jassertfalse;
-
-        // total bytes
-        char tempData[5] = { 0 };
-        fileStream->read( tempData, 2 );
-        int totalDataBytes = juce::String( tempData ).getHexValue32();
-
-        // read two bytes address
-        memset( tempData, 0, sizeof( tempData ) );
-        fileStream->read( tempData, 2 );
-        redData[0] = (char)juce::String( tempData ).getHexValue32();
-
-        memset( tempData, 0, sizeof( tempData ) );
-        fileStream->read( tempData, 2 );
-        redData[1] = (char)juce::String( tempData ).getHexValue32();
-
-        //RECORD TYPE
-        memset( tempData, 0, sizeof( tempData ) );
-        fileStream->read( tempData, 2 );
-        int recordType = juce::String( tempData ).getHexValue32();
-
-        // No need to read, if not data. end of data
-        if( totalDataBytes == 0 && recordType == 1 )
-            return -1;
-
-        if( recordType == 4 )
+        if( !fileStream || !fileStream->openedOk() ) return -3;
+        for(;;)
         {
-            // read data + checksum to forward the stream to next line
-            for( int i = 0; i < totalDataBytes; i++ )
+            juce::String line;
+            while( !fileStream->isExhausted() )
             {
-                memset( tempData, 0, sizeof( tempData ) );
-                fileStream->read( tempData, 2 );
-                redData[i] = (char)juce::String( tempData ).getHexValue32();
+                const auto c = fileStream->readByte();
+                if( c == '\n' ) break;
+                if( c != '\r' ) line += juce::String::charToString(c);
+                if( line.length() > 521 ) return -3;
             }
-            // read checksum
-            fileStream->read( tempData, 2 );
-
-            return -2;
+            if( line.isEmpty() )
+            {
+                if( fileStream->isExhausted() ) return -3; // EOF record is required.
+                continue;
+            }
+            if( !line.startsWithChar(':') || line.length() < 11 || (line.length() & 1) == 0 ) return -3;
+            std::array<unsigned, 260> bytes{};
+            unsigned sum = 0;
+            const int count = (line.length() - 1) / 2;
+            auto hex = [](juce::juce_wchar c) -> int {
+                if( c >= '0' && c <= '9' ) return int(c - '0');
+                if( c >= 'A' && c <= 'F' ) return int(c - 'A' + 10);
+                if( c >= 'a' && c <= 'f' ) return int(c - 'a' + 10);
+                return -1;
+            };
+            for( int i = 0; i < count; ++i )
+            {
+                const int high = hex(line[1 + i * 2]), low = hex(line[2 + i * 2]);
+                if( high < 0 || low < 0 ) return -3;
+                sum += bytes[(size_t)i] = unsigned(high * 16 + low);
+            }
+            const auto size = bytes[0], type = bytes[3];
+            if( count != int(size + 5) || (sum & 255) != 0 ) return -3;
+            if( type == 1 ) return size == 0 && bytes[1] == 0 && bytes[2] == 0 ? 0 : -3;
+            if( type == 4 )
+            {
+                if( size != 2 || capacity < 2 || bytes[1] || bytes[2] ) return -3;
+                redData[0] = char(bytes[4]); redData[1] = char(bytes[5]);
+                return -2;
+            }
+            if( type == 3 || type == 5 ) { if( size != 4 ) return -3; continue; }
+            if( type != 0 || size + 2 > capacity ) return -3;
+            redData[0] = char(bytes[1]); redData[1] = char(bytes[2]);
+            for( unsigned i = 0; i < size; ++i ) redData[i + 2] = char(bytes[i + 4]);
+            return int(size + 2);
         }
-        if( recordType != 0 )
-        {
-            // read data + checksum to forward the stream to next line
-            fileStream->read( tempData, totalDataBytes * 2 + 2 );
-            return 0;
-        }
-
-        for( int i = 0; i < totalDataBytes; i++ )
-        {
-            memset( tempData, 0, sizeof( tempData ) );
-            fileStream->read( tempData, 2 );
-            redData[i + 2] = (char)juce::String( tempData ).getHexValue32();
-        }
-        // read checksum
-        fileStream->read( tempData, 2 );
-
-        return totalDataBytes + 2;
     }
 
     juce::int64 FirmwareUpdate::HexParser::getSize()
     {
-        if( !fileStream->getStatus().wasOk() )
+        if( !fileStream || !fileStream->getStatus().wasOk() )
             return 0;
 
         return fileStream->getTotalLength();
@@ -427,7 +427,7 @@ namespace mt
     {
         int fwstatus = SUCCESS;
         DBG( "IN FIRMWRE UPDATE" );
-        swupdatemsg_t data;
+        swupdatemsg_t data{};
         data.imageType               = SwupdateType_t::LINUXUPDATE;
         static double _totalProgress = 0.0;
         bool          mcustaus       = ( isMCUImagePresent() && mt::HwPref::getHwPref().getSurfaceVersion().isNotEmpty() );
@@ -525,7 +525,7 @@ namespace mt
                 data.totalper  = _totalProgress;
 
                 // DBG( "Progress ->  " << juce::String( data.totalper ) );
-                if( swupdateStatus )
+                if( true )
                 {
                     if( msg.status == mt::RECOVERY_STATUS::SUCCESS )
                     {
@@ -535,7 +535,7 @@ namespace mt
 
                         linuxsteps      = data.nsteps;
                         linuxPercentage = _totalProgress;
-                        swupdateStatus( data );
+                        notifyStatus(data);
                         break;
                     }
                     else if( msg.status == mt::RECOVERY_STATUS::FAILURE )
@@ -544,11 +544,11 @@ namespace mt
                         if( mcustaus ) { data.command_status = mt::RECOVERY_STATUS::FAILURE; }
                         else { data.command_status = mt::RECOVERY_STATUS::LINUX_FAILURE; }
 
-                        swupdateStatus( data );
+                        notifyStatus(data);
                         fwstatus = FAILURE;
                         break;
                     }
-                    swupdateStatus( data );
+                    notifyStatus(data);
                 }
             }
         }

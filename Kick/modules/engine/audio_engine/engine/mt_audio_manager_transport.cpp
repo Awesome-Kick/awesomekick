@@ -61,7 +61,7 @@ namespace mt
         signals::on1_16.connect( [&]() {} );
 
         signals::onBeat.connect( [&]( int ) {} );
-        signals::onBar.connect( [&]( int ) { onBar(); } );
+        barConnection = signals::onBar.connect( [&]( int ) { barPending.store(true); } );
 
         auto tickProcessingFunc = [&]() { processTick(); };
         tickProcessingThread    = new std::thread( tickProcessingFunc );
@@ -82,8 +82,19 @@ namespace mt
 
     void MTAudioTransportManager::close()
     {
+        const juce::ScopedLock guard(getSequenceLock());
         stop();
         playingSequence = nullptr;
+    }
+
+    void MTAudioTransportManager::detachSequence(MTSequence* sequence)
+    {
+        const juce::ScopedLock guard(getSequenceLock());
+        if(playingSequence == sequence) stop();
+        _nextBar.isEnabled.store(false);
+        nextSequenceToPlay = -1;
+        songPlaying = false;
+        while(!playQueue.empty()) playQueue.pop();
     }
 
     void MTAudioTransportManager::setup()
@@ -132,6 +143,9 @@ namespace mt
 
     int MTAudioTransportManager::play( int Seq )
     {
+        const juce::ScopedLock guard(getSequenceLock());
+        const auto sync = getSettings().midiControl.externalClock() ? CMidiClock::SyncMode::EXTERNAL_CLOCK : CMidiClock::SyncMode::INTERNAL_CLOCK;
+        if(midiClock.getClockSyncMode() != sync) midiClock.setClockSyncMode(sync);
         int retVal = -1;
 
         if( auto s = getSequence( Seq ) )
@@ -167,6 +181,7 @@ namespace mt
     int MTAudioTransportManager::pause()
     {
         midiClock.stop();
+        const juce::ScopedLock guard(getSequenceLock());
         setTransportState( TransportState::Paused );
 
         int retVal = -1;
@@ -181,12 +196,20 @@ namespace mt
     int MTAudioTransportManager::stop()
     {
         midiClock.stop();
+        const juce::ScopedLock guard(getSequenceLock());
         setTransportState( TransportState::Stopped );
+        _nextBar.isEnabled.store(false);
+        nextSequenceToPlay = -1;
+        songPlaying = false;
+        while( !playQueue.empty() ) playQueue.pop();
+        curTick.store(0);
+        prevTick.store(0);
 
         int retVal = -1;
         if( playingSequence )
         {
             playingSequence->stop();
+            playingSequence = nullptr;
             retVal = 0;
         }
         return retVal;
@@ -194,6 +217,7 @@ namespace mt
 
     int MTAudioTransportManager::play( int Seq, bool FromBeginning, bool Now )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( Now )
             return FromBeginning ? play( Seq ) : resume( Seq );
         else
@@ -210,6 +234,7 @@ namespace mt
 
     void MTAudioTransportManager::seek( int posInTicks )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
         {
             playingSequence->seek( posInTicks );
@@ -219,20 +244,12 @@ namespace mt
     /// Callback functions...
     void MTAudioTransportManager::onTick( unsigned int Ticks )
     {
-        /*if( playingSequence )
-        {
-            playingSequence->onTick( Ticks );
-        }
-        updatePlayheads();*/
-
-        /*juce::Logger::writeToLog( "is Tick Processing, " + juce::String( threadIsProcessingTick.load() ? "yes, " : "No, " ) +
-            "Prev Tick, " + juce::String( prevTick.load() ) + ", CurTick, " + juce::String(curTick.load()) + ", Ticks" + juce::String(Ticks));*/
-
-        if( threadIsProcessingTick )
-            return;
-
-        curTick = Ticks;
+        curTick.store(Ticks);
         onTickEvent.signal();
+    }
+
+    void MTAudioTransportManager::advanceTransport()
+    {
         if( curTick < prevTick )
             prevTick = 0;
         playTime += ( curTick - prevTick );
@@ -250,7 +267,7 @@ namespace mt
                     play( playQueue.front().seq );
                 }
                 playQueue.pop();
-                signals::onSongSequencePlay( playingSequence->getIndex(), -1, stepIndex );
+                if( playingSequence ) signals::onSongSequencePlay( playingSequence->getIndex(), -1, stepIndex );
             }
             else if( ( nextSequenceUpdateTicks <= playTime ) && ( nextSequenceUpdateTicks >= 0 ) )
             {
@@ -260,8 +277,9 @@ namespace mt
         }
         else
         {
-            if( lastSeqTicks <= playTime )
+            if( songPlaying && lastSeqTicks <= playTime )
             {
+                songPlaying = false;
                 signals::onSongStopped();
                 resetSong();
             }
@@ -272,7 +290,7 @@ namespace mt
         {
             auto length        = playingSequence->isLooping.get() ? playingSequence->loopEnd.get() - playingSequence->loopStart.get() : (int)playingSequence->length.get();
             auto lengthInTicks = length * playingSequence->getTicksPerBar();
-            if( curTick % lengthInTicks == 0 )
+            if( lengthInTicks > 0 && curTick % lengthInTicks == 0 )
             {
                 play( nextSequenceToPlay );
                 nextSequenceToPlay = -1;
@@ -292,6 +310,10 @@ namespace mt
             {
                 const ScopedAtomicResetter<bool> resetter( threadIsProcessingTick, false, true );
 
+                const juce::ScopedLock guard(getSequenceLock());
+                if( !playingSequence ) { prevTick.store(curTick); continue; }
+                advanceTransport();
+                if( barPending.exchange(false) ) onBar();
                 prevTick.store( curTick );
 
                 if( playingSequence )
@@ -307,6 +329,7 @@ namespace mt
 
     void MTAudioTransportManager::updatePlayheads()
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
         {
             playingSequence->playheadLocalToGlobal();
@@ -318,12 +341,14 @@ namespace mt
 
     void MTAudioTransportManager::onBeat()
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
             playingSequence->onBeat();
     }
 
     void MTAudioTransportManager::onBar()
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
         {
             if( _nextBar.isEnabled.load() )
@@ -337,26 +362,31 @@ namespace mt
 
     void MTAudioTransportManager::onStart( unsigned int BeginTick )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
             playingSequence->onStart( BeginTick );
     }
 
     void MTAudioTransportManager::onLoopBegin( unsigned int BeginTick )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
             playingSequence->onLoopBegin( BeginTick );
     }
 
     void MTAudioTransportManager::onLoopEnd( unsigned int EndTick, unsigned int LoopCount )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( playingSequence )
             playingSequence->onLoopEnd( EndTick, LoopCount );
     }
 
     void MTAudioTransportManager::setupSong( MTSongInfo SongInfo, int Index )
     {
-        if( SongInfo.name.isNotEmpty() && SongInfo.steps.size() )
+        const juce::ScopedLock guard(getSequenceLock());
+        if( SongInfo.name.isNotEmpty() && juce::isPositiveAndBelow(Index, SongInfo.steps.size()) )
         {
+            songPlaying = true;
             auto index{ 0 };
             bool first{ true };
             int  firstSeq{ -1 };
@@ -379,6 +409,7 @@ namespace mt
                     else
                     {
                         auto pSeq   = getSequence( prevSeq );
+                        if(!pSeq) return;
                         auto length = pSeq->isLooping.get() ? pSeq->loopEnd.get() - pSeq->loopStart.get() : (int)pSeq->length.get();
 
                         PlayManager data;
@@ -395,6 +426,7 @@ namespace mt
             }
 
             auto pSeq    = getSequence( playQueue.size() ? playQueue.back().seq : firstSeq );
+            if(!pSeq) return;
             auto length  = pSeq->isLooping.get() ? pSeq->loopEnd.get() - pSeq->loopStart.get() : (int)pSeq->length.get();
             lastSeqTicks = pSeq->getTicksPerBar() * ( playQueue.size() ? playQueue.back().repeatCount * length : SongInfo.steps[Index].repeatCount * length );
             stepIndex    = Index;
@@ -433,13 +465,15 @@ namespace mt
 
     void MTAudioTransportManager::setNextSequence( int NextSequence )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         if( nextSequenceToPlay != NextSequence )
             nextSequenceToPlay = NextSequence;
     }
 
     void MTAudioTransportManager::setNextBarFlag( bool NextBarFlag )
     {
+        const juce::ScopedLock guard(getSequenceLock());
         _nextBar.isEnabled = NextBarFlag;
-        _nextBar.seq       = nextSequenceToPlay == -1 ? playingSequence->getIndex() : nextSequenceToPlay;
+        _nextBar.seq       = nextSequenceToPlay == -1 ? (playingSequence ? playingSequence->getIndex() : -1) : nextSequenceToPlay;
     }
 }

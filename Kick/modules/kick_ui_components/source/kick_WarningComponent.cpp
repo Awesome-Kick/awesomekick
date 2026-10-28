@@ -18,7 +18,7 @@ namespace ui
         info.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
         info.setValueJustification( juce::Justification::centred );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             no.setImages( "No" );
             yes.setImages( "Yes" );
         } );

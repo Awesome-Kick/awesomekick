@@ -38,6 +38,7 @@ namespace mt
         void noteOn( int Note, int Velocity );
         void noteOff( int Note );
         void allNotesOff();
+        void sustain(bool Down);
         void setParam( int Index, float Value );
         void pitchBend( float Semitones );
         void modWheel( float Amount ); // 0..1
@@ -58,6 +59,7 @@ namespace mt
                 NoteOn,
                 NoteOff,
                 AllNotesOff,
+                Sustain,
                 Param,
                 PitchBend,
                 ModWheel,
@@ -75,6 +77,8 @@ namespace mt
 
         // Audio thread only.
         std::array<int, 128> sounding = []() { std::array<int, 128> a{}; a.fill( -1 ); return a; }(); // input note -> note sent
+        bool sustainDown{false};
+        std::array<bool, 128> sustained{};
         std::array<int, 64>  deferredOffs{};
         int                  numDeferredOffs{ 0 };
         juce::LinearSmoothedValue<float> gainL{ 1.f }, gainR{ 1.f };

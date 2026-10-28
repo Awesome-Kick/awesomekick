@@ -233,8 +233,8 @@ namespace kick_ui
                                         openWarningPopUp( "No Events Are Present To Split" );
                                 }
 
-                                if( p ) delete p;
                             }
+                            if( p ) delete p;
                         },
                         ui::layout::warningPopup );
                 }
@@ -296,7 +296,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             srNo.setImage( "ID_Program" );
             close.setImages( "Edit_Close" );
         } );

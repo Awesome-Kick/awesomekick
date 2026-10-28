@@ -65,9 +65,9 @@ namespace kick_ui
             lastPadPressed = mt::utils::getBankOffset( Bank ) + Pad;
             if( multiple.getToggleState() )
             {
-                selected.addIfNotAlreadyThere( lastPadPressed );
-
-                auto isHighlight = miniMap.isHighlight( lastPadPressed );
+                auto isHighlight = selected.contains( lastPadPressed );
+                if( isHighlight ) selected.removeAllInstancesOf( lastPadPressed );
+                else selected.addIfNotAlreadyThere( lastPadPressed );
                 miniMap.setHighlight( lastPadPressed, !isHighlight );
             }
             else if( current.getToggleState() )

@@ -49,8 +49,8 @@ namespace kick_ui
         fileName.setValueJustification( juce::Justification::centred );
         fileName.setValueBackgroundColour( ui::Theme::backgroundColour( 9 ) );
         fileName.setValueFontHeight( 24 );
-        fileName.setEditable( true );
-        fileName.setText( "Do You Want To Export " + FileName + " Song", juce::dontSendNotification );
+        fileName.setEditable( false );
+        fileName.setText( "Export MIDI notes for " + FileName + " to the project Exports folder?", juce::dontSendNotification );
     }
 
     void SaveFile::resized()
@@ -409,12 +409,18 @@ namespace kick_ui
         };
 
         exportt.onClick = [&]() {
-            auto savePopUp = new SaveFile( songListBox.getSelected() );
-            mt::utils::showOptions( "EXPORT", savePopUp, [this, savePopUp]( int R ) {
+            const auto songName = songListBox.getSelected();
+            auto savePopUp = new SaveFile(songName);
+            mt::utils::showOptions( "EXPORT", savePopUp, [this, savePopUp, songName]( int R ) {
                 if( savePopUp )
                 {
                     if( R == UI::APPLY )
                     {
+                        auto& audio = mt::getAudioInterface();
+                        const auto output = audio.getProjectDir().getChildFile("Exports").getChildFile(juce::File::createLegalFileName(songName) + ".mid").getNonexistentSibling();
+                        const bool saved = audio.exportSongMidi(songName, output);
+                        auto* result = new ui::FilePopup(saved ? "MIDI saved: " + output.getFullPathName() : "MIDI export failed. Check the song steps and destination.", true, false, false);
+                        mt::utils::showDialog("EXPORT MIDI", result, [result](int) { delete result; }, ui::layout::warningPopup);
                     }
                 }
                 delete savePopUp;
@@ -432,7 +438,7 @@ namespace kick_ui
             content.setBpmValue( bpmValue );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             exportt.setImages( "Song_Export", "Song_Export_Active" );
             header.setIcon( "Icon_SongEdit" );
         } );

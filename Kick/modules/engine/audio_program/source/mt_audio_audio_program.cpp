@@ -194,7 +194,7 @@ namespace mt
         }
     }
 
-    MTIAudio* MTAudioProgram::getAudioClip( int Start )
+    std::unique_ptr<MTIAudio> MTAudioProgram::getAudioClip( int Start )
     {
         auto vt = vTree.getOrCreateChildWithName( IDs::AUDIOS, um );
         for( auto audio : vt )
@@ -202,12 +202,12 @@ namespace mt
             MTIAudio audioSample( audio, um );
 
             if( Start == audioSample.startTime.get() )
-                return &audioSample;
+                return std::make_unique<MTIAudio>(audio, um);
         }
         return nullptr;
     }
 
-    MTIAudio* MTAudioProgram::getAudioSample( int Start )
+    std::unique_ptr<MTIAudio> MTAudioProgram::getAudioSample( int Start )
     {
         auto vt = vTree.getOrCreateChildWithName( IDs::AUDIOS, um );
         for( auto audio : vt )
@@ -215,7 +215,7 @@ namespace mt
             MTIAudio audioSample( audio, um );
 
             if( Start >= audioSample.startTime.get() && ( Start <= ( audioSample.startTime.get() + audioSample.length.get() ) ) )
-                return &audioSample;
+                return std::make_unique<MTIAudio>(audio, um);
         }
         return nullptr;
     }

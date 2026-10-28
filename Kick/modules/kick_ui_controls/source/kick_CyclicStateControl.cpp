@@ -7,8 +7,8 @@ namespace ui
         mt::utils::addListener( this, leftNav, rightNav );
         addAndMakeVisible( stateButton );
 
-        themeChanged.connect( [&]() {
-            stateButton.setImages( states[currentState] );
+        ui::connectTheme( *this, [&]() {
+            if( currentState < states.size() ) stateButton.setImages( states[currentState] );
         } );
     }
 
@@ -22,19 +22,21 @@ namespace ui
 
     void KickCyclicStateControl::setCurrentState( unsigned int cs )
     {
-        currentState = cs;
-        stateButton.setImages( states[cs] );
+        if( states.empty() ) return;
+        currentState = juce::jmin( cs, static_cast<unsigned>(states.size() - 1) );
+        stateButton.setImages( states[currentState] );
     }
 
     void KickCyclicStateControl::setNormalized( float Value )
     {
-        auto state = (int)( Value * states.size() );
+        if(!std::isfinite(Value)) Value = 0.f;
+        auto state = (int)( juce::jlimit(0.f, 1.f, Value) * states.size() );
         setCurrentState( state );
     }
 
     float KickCyclicStateControl::getNormalized()
     {
-        return ( (float)currentState / (float)states.size() );
+        return states.empty() ? 0.0f : (float)currentState / (float)states.size();
     }
 
     void KickCyclicStateControl::buttonClicked( juce::Button* button )

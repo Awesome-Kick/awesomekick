@@ -221,7 +221,6 @@ namespace ipc
                     conn->publish( handshakeMessage );
                 }
                 unregistered.remove( connectionId );
-                registered.remove( connectionId );
 
             } catch( ... )
             {

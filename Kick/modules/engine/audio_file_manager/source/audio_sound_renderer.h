@@ -57,18 +57,11 @@ namespace mt
         void                     getNextBlock( juce::AudioSampleBuffer& Block, double PitchRatio = 1.0 );
 
     private:
-        std::function<void( double )> advanceOne;
-
-        void setupAdvanceFunction();
-
-        void advanceForward( double PitchRatio );
-        void advanceForwardLooping( double PitchRatio );
-        void advanceReverse( double PitchRatio );
-        void advanceReverseLooping( double PitchRatio );
+        void step( double PitchRatio, int NumSamples = 1 );
 
         inline double getStartPosition()
         {
-            return !slice ? 0.0 : ( slice->isForward() ? slice->loopStart() : slice->loopEnd() );
+            return !slice ? 0.0 : ( slice->isForward() ? slice->loopStart() : juce::jmax( slice->loopStart(), slice->loopEnd() - 1 ) );
         }
 
         inline juce::AudioSampleBuffer& interpolateSample()

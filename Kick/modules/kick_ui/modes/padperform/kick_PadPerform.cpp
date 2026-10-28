@@ -7,7 +7,7 @@ namespace kick_ui
         mt::utils::addChildComponents( this, header, content );
         header.onBackButtonPressed = [this]( bool ) { closeScreen(); };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_PadPerform" );
         } );
     }
@@ -318,7 +318,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             chromaticBtn.setToggleButtonText( "Chromatic", "Chromatic" );
             notesBtn.setToggleButtonText( "Notes", "Notes" );
             chordsBtn.setToggleButtonText( "Chords", "Chords" );

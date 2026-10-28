@@ -67,9 +67,12 @@ namespace mt
         std::vector<std::pair<std::string, linuxFwInfo>> getSDCardFirmwareFiles() { return sd_card_firmware_files; }
         std::vector<std::pair<std::string, linuxFwInfo>> getUSBFirmwareFiles() { return usb_firmware_files; };
 
+        bool isUpdating() const { return updateInProgress.load(); }
+        void cancelUpdate() { cancelRequested.store(true); mcuStateChanged.signal(); }
         void setMcuUpdateState( MCUUpdateAction mcuUpdate )
         {
             mcuUpdateState = mcuUpdate;
+            mcuStateChanged.signal();
         }
 
         std::vector<std::pair<std::string, linuxFwInfo>> usb_firmware_files;
@@ -81,6 +84,15 @@ namespace mt
         std::string                                      pcFwVersion     = "";
 
     private:
+        std::atomic<bool> updateInProgress{false}, cancelRequested{false};
+        juce::WaitableEvent mcuStateChanged;
+        void notifyStatus(swupdatemsg_t& status)
+        {
+            SwupdateStatus callback;
+            { const juce::ScopedLock guard(statusLock); callback = swupdateStatus; }
+            if(callback) callback(status);
+        }
+        juce::CriticalSection statusLock;
         int linuxUpdate( bool status = true );
         int connect_ipc( bool reconnect );
         int progress_ipc_receive( int* connfd, struct progress_msg* msg );
@@ -110,7 +122,7 @@ namespace mt
         {
         public:
             void        AddPath( const juce::String& hexFilePath );
-            int         readNext( char redData[] );
+            int         readNext( char redData[], size_t capacity = 32 );
             juce::int64 getSize();
 
         private:
@@ -120,7 +132,8 @@ namespace mt
     public:
         void setSwUpdatecallback( SwupdateStatus func )
         {
-            swupdateStatus = func;
+            const juce::ScopedLock guard(statusLock);
+            swupdateStatus = std::move(func);
         }
         HexParser        parser;
         CPktMgr::HWMsg_t hwMessage;

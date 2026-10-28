@@ -39,21 +39,18 @@ namespace ui
             return false;
         }
 
-        juce::int32 calculateFolderSize( juce::File filePath )
+        juce::int64 calculateFolderSize( juce::File filePath )
         {
             juce::int64 totalSize = 0;
 
             if( filePath.isDirectory() )
             {
                 juce::Array<juce::File> files;
-                filePath.findChildFiles( files, juce::File::findFilesAndDirectories, true );
+                filePath.findChildFiles(files, juce::File::findFiles, true, "*", juce::File::FollowSymlinks::no);
 
                 for( const auto& file : files )
                 {
-                    if( file.isDirectory() )
-                        calculateFolderSize( file );
-                    else
-                        totalSize += file.getSize();
+                    totalSize += file.getSize();
                 }
             }
             else

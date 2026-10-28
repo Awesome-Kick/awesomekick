@@ -26,7 +26,17 @@
 
 namespace ui
 {
-    static sigslot::signal<> themeChanged;
+    inline sigslot::signal<> themeChanged;
+
+    template<typename Callback>
+    sigslot::connection connectTheme( juce::Component& owner, Callback callback )
+    {
+        juce::Component::SafePointer<juce::Component> safe( &owner );
+        return themeChanged.connect_extended( [safe, callback = std::move(callback)](sigslot::connection& connection) {
+            if( safe ) callback();
+            else connection.disconnect();
+        } );
+    }
 
     enum FONT
     {

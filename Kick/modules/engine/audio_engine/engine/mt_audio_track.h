@@ -36,7 +36,7 @@ namespace mt
     {
     public:
         explicit MTTrack( MTAudioManager& M, MTSequence& Seq, juce::UndoManager* UM, juce::ValueTree& VT );
-        ~MTTrack() { trackPlayhead.clear(); };
+        ~MTTrack() { programDeletionConnection.disconnect(); vTree.removeListener( this ); trackPlayhead.clear(); };
 
         juce::ValueTree& getVT() { return vTree; };
         juce::ValueTree& getState() { return vTree; };
@@ -122,6 +122,7 @@ namespace mt
         inline void reloadMidiMeter( float Level ) { midiMeter.reload( Level ); };
 
     private:
+        friend struct TrackAuditAccess;
         void        progChangeHandler();
         void        lengthChangeHandler();
         void        recalculateIndex( unsigned int Tick );
@@ -151,7 +152,12 @@ namespace mt
         unsigned int          tickCtr{ 0 };
         unsigned int          tickPos{ 0 };
         double                levelScaler{ 1.f };
+        struct LiveDestination { int note{ -1 }, channel{ 1 }; };
+        std::array<std::array<LiveDestination, 128>, 16> liveDestinations{};
+        int64_t tickOffset{0};
+        bool scheduleStart{ true };
         juce::CriticalSection lock;
+        sigslot::scoped_connection programDeletionConnection;
 
         std::atomic<bool>         soloMuted{ false };
         std::atomic<unsigned int> lengthInTicks{ 0 };

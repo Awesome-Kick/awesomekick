@@ -17,11 +17,17 @@ namespace kick_ui
         void getUsbupdateStatus( mt::usbmsg_t& usbupdate );
         void setSwUpdateCallback()
         {
-            mt::FirmwareUpdate::getSwupdateInstance().setSwUpdatecallback( std::bind( &SWUpdateScreen::getSwupdateStatus, this, std::placeholders::_1 ) );
+            juce::Component::SafePointer<SWUpdateScreen> safe(this);
+            mt::FirmwareUpdate::getSwupdateInstance().setSwUpdatecallback([safe](mt::swupdatemsg_t& data) {
+                juce::MessageManager::callAsync([safe, data]() mutable { if(safe) safe->getSwupdateStatus(data); });
+            });
         }
         void setUsbCallback()
         {
-            mt::USBFunctionFS::getUSBInstance().setUsbcallback( std::bind( &SWUpdateScreen::getUsbupdateStatus, this, std::placeholders::_1 ) );
+            juce::Component::SafePointer<SWUpdateScreen> safe(this);
+            mt::USBFunctionFS::getUSBInstance().setUsbcallback([safe](mt::usbmsg_t& data) {
+                juce::MessageManager::callAsync([safe, data]() mutable { if(safe) safe->getUsbupdateStatus(data); });
+            });
         }
 
     private:
@@ -42,8 +48,10 @@ namespace kick_ui
         kick_ui::KickModeHeader header{ "Firmware Update", "Icon_SettingsScreen" };
         ui::KickProgressBar     stepProgressbar;
         ui::KickProgressBar     overallProgressbar;
-        double                  _step_percentage;
-        double                  _overallpercentage;
+        bool updateStarted{false};
+        bool downloadCompleted{false};
+        double                  _step_percentage{0};
+        double                  _overallpercentage{0};
         juce::String            _overallLabel = "Downloading";
 
         ui::KickImageButton logo1{ "", "logo_pref", "" };

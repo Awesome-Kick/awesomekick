@@ -14,6 +14,10 @@
  * SPDX-License-Identifier: AGPL-3.0-or-later
  */
 #include "audio_engine/audio_engine.h"
+#include "hardware/hardware.h"
+#include "input_events/input_events.h"
+#include "audio_engine/engine/mt_sample_editor_actions.h"
+#include "audio_engine/engine/mt_sample_player.h"
 
 #if JUCE_WINDOWS
     #include <windows.h>
@@ -869,6 +873,7 @@ namespace
         auto hfOf = [&]( const juce::ValueTree& Patch ) {
             synth.reset();
             synth.setPatch( Patch );
+            synth.reset(); // Measure steady patch timbre, excluding a graph-edit crossfade.
             synth.noteOn( 60, 1.f );
             render( 4 );
             double hf = 0;
@@ -1721,6 +1726,35 @@ namespace
             R.check( blip > 0.005f, "very short note is audible", "peak " + f3( blip ) );
             settled();
 
+            // Audit A9/A13: a retrigger survives an earlier short release, and CC64
+            // holds released keys until the pedal rises, including while muted.
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOn(1, 64, (juce::uint8)110));
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOff(1, 64));
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOn(1, 64, (juce::uint8)110));
+            measureOutput(meter, 500); // Exclude the initial blip and an obsolete release tail.
+            const auto retriggered = measureOutput(meter, 200);
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOff(1, 64));
+            R.check(retriggered > 0.02f && settled() < 0.005f, "A9: an earlier deferred off does not stop the retrigger");
+            held();
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::controllerEvent(1, 64, 127));
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOff(1, 57));
+            measureOutput(meter, 700); // An unsupported pedal would have released by now.
+            const auto sustained = measureOutput(meter, 200);
+            ai.setTrackMute(seq, ht, true);
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::controllerEvent(1, 64, 0));
+            ai.setTrackMute(seq, ht, false);
+            R.check(sustained > 0.02f && settled() < 0.005f, "A13: sustain holds a released key and pedal-up releases it through mute");
+
+            held();
+            juce::Array<juce::MidiMessage> pedalBatch;
+            pedalBatch.add(juce::MidiMessage::noteOff(1, 57));
+            pedalBatch.add(juce::MidiMessage::controllerEvent(1, 64, 127));
+            if(ins) ins->noteProcess(pedalBatch);
+            const auto releasedBeforePedal = settled();
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::controllerEvent(1, 64, 0));
+            ai.addLiveMidiMsg(ai.getSelected(), juce::MidiMessage::noteOff(1, 57));
+            R.check(releasedBeforePedal < 0.005f, "A13: a pedal pressed after note-off in a batch does not recapture the key");
+
             // 7. Tree changes reach the engine (this is what undo/redo do).
             if( ins )
             {
@@ -1996,6 +2030,8 @@ namespace
 
 } // namespace
 
+#include "AuditRegressionTests.h"
+
 class KickEngineTestApp : public juce::JUCEApplication
 {
 public:
@@ -2038,19 +2074,23 @@ private:
             return;
         }
 
-        testObjectIds( R );
-        testSampleRecorder( R );
-        testLooper( R );
-        testFilter( R );
-        testADSR( R );
-        testBasicSynth( R );
-        testModularEngine( R );
-        testModularPatchEditing( R );
-        testModularCablesAndEffects( R );
-        testModularPlayModes( R );
-        testModularTempoArpAndModules( R );
-        testPadLayout( R );
-        testEngine( R, kitDir );
+        if(juce::SystemStats::getEnvironmentVariable("KICK_TEST_AUDIT_ONLY", {}).getIntValue() == 0)
+        {
+            testObjectIds( R );
+            testSampleRecorder( R );
+            testLooper( R );
+            testFilter( R );
+            testADSR( R );
+            testBasicSynth( R );
+            testModularEngine( R );
+            testModularPatchEditing( R );
+            testModularCablesAndEffects( R );
+            testModularPlayModes( R );
+            testModularTempoArpAndModules( R );
+            testPadLayout( R );
+            testEngine( R, kitDir );
+        }
+        testAuditRegressions(R);
 
         R.lines.add( "\n" + juce::String( R.passed ) + " passed, " + juce::String( R.failed ) + " failed" );
         exeDir.getChildFile( "engine_test_results.txt" ).replaceWithText( R.lines.joinIntoString( "\n" ) );

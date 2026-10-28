@@ -56,12 +56,16 @@ namespace kick_ui
         exportt.onClick = [&]() {
             if( mode == SamplerRecorder::RecordMode::recordModeStopped )
             {
-                // Export The Current Sample
+                openSaveFilePopUp(false);
             }
             exportt.setToggleState( false, juce::dontSendNotification );
         };
         clear.onClick = [&]() {
-            //Clear All and Reset The Recording
+            recorder.setRecordMode(SamplerRecorder::RecordMode::recordModeNone);
+            recorder.clearRecording();
+            samplePoints.clear();
+            startSamplePoints.clear();
+            endSamplePoints.clear();
             clear.setToggleState( false, juce::dontSendNotification );
         };
 
@@ -129,7 +133,7 @@ namespace kick_ui
 
         sample.triggerClick();
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             exportt.setImages( "Song_Export", "Song_Export_Active" );
             clear.setImages( "Song_Clear", "Song_Clear_Active" );
             header.setIcon( "Icon_Sampler" );
@@ -223,13 +227,19 @@ namespace kick_ui
     {
         auto filePath   = getValidFileName( ae.getProjectDir().getSiblingFile( fileName + ".wav" ).getFullPathName().toStdString() );
         auto sampleFile = ae.getProjectDir().getSiblingFile( filePath ).getFullPathName().toStdString();
-        ae.saveRecording( sampleFile );
+        if(!ae.saveRecording(sampleFile))
+        {
+            auto* warning = new ui::FilePopup("The recording could not be saved. Check available storage and try again.", true, false, false);
+            mt::utils::showDialog("SAVE SAMPLE", warning, [warning](int) { delete warning; }, ui::layout::warningPopup);
+            return {};
+        }
         recorder.clearRecording();
         ae.addAsset( sampleFile, mt::AssetTypes::Samples );
         addSlicesToSample( sampleFile );
         if( SelProgram != 0 && buttonState == SAMPLE )
         {
-            auto progType = ae.getProgram( ae.getSelectedProgram() )->getType();
+            auto* selectedProgram = ae.getProgram(ae.getSelectedProgram());
+            auto progType = selectedProgram ? selectedProgram->getType() : mt::MTProgramType::Unknown;
             if( progType == mt::MTProgramType::Drum || progType == mt::MTProgramType::Keygroup || progType == mt::MTProgramType::Clip || progType == mt::MTProgramType::Audio )
                 ae.addSampleToProgram( ae.getSelectedProgram(), PadIndex, sampleFile );
         }

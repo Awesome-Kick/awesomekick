@@ -33,7 +33,7 @@ namespace ui
         setOutline( 0 );
         setTabBarDepth( layout::tabBar.getHeight() );
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             back.setImages( "Mode Back Button - Round" );
             fullscreen.setImages( "Mode Show Bar" );
         } );

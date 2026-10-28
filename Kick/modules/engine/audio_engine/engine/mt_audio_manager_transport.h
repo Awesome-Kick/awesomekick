@@ -34,6 +34,7 @@ namespace mt
         virtual ~MTAudioTransportManager();
 
         void close();
+        void detachSequence(MTSequence* Sequence);
         void setup();
 
         // Getters.
@@ -69,6 +70,7 @@ namespace mt
 
     private:
         void onTick( unsigned int Ticks ) override;
+        void advanceTransport();
         void onBeat();
         void onBar();
         void onStart( unsigned int ) override;
@@ -79,6 +81,8 @@ namespace mt
         void resetSong();
 
     private:
+        std::atomic<bool> barPending{false};
+        sigslot::scoped_connection barConnection;
         CMidiClock&     midiClock{ getMidiClock() };
         juce::ValueTree runtimeVT{ IDs::RUNTIME };
 
@@ -101,6 +105,7 @@ namespace mt
             bool fromBegin{ true };
         };
 
+        bool songPlaying{false};
         int                     stepIndex{ -1 };
         int                     lastSeqTicks{ 0 };
         int                     nextSequenceUpdateTicks{ -1 };

@@ -69,7 +69,7 @@ namespace mt
             }
         }
 
-        trackNameChanged.connect( [&]( MTTrack* T ) { updateTrackList(); } );
+        trackNameConnection = trackNameChanged.connect( [&]( MTTrack* T ) { updateTrackList(); } );
         updateTrackList();
 
         getBPM();
@@ -80,6 +80,7 @@ namespace mt
 
     MTSequence::~MTSequence()
     {
+        trackNameConnection.disconnect();
         vTree.removeListener( this );
         stop();
 

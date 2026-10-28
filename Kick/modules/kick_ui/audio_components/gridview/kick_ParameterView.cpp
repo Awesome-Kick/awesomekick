@@ -17,7 +17,7 @@ namespace kick_ui
 
         nudgeBtn.triggerClick();
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             ecBtn.setImages( "UP", "Down" );
             paramTypeBtn.setImages( "Velocity" );
             transposeBtn.setToggleButtonText( "Transpose", "Transpose" );

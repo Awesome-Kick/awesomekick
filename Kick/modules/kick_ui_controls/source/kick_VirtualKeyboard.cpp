@@ -167,7 +167,7 @@ namespace ui
 
         addAllMakeVisibleAndAddListener();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             dynamic_cast<KickImageButton*>( row[0][0].get() )->setImages( "Virtual_s1", "Virtual_s1", "Virtual_s1_Active" );
             dynamic_cast<KickImageButton*>( row[0][1].get() )->setImages( "Virtual_s2", "Virtual_s2", "Virtual_s2_Active" );
             dynamic_cast<KickImageButton*>( row[0][2].get() )->setImages( "Virtual_s3", "Virtual_s3", "Virtual_s3_Active" );
@@ -243,7 +243,7 @@ namespace ui
 
         addAllMakeVisibleAndAddListener();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             dynamic_cast<KickImageButton*>( row[0][0].get() )->setImages( "Virtual_q", "Virtual_q", "Virtual_q_Active" );
             dynamic_cast<KickImageButton*>( row[0][1].get() )->setImages( "Virtual_w", "Virtual_w", "Virtual_w_Active" );
             dynamic_cast<KickImageButton*>( row[0][2].get() )->setImages( "Virtual_e", "Virtual_e", "Virtual_e_Active" );
@@ -320,7 +320,7 @@ namespace ui
 
         addAllMakeVisibleAndAddListener();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             dynamic_cast<KickImageButton*>( row[0][0].get() )->setImages( "Virtual_Q", "Virtual_Q", "Virtual_Q_Active" );
             dynamic_cast<KickImageButton*>( row[0][1].get() )->setImages( "Virtual_W", "Virtual_W", "Virtual_W_Active" );
             dynamic_cast<KickImageButton*>( row[0][2].get() )->setImages( "Virtual_E", "Virtual_E", "Virtual_E_Active" );
@@ -396,7 +396,7 @@ namespace ui
 
         addAllMakeVisibleAndAddListener();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             dynamic_cast<KickImageButton*>( row[0][0].get() )->setImages( "Virtual_1", "Virtual_1", "Virtual_1_Active" );
             dynamic_cast<KickImageButton*>( row[0][1].get() )->setImages( "Virtual_2", "Virtual_2", "Virtual_2_Active" );
             dynamic_cast<KickImageButton*>( row[0][2].get() )->setImages( "Virtual_3", "Virtual_3", "Virtual_3_Active" );

@@ -1,5 +1,21 @@
 namespace ui
 {
+    namespace
+    {
+        bool validateNewProjectName(const juce::String& name)
+        {
+            const auto root = getAppDirs(MTProjects);
+            const bool valid = name.isNotEmpty() && name == name.trim()
+                && name != "." && name != ".." && !name.containsAnyOf("/\\:")
+                && juce::File::createLegalFileName(name) == name && !root.getChildFile(name).exists();
+            if(!valid)
+            {
+                auto* popup = new ui::FilePopup("Choose a valid project name that does not already exist.", true, false, false);
+                mt::utils::showDialog("NEW PROJECT", popup, [popup](int) { delete popup; }, ui::layout::warningPopup);
+            }
+            return valid;
+        }
+    }
     bool RecentProject::enableRecentProjVTreeEntry{ true };
     bool RecentProject::isProjectLoading{ false };
 
@@ -21,7 +37,7 @@ namespace ui
         header.setAutoLoadToggleState( settings.projects.isAutoLoad() );
 
         longPressComp->onLoadTriggered = [&]( int Index ) {
-            recentItems[Index]->onMouseDown( Index, juce::File() );
+            if(juce::isPositiveAndBelow(Index, recentItems.size()) && recentItems[Index]->onMouseDown) recentItems[Index]->onMouseDown( Index, juce::File() );
         };
 
         longPressComp->onRemoveTriggered = [&]( int Index ) {
@@ -78,7 +94,7 @@ namespace ui
 
         maxNumOfRecentProject = settings.projects.maxRecentProjects();
 
-        themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             fileBrowser.setImages( "Browser_Recent" );
             header.setIcon( "RecentProject" );
         } );
@@ -105,6 +121,7 @@ namespace ui
 
     void RecentProject::createProject( juce::String value )
     {
+        if(!validateNewProjectName(value)) return;
         auto nChild = settings.projects.getNumChildren();
         for( auto i = 0; i < nChild; i++ )
         {
@@ -133,6 +150,12 @@ namespace ui
 
     void RecentProject::onProjectLoaded( juce::File file )
     {
+        if(!juce::MessageManager::getInstance()->isThisTheMessageThread())
+        {
+            juce::Component::SafePointer<RecentProject> safe(this);
+            juce::MessageManager::callAsync([safe, file] { if(safe) safe->onProjectLoaded(file); });
+            return;
+        }
         if( enableRecentProjVTreeEntry )
             settings.projects.rearrangeProject( file );
         else
@@ -156,16 +179,20 @@ namespace ui
 
     void RecentProject::copyProjIntoProjectDir( juce::String text, juce::File project )
     {
-        juce::File projDir = getAppDirs( MTProjects ).getFullPathName() + seprator + ( text );
-        projDir.createDirectory();
-        juce::String            copyFile = text + mt::__projectFileSuffix;
+        if(!validateNewProjectName(text)) return;
+        const auto root = getAppDirs(MTProjects);
+        const auto projDir = root.getChildFile(text);
         juce::Array<juce::File> sourceFiles;
-        project.findChildFiles( sourceFiles, juce::File::findFiles, false, "*.kickPrj" );
-        juce::File destination = projDir.getChildFile( copyFile );
-        sourceFiles[0].copyFileTo( destination );
-        // Load Project file.
-        auto destinationFile = destination.getParentDirectory();
-        loadProject( destinationFile );
+        project.findChildFiles(sourceFiles, juce::File::findFiles, false, "*.kickPrj");
+        if(sourceFiles.isEmpty() || projDir.createDirectory().failed()) return;
+        const auto destination = projDir.getChildFile(text + mt::__projectFileSuffix);
+        if(!sourceFiles[0].copyFileTo(destination))
+        {
+            projDir.deleteFile(); // Only the just-created empty directory can be removed.
+            return;
+        }
+        auto destinationFile = projDir;
+        loadProject(destinationFile);
     }
 
     void RecentProject::loadProject( juce::File& Project )
@@ -221,6 +248,7 @@ namespace ui
         for( int index = 0; index < NumOptions; ++index )
             addProjectList( index );
 
+        selectedIndex = recentItems.empty() ? -1 : juce::jlimit(0, (int)recentItems.size() - 1, selectedIndex);
         resized();
     }
 
@@ -374,7 +402,7 @@ namespace ui
 
     void RecentProject::knobClicked()
     {
-        if( selectedIndex >= 0 )
+        if( juce::isPositiveAndBelow(selectedIndex, recentItems.size()) )
             if( recentItems[selectedIndex]->onMouseDown )
                 recentItems[selectedIndex]->onMouseDown( selectedIndex, juce::File() );
     }
@@ -398,6 +426,7 @@ namespace ui
         if( juce::isPositiveAndBelow( selectedIndex, recentItems.size() ) )
             recentItems[selectedIndex]->showBorder( true );
 
+        if(!juce::isPositiveAndBelow(selectedIndex, recentItems.size())) return;
         auto projectsStartIndex = demoList.getSize() + templateList.getSize();
         if( selectedIndex >= projectsStartIndex )
         {
@@ -434,7 +463,7 @@ namespace ui
             selectedIndex          = ( 0 < ( projectList.getSize() ) ) ? projectStartIndex : 0;
 
             clearAllShowBorder();
-            recentItems[selectedIndex]->showBorder( true );
+            if(juce::isPositiveAndBelow(selectedIndex, recentItems.size())) recentItems[selectedIndex]->showBorder( true );
 
             // Check if we have come here on first launch,
             if( bFirstLaunch )

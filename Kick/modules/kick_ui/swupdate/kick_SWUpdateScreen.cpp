@@ -55,7 +55,11 @@ namespace kick_ui
 
     void SWUpdateScreen::visibilityChanged()
     {
+        if( !isVisible() || updateStarted ) return;
+        updateStarted = true;
+        downloadCompleted = false;
         setUsbCallback();
+        setSwUpdateCallback();
         _overallLabel      = "";
         _overallpercentage = 0.0;
         if( isVisible() )
@@ -70,7 +74,7 @@ namespace kick_ui
             }
             else
             {
-                std::thread( [&]() {
+                std::thread( []() {
                     mt::FirmwareUpdate::getSwupdateInstance().updateFirmware();
                 } ).detach();
             }
@@ -102,6 +106,12 @@ namespace kick_ui
 
     void SWUpdateScreen::getSwupdateStatus( mt::swupdatemsg_t& data )
     {
+        if( !juce::MessageManager::getInstance()->isThisTheMessageThread() )
+        {
+            juce::Component::SafePointer<SWUpdateScreen> safe(this);
+            juce::MessageManager::callAsync([safe, data]() mutable { if( safe ) safe->getSwupdateStatus(data); });
+            return;
+        }
         if( data.command_status == mt::RECOVERY_STATUS::RUN )
         {
             _overallpercentage = data.totalper;
@@ -116,13 +126,14 @@ namespace kick_ui
         }
         else if( data.command_status == mt::RECOVERY_STATUS::SUCCESS )
         {
+            updateStarted = false;
             _overallpercentage = 100.0;
             DBG( "Firmware Upgrade SUCCESS " );
             auto warningPopup = new ui::FilePopup( "Firmware Upgrade SUCCESS! Do you want to reboot a device ?", false, true, true );
-            mt::utils::showDialog( "SUCCESS!", warningPopup, [&]( int R ) {
+            mt::utils::showDialog( "SUCCESS!", warningPopup, [this, warningPopup]( int R ) {
                 if( R == UI::APPLY )
                 {
-                    if( system( "reboot -nf" ) == 0 )
+                    if( system( "sync && reboot" ) == 0 )
                         DBG( "Rebooting the device so new firmware will apply" );
                 }
                 else if( R == UI::CANCEL )
@@ -132,8 +143,9 @@ namespace kick_ui
         }
         else if( data.command_status == mt::RECOVERY_STATUS::FAILURE || data.command_status == mt::RECOVERY_STATUS::LINUX_FAILURE )
         {
+            updateStarted = false;
             auto warningPopup = new ui::FilePopup( "Firmware Update Failed", true, false, false );
-            mt::utils::showDialog( "WARNING!", warningPopup, [&]( int R ) {
+            mt::utils::showDialog( "WARNING!", warningPopup, [this, warningPopup]( int R ) {
                 if( R == UI::CANCEL )
                     closeScreen();
                 if( warningPopup ) delete warningPopup;
@@ -146,6 +158,13 @@ namespace kick_ui
 
     void SWUpdateScreen::getUsbupdateStatus( mt::usbmsg_t& data )
     {
+        if( !juce::MessageManager::getInstance()->isThisTheMessageThread() )
+        {
+            juce::Component::SafePointer<SWUpdateScreen> safe(this);
+            juce::MessageManager::callAsync([safe, data]() mutable { if( safe ) safe->getUsbupdateStatus(data); });
+            return;
+        }
+        if(downloadCompleted) return; // Ignore late USB status after ownership passes to the flasher.
         if( data.command_status == mt::USB_STATUS::U_INIT )
         {
             DBG( "INIT" );
@@ -163,49 +182,29 @@ namespace kick_ui
         }
         else if( data.command_status == mt::USB_STATUS::U_DONE )
         {
+            downloadCompleted = true;
             _overallLabel = "Download done..";
             DBG( "USB Download DONE<<" << juce::String( data.percentage ) );
             _overallLabel      = "Validating Image....";
             _overallpercentage = 0;
             mt::USBFunctionFS::getUSBInstance().stop();
-            mt::SwUpdateErrorCode_t status = mt::FirmwareUpdate::getSwupdateInstance().validateImage( true );
-            if( status == mt::SwUpdateErrorCode_t::SW_FAILED )
-            {
-                _overallLabel = "Image Validation failed";
-                DBG( "IMAGE VALIDATION FAILED" );
-            }
-            else if( status == mt::SwUpdateErrorCode_t::IMAGE_EXTRACTION_E || mt::SwUpdateErrorCode_t::IMAGE_EXTRACTION_E )
-            {
-                _overallLabel = "InValid Image..";
-            }
-            if( status == mt::SwUpdateErrorCode_t::SW_SUCCESS )
-            {
-#if 0
-                mt::VersionComparisonResult currentver = mt::FirmwareUpdate::getSwupdateInstance().compareVerison();
-                if( currentver == mt::VersionComparisonResult::Equal ) //both image version is same
-                {
-                    DBG( "You are already updated image" );
-                }
-                else if( currentver == mt::VersionComparisonResult::Greater ) //current version is higher then image placed
-                {
-                    DBG( "Sw version is older then current version" );
-                }
-                else if( currentver == mt::VersionComparisonResult::Error ) //current version is higher then image placed
-                {
-                    DBG( "Failed to get SwVersion" );
-                }
-                else
-                {
-#endif
-                DBG( "Firmware Image Varification successFul" );
-                std::thread( [&]() {
-                    mt::FirmwareUpdate::getSwupdateInstance().updateFirmware();
-                } ).detach();
-                //}
-            }
+            juce::Component::SafePointer<SWUpdateScreen> safe(this);
+            std::thread([safe] {
+                auto& updater = mt::FirmwareUpdate::getSwupdateInstance();
+                const auto status = updater.validateImage(true);
+                if(status == mt::SwUpdateErrorCode_t::SW_SUCCESS) updater.updateFirmware();
+                else juce::MessageManager::callAsync([safe] {
+                    if(!safe) return;
+                    safe->updateStarted = false;
+                    safe->_overallLabel = "Image validation failed";
+                    safe->header.showBackButton(true);
+                });
+            }).detach();
         }
         else if( data.command_status == mt::USB_STATUS::U_FAILED )
         {
+            updateStarted = false;
+            header.showBackButton(true);
             DBG( "Firmware Download FAILED" );
             _overallLabel      = "Download done..";
             _overallpercentage = 0.0;
@@ -213,6 +212,7 @@ namespace kick_ui
         }
         else if( data.command_status == mt::USB_STATUS::U_TIMEOUT )
         {
+            updateStarted = false;
             DBG( "U_TIMEOUT" );
             _overallLabel      = "Connection Timed Out";
             _overallpercentage = 0.0;
@@ -229,7 +229,7 @@ namespace kick_ui
     void SWUpdateScreen::handleCommand( CPktMgr::HWMsg_t& f_hwMsg )
     {
         mt::MCUUpdateAction flag = mt::MCUUpdateAction::EN_SW_UPDATE_FAILURE;
-        if( contracts::DclContractsHelper::isSoftwareUpdateMessage( f_hwMsg ) )
+        if( contracts::DclContractsHelper::isSoftwareUpdateMessage( f_hwMsg ) && !f_hwMsg.data.empty() )
         {
 #ifdef DEBUG_FWUPDATE
             DBG( "SwUtility - Handle Command Enter" );

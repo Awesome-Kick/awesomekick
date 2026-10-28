@@ -349,14 +349,24 @@ namespace kick_ui
         auto&        ae        = mt::getAudioInterface();
         auto         prjLoaded = ae.isProjectLoaded();
         juce::String log;
-        log += "Data[0] From DCL:" + juce::String( f_HwMsg.data[0] ) + " cmd From DCL : " + juce::String( f_HwMsg.pktCmd ) + +" type From DCL : " + juce::String( f_HwMsg.pktType );
+        log += "Data[0] From DCL:" + juce::String( f_HwMsg.data.empty() ? -1 : f_HwMsg.data[0] ) + " cmd From DCL : " + juce::String( f_HwMsg.pktCmd ) + +" type From DCL : " + juce::String( f_HwMsg.pktType );
         juce::Logger::writeToLog( log );
 
+        if( contracts::DclContractsHelper::isSoftwareUpdateMessage(f_HwMsg) )
+        {
+            if( !f_HwMsg.data.empty() )
+            {
+                const auto code = f_HwMsg.data[0];
+                mt::FirmwareUpdate::getSwupdateInstance().setMcuUpdateState(code == 1 ? mt::MCUUpdateAction::EN_SW_UPDATE_BEGIN_TRANSFER : code == 6 ? mt::MCUUpdateAction::EN_SW_UPDATE_FAILURE : mt::MCUUpdateAction::EN_SW_UPDATE_ACK);
+            }
+            return;
+        }
+        if( getCurrentScreen() == Screen::SWUpdateWindow && !contracts::DclContractsHelper::isSystemMessage(f_HwMsg) ) return;
         if( contracts::DclContractsHelper::isSystemMessage( f_HwMsg ) )
         {
-            if( contracts::DclContractsHelper::isSoftwareVersionMessage( f_HwMsg ) )
+            if( contracts::DclContractsHelper::isSoftwareVersionMessage( f_HwMsg ) && f_HwMsg.data.size() >= 2 )
             {
-                mt::HwPref::getHwPref().setSurfaceVersion( juce::String( f_HwMsg.data[0] ) + "." + juce::String( f_HwMsg.data[1] ) );
+                mt::HwPref::getHwPref().setSurfaceVersion( juce::String( f_HwMsg.data.empty() ? -1 : f_HwMsg.data[0] ) + "." + juce::String( f_HwMsg.data[1] ) );
                 return;
             }
             if( contracts::DclContractsHelper::isSystemCommInit( f_HwMsg ) )

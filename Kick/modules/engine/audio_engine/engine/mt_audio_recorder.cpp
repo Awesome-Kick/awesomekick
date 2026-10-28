@@ -171,9 +171,9 @@ namespace mt
         if( _sampler ) _sampler->reset();
     }
 
-    void MTAudioRecorderManager::saveRecording( const std::string& FilePath )
+    bool MTAudioRecorderManager::saveRecording( const std::string& FilePath )
     {
-        if( _sampler ) _sampler->saveRecording( FilePath );
+        return _sampler && _sampler->saveRecording(FilePath);
     }
 
     void MTAudioRecorderManager::startRecorderPreview( double fromStartTimeInSeconds )
@@ -189,6 +189,12 @@ namespace mt
     juce::AudioBuffer<float>& MTAudioRecorderManager::getRecorderAudioBuffer()
     {
         return _sampler ? _sampler->getAudioBuffer() : _recBufEmpty;
+    }
+
+    void MTAudioRecorderManager::copyRecorderThumbnailBlock(int& start, juce::AudioBuffer<float>& destination, int& totalFrames, double& rate)
+    {
+        if(_sampler) _sampler->copyThumbnailBlock(start, destination, totalFrames, rate);
+        else { destination.setSize(0,0); totalFrames = 0; rate = 0.0; }
     }
 
     void MTAudioRecorderManager::setRecorderListener( MTRecorderListener& Listener )

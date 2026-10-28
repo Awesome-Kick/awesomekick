@@ -123,7 +123,7 @@ namespace kick_ui
         // Defaults...
         selectors[0].setToggleState( true, juce::sendNotification );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_SettingsScreen" );
         } );
     }

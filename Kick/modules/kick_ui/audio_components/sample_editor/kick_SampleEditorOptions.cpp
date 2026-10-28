@@ -304,7 +304,7 @@ namespace mt
 
             manualButton.setToggleState( true, juce::sendNotification );
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 manualButton.setToggleButtonText( "Manual", "Manual" );
                 thresholdButton.setToggleButtonText( "Threshold", "Threshold" );
                 regionsButton.setToggleButtonText( "Regions", "Regions" );
@@ -468,7 +468,7 @@ namespace mt
                     xFadeNumber.setValueBounds( 0, value - 1, 0 );
             } );
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 repeat.setToggleButtonText( "Repeat", "Repeat" );
                 loopLock.setToggleButtonText( "Loop Lock", "Loop Lock" );
                 linkSlice.setToggleButtonText( "Link Slice", "Link Slice" );
@@ -688,7 +688,7 @@ namespace mt
                 seData.setLinkSlices( linkSlice.getToggleState() );
             };
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 repeat.setToggleButtonText( "Repeat", "Repeat" );
                 loopLock.setToggleButtonText( "Loop Lock", "Loop Lock" );
                 linkSlice.setToggleButtonText( "Link Slice", "Link Slice" );

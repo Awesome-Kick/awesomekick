@@ -55,7 +55,7 @@ namespace kick_ui
         screen.setValueColour( ui::Theme::textColour( 1 ) );
         screen.setValueFontHeight( 18 );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             custom.setToggleButtonText( "Custom", "Custom" );
             screen.setToggleButtonText( "Screen", "Screen" );
             header.setIcon( "Icon_qlink" );

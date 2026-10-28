@@ -215,6 +215,7 @@ namespace ui
         }
 
     private:
+        std::atomic<unsigned> selectionRevision{ 0 };
         BoxType    type;
         KickList   list;
         KickLabel  title{ "" }, value{ "" };

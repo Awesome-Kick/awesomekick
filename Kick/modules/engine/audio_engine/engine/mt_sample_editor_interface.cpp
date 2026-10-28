@@ -13,7 +13,6 @@ namespace mt
             formatManager.registerBasicFormats();
             //transportSource.addChangeListener( this );
             undoManager.addChangeListener( this );
-            MTSampleEditUndoAction::setUndoActions( &undoActions );
             //move to AppHome and set global undo size limits
             //undoManager.setMaxNumberOfStoredUnits(75000, 1);
         }
@@ -21,7 +20,6 @@ namespace mt
         ~MTSampleEditorData()
         {
             undoManager.removeChangeListener( this );
-            MTSampleEditUndoAction::cleanup();
         }
 
         juce::AudioThumbnailBase* getThumbnail()
@@ -230,7 +228,6 @@ namespace mt
             {
                 getAudioInterface().getUndoManager().beginNewTransaction();
                 auto action = new MTSampleEditUndoAction( actionObject );
-                undoActions.push_back( action );
                 performed = getAudioInterface().getUndoManager().perform( action );
             }
             else
@@ -361,10 +358,7 @@ namespace mt
             if( sourceFile != source )
             {
                 // clear undo state and history
-                MTSampleEditUndoAction::setClearHistory( true );
-                undoActions.clear();
                 getAudioInterface().getUndoManager().clearUndoHistory();
-                MTSampleEditUndoAction::setClearHistory( false );
                 sourceModifiedTime = source.getLastModificationTime();
             }
 
@@ -400,7 +394,6 @@ namespace mt
         std::vector<MTSampleModifiedListener*> smpModifiedlisteners;
         juce::UndoManager&                     undoManager{ getAudioInterface().getUndoManager() };
         juce::Time                             sourceModifiedTime;
-        std::list<MTSampleEditUndoAction*>     undoActions;
 
     private:
         JUCE_DECLARE_NON_MOVEABLE( MTSampleEditorData )

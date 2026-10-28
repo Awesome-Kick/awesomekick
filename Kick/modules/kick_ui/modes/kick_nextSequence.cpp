@@ -212,7 +212,7 @@ namespace kick_ui
             else if( !clear.isEnabled() )
                 clear.setEnabled( true );
         };
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             nextBar.setToggleButtonText( "Next Bar", "Next Bar" );
             sudden.setToggleButtonText( "Sudden", "Sudden" );
             clear.setToggleButtonText( "Clear", "Clear" );
@@ -566,7 +566,7 @@ namespace kick_ui
 
         header.onBackButtonPressed = [this]( bool ) { closeScreen(); };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             header.setIcon( "Icon_NextSeq" );
         } );
     }

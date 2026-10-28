@@ -35,7 +35,7 @@ namespace kick_ui
         ampAhdsrBtn.addListener( this );
         feAhdsrBtn.addListener( this );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             feAhdsrBtn.setImages( "effect3" );
             ampAhdsrBtn.setImages( "effect3" );
         } );

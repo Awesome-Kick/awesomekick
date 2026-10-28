@@ -216,7 +216,7 @@ namespace kick_ui
                 onPadChange( bank.getSelectedIndex(), index );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             type.setToggleButtonText( "PROGRAM", "PAD" );
         } );
     }
@@ -302,7 +302,7 @@ namespace kick_ui
         ins4.setValueColour( ui::Theme::textColour( 1 ) );
         ins4.setValueFontHeight( 18 );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             mix.setToggleButtonText( "Mix", "Mix" );
             midi.setToggleButtonText( "MIDI CC", "MIDI CC" );
             program.setToggleButtonText( "Program", "Program" );

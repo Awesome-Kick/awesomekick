@@ -76,16 +76,69 @@ namespace mt
             if( uniqueNoteId < (int)it[IDs::id] )
                 uniqueNoteId = it[IDs::id];
 
-            int start = it.getProperty( IDs::start );
-            int id    = it.getProperty( IDs::id );
-            if( !notes.contains( start ) )
-            {
-                notes.set( start, new juce::HashMap<int, MTNote*>() );
-            }
-            notes[start]->set( id, new MTNote( it ) );
+            syncPlaybackNote( it );
         }
+        vTree.addListener( &noteListener );
 
         deSelectAllNotes();
+    }
+
+    MTNoteList::~MTNoteList()
+    {
+        cancelPendingUpdate();
+        vTree.removeListener( &noteListener );
+    }
+
+    std::vector<MTNoteList::PlaybackNote> MTNoteList::getNotesAtPos( int start ) const
+    {
+        const juce::ScopedLock guard( lock );
+        std::vector<PlaybackNote> result;
+        auto bucket = notes.find( start );
+        if( bucket != notes.end() )
+            for( const auto& entry : bucket->second ) result.push_back( entry.second );
+        return result;
+    }
+
+    void MTNoteList::syncPlaybackNote( const juce::ValueTree& note, bool remove )
+    {
+        if( !note.hasType( IDs::NOTE ) ) return;
+        const juce::ScopedLock guard( lock );
+        const int id = note[IDs::id];
+        auto previous = notePositions.find( id );
+        if( previous != notePositions.end() )
+        {
+            auto bucket = notes.find( previous->second );
+            if( bucket != notes.end() )
+            {
+                bucket->second.erase( id );
+                if( bucket->second.empty() ) notes.erase( bucket );
+            }
+            notePositions.erase( previous );
+        }
+        if( !remove )
+        {
+            PlaybackNote data{ int(note[IDs::no]), int(note[IDs::velocity]),
+                int(note.getProperty(IDs::probability, 100)), int(note.getProperty(IDs::ratchet, 1)),
+                int(note[IDs::start]), int(note[IDs::length]) };
+            notes[data.start][id] = data;
+            notePositions[id] = data.start;
+            uniqueNoteId = juce::jmax( uniqueNoteId, id );
+        }
+        else selected.removeAllInstancesOf( note );
+        triggerAsyncUpdate();
+    }
+
+    void MTNoteList::valueTreePropertyChanged( juce::ValueTree& tree, const juce::Identifier& )
+    {
+        if( tree.getParent() == vTree ) syncPlaybackNote( tree );
+    }
+    void MTNoteList::valueTreeChildAdded( juce::ValueTree& parentTree, juce::ValueTree& child )
+    {
+        if( parentTree == vTree ) syncPlaybackNote( child );
+    }
+    void MTNoteList::valueTreeChildRemoved( juce::ValueTree& parentTree, juce::ValueTree& child, int )
+    {
+        if( parentTree == vTree ) syncPlaybackNote( child, true );
     }
 
     void MTNoteList::sort()
@@ -433,18 +486,8 @@ namespace mt
         if( NoteVT.isValid() )
         {
             vTree.addChild( NoteVT, -1, um );
-            MTNote* n     = new MTNote( NoteVT );
-            int     start = n->start;
-            int     id    = n->id;
-            //noteCount++;
-            /*juce::Logger::writeToLog( "Note Added, " + juce::String( n->number.get() ) +
-                ", Note Count, " + juce::String( vTree.getNumChildren() ) + ", Count, " + juce::String( noteCount) );*/
-
-            if( !notes.contains( start ) )
-            {
-                notes.set( start, new juce::HashMap<int, MTNote*>() );
-            }
-            notes[start]->set( id, n );
+            MTNote data( NoteVT );
+            auto* n = &data;
             // MIDi file...
             if( pMidiSeq )
             {
@@ -531,18 +574,6 @@ namespace mt
     {
         if( NoteVT.getNumProperties() )
         {
-            int     start  = NoteVT.getProperty( IDs::start );
-            int     id     = NoteVT.getProperty( IDs::id );
-            MTNote* p      = ( *notes[start] )[id];
-            int     number = p->number.get();
-            notes[start]->remove( id );
-            delete p;
-            if( notes[start]->size() == 0 )
-            {
-                juce::HashMap<int, MTNote*>* map = notes[start];
-                notes.remove( start );
-                delete map;
-            }
             selected.removeAllInstancesOf( NoteVT );
             vTree.removeChild( NoteVT, um );
             triggerAsyncUpdate();
@@ -672,7 +703,7 @@ namespace mt
         juce::ScopedLock sl( lock );
         selected.clearQuick();
         vTree.removeAllChildren( um );
-        notes.clear();
+
         triggerAsyncUpdate();
         return 0;
     }
@@ -680,22 +711,8 @@ namespace mt
     int MTNoteList::deleteSelectedNotes()
     {
         juce::ScopedLock sl( lock );
-        for( auto it : selected )
-        {
-            int     start  = it.getProperty( IDs::start );
-            int     id     = it.getProperty( IDs::id );
-            MTNote* p      = ( *notes[start] )[id];
-            int     number = p->number.get();
-            notes[start]->remove( id );
-            delete p;
-            if( notes[start]->size() == 0 )
-            {
-                juce::HashMap<int, MTNote*>* map = notes[start];
-                notes.remove( start );
-                delete map;
-            }
-            vTree.removeChild( it, um );
-        }
+        const auto selection = selected;
+        for( auto it : selection ) vTree.removeChild( it, um );
         selected.clearQuick();
         triggerAsyncUpdate();
         return 0;
@@ -1237,35 +1254,7 @@ namespace mt
             if( 0 >= Note.length.get() ) Note.length = 1;
         }
 
-        auto prevStart = Note.start.get();
-        Note.start     = NewStart;
-        if( auto* innerMap = notes[prevStart] )
-        {
-            if( auto* keyNote = ( *innerMap )[Note.id.get()] )
-            {
-                innerMap->remove( Note.id.get() );
-                if( innerMap->size() == 0 )
-                {
-                    notes.remove( prevStart );
-                    delete innerMap;
-                }
-
-                if( !notes.contains( Note.start.get() ) )
-                    notes.set( Note.start.get(), new juce::HashMap<int, MTNote*>() );
-
-                notes[Note.start.get()]->set( Note.id.get(), keyNote );
-
-                // MIDi file...
-                if( pMidiSeq )
-                {
-                    juce::MidiMessage msgOn  = juce::MidiMessage::noteOn( 1, keyNote->number.get(), (juce::uint8)keyNote->velocity.get() );
-                    juce::MidiMessage msgOff = juce::MidiMessage::noteOff( 1, keyNote->number.get(), (juce::uint8)keyNote->velocity.get() );
-                    pMidiSeq->addEvent( msgOn, keyNote->start.get() );
-                    pMidiSeq->addEvent( msgOff, keyNote->start.get() + keyNote->length.get() );
-                    pMidiSeq->updateMatchedPairs();
-                }
-            }
-        }
+        Note.start = NewStart; // The tree listener updates the playback snapshot, including undo/redo.
         return 0;
     }
 

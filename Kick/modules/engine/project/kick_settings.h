@@ -111,6 +111,7 @@ namespace mt
         void setup( juce::ValueTree VT, juce::UndoManager* Undo );
         bool isValid();
 
+        Atomic<bool> externalClock;
         Atomic<bool> ipTrackState;
         Atomic<bool> opTrackState;
         Atomic<bool> ipControlState;

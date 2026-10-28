@@ -30,7 +30,7 @@ namespace mt
         std::vector<juce::Image> LoadAnimation::gifImages;
         LoadAnimation::LoadAnimation()
         {
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 gifImages.clear();
                 loadImages();
             } );

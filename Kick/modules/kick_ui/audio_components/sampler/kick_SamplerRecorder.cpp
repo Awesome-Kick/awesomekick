@@ -51,7 +51,7 @@ namespace kick_ui
 
         ae.setRecorderListener( recorderListner );
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             recordButton.setImages( "sampler_Rec" );
             setRecordMode( mode );
         } );
@@ -60,6 +60,8 @@ namespace kick_ui
     SamplerRecorder::~SamplerRecorder()
     {
         stopTimer();
+        thumbnailNextSample = 0;
+        thumbnailFrames = -1;
         thumbnail.clear();
         thumbnailCache.clear();
     }
@@ -337,6 +339,8 @@ namespace kick_ui
     void SamplerRecorder::clearRecording()
     {
         _progress = 0.0;
+        thumbnailNextSample = 0;
+        thumbnailFrames = -1;
         thumbnail.clear();
         thumbnailCache.clear();
         stopRecording( true );
@@ -351,6 +355,8 @@ namespace kick_ui
 
     void SamplerRecorder::startRecording()
     {
+        thumbnailNextSample = 0;
+        thumbnailFrames = -1;
         _progress     = 0.0;
         _recordLength = maxLengthTimerControl.getTime();
         //TODO
@@ -406,8 +412,22 @@ namespace kick_ui
     }
     void SamplerRecorder::setThumbnail()
     {
-        auto& source = ae.getRecorderAudioBuffer();
-        thumbnail.setSource( &source, source.getNumSamples(), 6783672364 );
+        int start = thumbnailNextSample, total = 0;
+        double rate = 0.0;
+        ae.copyRecorderThumbnailBlock(start, thumbnailBlock, total, rate);
+        if(total != thumbnailFrames || rate != thumbnailRate || start < thumbnailNextSample)
+        {
+            thumbnail.reset(thumbnailBlock.getNumChannels(), rate > 0 ? rate : 44100.0, total);
+            thumbnailFrames = total;
+            thumbnailRate = rate;
+            if(start > 0)
+            {
+                start = 0;
+                ae.copyRecorderThumbnailBlock(start, thumbnailBlock, total, rate);
+            }
+        }
+        if(thumbnailBlock.getNumSamples() > 0) thumbnail.addBlock(start, thumbnailBlock, 0, thumbnailBlock.getNumSamples());
+        thumbnailNextSample = start + thumbnailBlock.getNumSamples();
         triggerAsyncUpdate();
     }
     void SamplerRecorder::timerCallback()

@@ -10,7 +10,7 @@ namespace ui
         juce::String getUsbMountedPath();
         bool         getSdCardStatus();
         bool         getUsbStatus();
-        juce::int32  calculateFolderSize( juce::File filePath );
+        juce::int64  calculateFolderSize( juce::File filePath );
         void         setSdCardEjectStatus( bool );
         void         setUsbEjectStatus( bool );
         bool         getSdCardEjectStatus();

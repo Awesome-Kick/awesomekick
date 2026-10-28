@@ -66,7 +66,7 @@ namespace mt
         */
 
         // Setup handler for program being deleted
-        programBeingDeleted.connect( [this]( MTIProgram* MTIProg ) {
+        programDeletionConnection = programBeingDeleted.connect( [this]( MTIProgram* MTIProg ) {
             if( program.load() == MTIProg )
             {
                 setProgram( nullptr );
@@ -109,7 +109,7 @@ namespace mt
     }
 
     void MTTrack::setTranspose( int Transpose ) { MTITrackData::transpose = Transpose; }
-    void MTTrack::setMidiPort( const juce::String& MidiPort ) { MTITrackData::midiPort.setValue( midiPort, undoManager ); }
+    void MTTrack::setMidiPort( const juce::String& MidiPort ) { MTITrackData::midiPort.setValue( MidiPort, undoManager ); }
     void MTTrack::setMidiChannel( int MidiChannel ) { MTITrackData::midiChannel = MidiChannel; }
     void MTTrack::setMidiOutChannel( int MidiChannel ) { MTITrackData::midiOutChannel = MidiChannel; }
     void MTTrack::setMuteGroup( int Group ) { MTITrackData::muteGroup = Group; }
@@ -134,6 +134,7 @@ namespace mt
 
     void MTTrack::progChangeHandler()
     {
+        const juce::ScopedLock guard(lock);
         auto newProgram = manager.getProgramById( programId.get() );
         if( newProgram != program.load() )
         {
@@ -192,43 +193,54 @@ namespace mt
 
     void MTTrack::play()
     {
+        const juce::ScopedLock guard(lock);
         isPlaying = true;
         // The variables are cleared here and in stop as the workflow may be pause->playstart. if Ui calls stop and resume then it may lead to issues.
         trackPlayhead.clear();
         trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() - 1 ) : 0;
         prevTick              = 0;
+        scheduleStart         = true;
         tickCtr               = 0;
-        tickPos               = 0;
+        tickOffset = seq.isLooping.get() ? seq.getTicksUpto(juce::jmax(0, seq.getLoopStart())) : 0;
+        tickPos = (unsigned)tickOffset;
     }
 
     void MTTrack::resume()
     {
+        const juce::ScopedLock guard(lock);
         isPlaying = true;
     }
 
     void MTTrack::pause()
     {
+        const juce::ScopedLock guard(lock);
         isPlaying = false;
         stopAllMidiNotes();
     }
 
     void MTTrack::stop()
     {
+        const juce::ScopedLock guard(lock);
         stopAllMidiNotes();
         isPlaying = false;
         trackPlayhead.clear();
         trackPlayhead.bnb.bar = seq.isLooping.get() ? juce::jmax<int>( 0, seq.getLoopStart() - 1 ) : 0;
         prevTick              = 0;
+        scheduleStart         = true;
         tickCtr               = 0;
-        tickPos               = 0;
+        tickOffset = seq.isLooping.get() ? seq.getTicksUpto(juce::jmax(0, seq.getLoopStart())) : 0;
+        tickPos = (unsigned)tickOffset;
     }
 
     void MTTrack::seek( int posInTicks )
     {
-        tickPos = posInTicks;
-        if( seq.isLooping.get() )
-            while( tickPos > lengthInTicks.load() ) // This is cheap modulo
-                tickPos -= lengthInTicks.load();
+        const juce::ScopedLock guard(lock);
+        tickPos = juce::jmax(0, posInTicks);
+        tickOffset = int64_t(tickPos) - int64_t(prevTick);
+        scheduleStart = true;
+        if( seq.isLooping.get() && lengthInTicks.load() > 0 )
+            while( tickPos >= lengthInTicks.load() ) // This is cheap modulo
+                tickPos %= lengthInTicks.load();
 
         //// restrict the position between loop start and sequence length.
         //tickPos  = juce::jlimit<int>( 0, seq.getTicksUpto( getLength() ), posInTicks );
@@ -285,42 +297,40 @@ namespace mt
     void MTTrack::fillMidiMessages( unsigned int tick, unsigned int PrevTick, int MidiChannel )
     {
         //juce::Logger::writeToLog( "prevTick, " + juce::String( PrevTick ) + "PresentTick, " + juce::String(tick));
-        juce::HashMap<int, MTNote*>* map = nullptr;
-        for( auto pos = PrevTick + 1; pos <= tick; pos++ )
+
+        for( auto pos = scheduleStart ? PrevTick : PrevTick + 1; pos <= tick; pos++ )
         {
-            int posOnTrack = pos % lengthInTicks.load();
-            map            = getNotesAtPos( posOnTrack );
-            if( !map ) continue;
-            for( const auto& it : *map )
+            while(!queuedNotes.empty() && queuedNotes.begin()->first <= pos)
             {
-                int noteNo = getEffectiveNoteNo( it->number.get() );
+                midiMsgs.add(queuedNotes.begin()->second);
+                queuedNotes.erase(queuedNotes.begin());
+            }
+            int posOnTrack = int((int64_t(pos) + tickOffset) % lengthInTicks.load());
+            for( const auto& it : getNotesAtPos( posOnTrack ) )
+            {
+                int noteNo = getEffectiveNoteNo( it.number );
                 if( !isTrackEffectivelyMuted() && CommonUtils::isValidMidiNote( noteNo ) )
                 {
                     // Check probability of playback.
                     auto rand = AudIO::utils::random<int>( PROBABILITY::MIN, PROBABILITY::MAX );
-                    if( rand <= it->probability.get() )
+                    if( rand <= it.probability )
                     {
-                        int noteVelocity = getEffectiveNoteVelocity( it->velocity.get() );
+                        int noteVelocity = getEffectiveNoteVelocity( it.velocity );
 
                         // Trigger note now.
                         midiMsgs.insert( -1, juce::MidiMessage::noteOn( MidiChannel, noteNo, (juce::uint8)noteVelocity ) );
 
                         // Check Ratchet
-                        auto parts = (int)( it->ratchet.get() );
-                        if( 1 < parts )
+                        const auto length = juce::jmax(1, it.length);
+                        const auto parts = juce::jlimit(1, length, it.ratchet);
+                        for(int part = 1; part < parts; ++part)
                         {
-                            auto time      = tickCtr;
-                            auto partTicks = ( it->length.get() / parts );
-                            // Queue Retriggers...
-                            for( auto i = 2; i <= parts; ++i )
-                            {
-                                queuedNotes.insert( { time - 1, juce::MidiMessage::noteOff( MidiChannel, noteNo, (juce::uint8)noteVelocity ) } );
-                                time += partTicks;
-                                queuedNotes.insert( { time, juce::MidiMessage::noteOn( MidiChannel, noteNo, (juce::uint8)noteVelocity ) } );
-                            }
+                            const auto time = pos + (unsigned)(int64_t(length) * part / parts);
+                            queuedNotes.insert({time - 1, juce::MidiMessage::noteOff(MidiChannel, noteNo)});
+                            queuedNotes.insert({time, juce::MidiMessage::noteOn(MidiChannel, noteNo, (juce::uint8)noteVelocity)});
                         }
                         // Queue last note off.
-                        queuedNotes.insert( { ( pos + it->length.get() - 1 ), juce::MidiMessage::noteOff( MidiChannel, noteNo, (juce::uint8)noteVelocity ) } ); // Queue note-off
+                        queuedNotes.insert( { ( pos + length - 1 ), juce::MidiMessage::noteOff( MidiChannel, noteNo, (juce::uint8)noteVelocity ) } ); // Queue note-off
                     }
                 }
             }
@@ -329,6 +339,7 @@ namespace mt
 
     void MTTrack::onTick( unsigned int Tick )
     {
+        const juce::ScopedLock guard(lock);
         auto pProgram = program.load();
         if( !pProgram || ( 0 == lengthInTicks.load() ) )
             return;
@@ -346,25 +357,14 @@ namespace mt
 
         const juce::ScopedLock sl( lock );
 
-        // Check if any pending queued note off's are to be sent...
-        for( auto p = queuedNotes.begin(); p != queuedNotes.end(); )
-        {
-            if( p->first <= tickCtr )
-            {
-                midiMsgs.insert( -1, p->second );
-                p = queuedNotes.erase( p );
-            }
-            else
-                ++p;
-        }
-
         fillMidiMessages( Tick, prevTick, trackMidiOutChannel );
+        scheduleStart = false;
 
         prevTick = Tick;
 
         if( tickPos >= lengthInTicks.load() )
         {
-            tickPos -= lengthInTicks.load();
+            tickPos %= lengthInTicks.load();
             noteIdx = 0;
         }
 
@@ -380,30 +380,39 @@ namespace mt
 
     int MTTrack::processIncomingMidiMessage( const juce::MidiMessage& Msg )
     {
+        const juce::ScopedLock guard(lock);
         auto pProgram = program.load();
 
         // While muted only releases get through: dropping them leaves gated notes
         // (instruments, held keygroups) sounding forever once the track is unmuted.
-        const bool isRelease = Msg.isNoteOff() || Msg.isAllNotesOff() || Msg.isAllSoundOff();
+        const bool isRelease = Msg.isNoteOff() || Msg.isAllNotesOff() || Msg.isAllSoundOff() || Msg.isResetAllControllers()
+            || (Msg.isControllerOfType(64) && Msg.getControllerValue() < 64);
         if( pProgram && ( !isTrackEffectivelyMuted() || isRelease ) )
         {
             juce::Array<juce::MidiMessage> list;
 
             if( Msg.isNoteOnOrOff() )
             {
-                auto effCh = getMidiOutChannel();
-                auto effNo = getEffectiveNoteNo( Msg.getNoteNumber() );
-
+                auto& destination = liveDestinations[juce::jlimit(0, 15, Msg.getChannel() - 1)][Msg.getNoteNumber()];
                 if( Msg.isNoteOn() )
                 {
-                    auto effVel = getEffectiveNoteVelocity( Msg.getVelocity() );
-                    list.insert( -1, juce::MidiMessage::noteOn( effCh, effNo, (juce::uint8)effVel ) );
+                    if( destination.note >= 0 ) list.add( juce::MidiMessage::noteOff(destination.channel, destination.note) );
+                    destination = { getEffectiveNoteNo(Msg.getNoteNumber()), getMidiOutChannel() };
+                    if( CommonUtils::isValidMidiNote(destination.note) )
+                        list.add( juce::MidiMessage::noteOn(destination.channel, destination.note, (juce::uint8)getEffectiveNoteVelocity(Msg.getVelocity())) );
+                    else destination.note = -1;
                 }
-                else
-                    list.insert( -1, juce::MidiMessage::noteOff( effCh, effNo ) );
+                else if( destination.note >= 0 )
+                {
+                    list.add( juce::MidiMessage::noteOff(destination.channel, destination.note) );
+                    destination.note = -1;
+                }
             }
-            else if( Msg.isAftertouch() ) // the same note number as its note-on
-                list.insert( -1, juce::MidiMessage::aftertouchChange( getMidiOutChannel(), getEffectiveNoteNo( Msg.getNoteNumber() ), Msg.getAfterTouchValue() ) );
+            else if( Msg.isAftertouch() )
+            {
+                const auto destination = liveDestinations[juce::jlimit(0, 15, Msg.getChannel() - 1)][Msg.getNoteNumber()];
+                if( destination.note >= 0 ) list.add( juce::MidiMessage::aftertouchChange(destination.channel, destination.note, Msg.getAfterTouchValue()) );
+            }
             else
                 list.insert( -1, Msg );
 
@@ -417,7 +426,7 @@ namespace mt
 
     int MTTrack::processIncomingMidiMessage( const MTMidiMessage& Msg )
     {
-        if( isMidiInAllowed( Msg.source->getName(), Msg.message.getChannel() ) )
+        if( isMidiInAllowed( Msg.sourceName, Msg.message.getChannel() ) )
             return processIncomingMidiMessage( Msg.message );
         return -1;
     }
@@ -436,8 +445,18 @@ namespace mt
 
     inline void MTTrack::stopAllMidiNotes()
     {
-        auto msg = juce::MidiMessage::allNotesOff( getMidiOutChannel() );
-        processIncomingMidiMessage( msg );
+        const juce::ScopedLock guard(lock);
+        if(auto* target = program.load())
+        {
+            juce::Array<juce::MidiMessage> releases;
+            for(auto& channel : liveDestinations) for(auto& note : channel)
+            {
+                if(note.note >= 0) releases.add(juce::MidiMessage::noteOff(note.channel, note.note));
+                note.note = -1;
+            }
+            for(int channel = 1; channel <= 16; ++channel) releases.add(juce::MidiMessage::allNotesOff(channel));
+            target->noteProcess(releases);
+        }
         queuedNotes.clear();
     }
 

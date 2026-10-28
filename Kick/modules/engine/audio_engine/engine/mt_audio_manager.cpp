@@ -72,10 +72,19 @@ namespace mt
             //DBG( messageText );
             auto& msg = Msg.message;
 
-            if( msg.isMidiClock() ) {}
-            else if( msg.isMidiStart() ) {}
-            else if( msg.isMidiStop() ) {}
-            else if( msg.isMidiContinue() ) {}
+            const auto& controls = getSettings().midiControl;
+            const bool external = controls.externalClock();
+            const bool selectedInput = Msg.sourceName.isNotEmpty() && (controls.ipPortName().isEmpty() || Msg.sourceName == controls.ipPortName());
+            auto& clock = getMidiClock();
+            if( msg.isMidiClock() || msg.isMidiStart() || msg.isMidiStop() || msg.isMidiContinue() )
+            {
+                if(!external || !selectedInput) return;
+                if(!clock.isExternalClockSync()) clock.setClockSyncMode(CMidiClock::SyncMode::EXTERNAL_CLOCK);
+                if(msg.isMidiClock()) clock.tickExternal(Msg.receivedAtMilliseconds);
+                else if(msg.isMidiStop()) pause();
+                else if(msg.isMidiStart()) { stop(); play(selected.sequence); clock.start(true); }
+                else { resume(selected.sequence); clock.start(false); }
+            }
             else if( msg.isTempoMetaEvent() ) {}
             else if( msg.isTimeSignatureMetaEvent() ) {}
             else

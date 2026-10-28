@@ -749,7 +749,7 @@ namespace kick_ui
             kick_ui::signals::sigScreenOpen( kick_ui::Screen::MenuFileBrowser );
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             leftNav.setImages( "Icon_minus" );
             rightNav.setImages( "Icon_plus" );
             header.setIcon( "sEdit_Icon" );

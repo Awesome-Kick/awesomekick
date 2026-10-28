@@ -29,7 +29,7 @@ namespace mt
         programs.reserve( 64 );
 
         // Connect callbacks...
-        programNameChanged.connect( [&]( MTIProgram* ) { updateProgramList(); } );
+        programNameConnection = programNameChanged.connect( [&]( MTIProgram* ) { updateProgramList(); } );
     }
 
     MTAudioProgramManager::~MTAudioProgramManager()

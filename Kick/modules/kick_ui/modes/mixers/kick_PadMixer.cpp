@@ -80,7 +80,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             solo.setImages( "Solo_normal", "Solo_active" );
             mute.setImages( "Mute_normal", "Mute_active" );
         } );
@@ -189,7 +189,7 @@ namespace kick_ui
             }
         };
 
-        ui::themeChanged.connect( [&]() {
+        ui::connectTheme( *this, [&]() {
             padEnabler.setImages( "PadMix_Enable", "PadMix_Enable_Active" );
             header.setIcon( "Icon_PadMix" );
         } );

@@ -67,7 +67,7 @@ namespace kick_ui
                 }
             };
 
-            ui::themeChanged.connect( [&]() {
+            ui::connectTheme( *this, [&]() {
                 mute.setImages( "Mute_normal", "Mute_active" );
             } );
         };

@@ -31,6 +31,7 @@ namespace mt
     class MTAudioSequenceManager
     {
     public:
+        juce::CriticalSection& getSequenceLock() const { return sequenceLock; }
         explicit MTAudioSequenceManager( MTSelected& Selected, MTAudioManager& Manager );
         virtual ~MTAudioSequenceManager();
 
@@ -121,6 +122,8 @@ namespace mt
         int  createSequence( juce::ValueTree& VT );
 
     private:
+        sigslot::scoped_connection sequenceNameConnection;
+        mutable juce::CriticalSection sequenceLock;
         MTSelected&     selected;
         MTAudioManager& manager;
 
