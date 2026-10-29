@@ -18,6 +18,12 @@ namespace sim
         // scale 2.586 board units per photo pixel, so the 1024x600 screen matches the display).
         static constexpr int boardWidth  = 1800;
         static constexpr int boardHeight = 1790;
+        // Studio view (KICKEM_VIEW=studio, F2 or the Studio | Panel chip): landscape layout after the
+        // MPC Live style, the basis for later tablet / phone layouts.
+        static constexpr int studioWidth  = 2560;
+        static constexpr int studioHeight = 1440;
+
+        enum class View { panel, studio };
 
         SimulatorBoard();
         ~SimulatorBoard() override;
@@ -28,6 +34,12 @@ namespace sim
         bool keyPressed( const juce::KeyPress& key ) override;
         void visibilityChanged() override;
         void togglePlayStop();
+
+        /// Switch the layout; the board takes the view's size (boardWidth x boardHeight or studioWidth x studioHeight).
+        void setView( View v );
+        View getView() const { return view; }
+        /// Asked to switch the view (chip, F2); the owner switches and refits the window.
+        std::function<void( View )> onViewRequested;
 
     private:
         /// Keys first go to the focused component (often a firmware button, which JUCE "clicks" on space),
@@ -70,6 +82,9 @@ namespace sim
         /// KICKEM_SELFTEST=makedemo: build the playable demo projects (see kick_Simulator.cpp)
         /// "AwesomeKick Groove" + "Rusty Kit" (sequence, drum program, 2-bar pattern), save them and quit.
         void startMakeDemo();
+        /// KICKEM_SHOWCASE=1: load "AwesomeKick Groove", play it and (with KICKEM_SHOT=<folder>) save a full-size
+        /// picture of the board as awesomekick-<view>.png, then quit.
+        void startShowcase();
         /// Copies the playable bundled demos (<data>/demos) into the projects folder, see kick_Simulator.cpp.
         void installBundledContent();
         void timerCallback() override;
@@ -78,6 +93,14 @@ namespace sim
         std::unique_ptr<juce::Component>   popupTestContent;
 
         juce::Component& screen;
+        View             view { View::panel };
+        SimViewSwitch    viewSwitch;
+
+        /// Board coordinates of the firmware screen (1024x600 shown scaled) and of the LINK recess in the current view.
+        juce::Rectangle<int> screenArea() const;
+        juce::Rectangle<int> linkArea() const;
+        void                 paintPanel( juce::Graphics& g );
+        void                 paintStudio( juce::Graphics& g );
 
         // Left column
         /// Tooltips: the panel's own texts (tips), then a component's own tooltip, then the name of an
@@ -134,6 +157,14 @@ namespace sim
         Simulator();
         void paint( juce::Graphics& g ) override;
         void resized() override;
+        /// F2: switch between the panel and the studio view.
+        bool keyPressed( const juce::KeyPress& key ) override;
+        void setView( SimulatorBoard::View v );
+        void toggleView();
+        /// Board size of the current view (the window keeps its aspect ratio).
+        juce::Point<int> getBoardSize() const { return { board.getWidth(), board.getHeight() }; }
+        /// Called after a view switch, e.g. so the window can adapt its aspect ratio.
+        std::function<void()> onViewChanged;
 
     private:
         SimulatorBoard board;

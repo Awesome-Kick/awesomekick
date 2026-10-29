@@ -20,6 +20,16 @@ namespace sim
         const juce::Rectangle<int> cameraRect { 57, 52, 178, 77 };
         const juce::Rectangle<int> linkRect { 57, 641, 191, 156 };
 
+        // Studio view (board 2560 x 1440): screen scaled by 1308/1024 inside a black frame, panels as rounded areas.
+        namespace studio
+        {
+            const juce::Rectangle<int> screenRect { 316, 193, 1308, 766 };
+            const juce::Rectangle<int> frameRect { 304, 172, 1332, 808 };
+            const juce::Rectangle<int> linkRect { 1040, 1212, 191, 156 }; // centred at 1135,1290
+            const juce::Rectangle<int> areas[] = { { 12, 12, 2536, 148 }, { 12, 172, 280, 1256 }, { 1648, 172, 900, 1256 }, { 304, 992, 1332, 436 } };
+            const juce::Colour         background { 0xff1e1e1f }, area { 0xff2f2f30 };
+        }
+
         /// Diagnostics (set KICKEM_TRACE_MOUSE=1): log every mouse-down the app receives.
         struct MouseTrace : juce::MouseListener
         {
@@ -58,6 +68,12 @@ namespace sim
         }
         for( auto* b : { &linkBtn, &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
             addAndMakeVisible( b );
+        addAndMakeVisible( viewSwitch ); // last: on top of mainControl, which covers the whole studio board
+        viewSwitch.onSelect = [this]( bool studioView ) {
+            const auto v = studioView ? View::studio : View::panel;
+            if( v != view && onViewRequested )
+                onViewRequested( v );
+        };
 
         // MASTER and REC are analog pots on the KICK, outside the firmware. Here MASTER sets the output
         // level and REC the sampling input gain. Their start position (3/4) is unity gain; full left is silent.
@@ -115,7 +131,8 @@ namespace sim
 
         setWantsKeyboardFocus( true ); // space bar = PLAY / STOP, see keyPressed() and SpaceBar
         juce::Desktop::getInstance().addFocusChangeListener( &spaceBar );
-        setSize( boardWidth, boardHeight ); // last: resized() needs every child
+        // last: resized() needs every child
+        setView( juce::SystemStats::getEnvironmentVariable( "KICKEM_VIEW", {} ).equalsIgnoreCase( "studio" ) ? View::studio : View::panel );
 
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_TRACE_MOUSE", {} ).isNotEmpty() )
             juce::Desktop::getInstance().addGlobalMouseListener( &mouseTrace );
@@ -125,7 +142,11 @@ namespace sim
         if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SELFTEST", {} ).isNotEmpty() )
             startSelfTest();
         else
+        {
             installBundledContent();
+            if( juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOWCASE", {} ) == "1" )
+                startShowcase();
+        }
     }
 
     juce::String SimulatorBoard::Tooltips::getTipFor( juce::Component& c )
@@ -210,6 +231,7 @@ namespace sim
             if( tip.isNotEmpty() )
                 tooltips.tips[b] = tip;
         }
+        tooltips.tips[&viewSwitch] = "Switch the view: Studio (wide layout) or Panel (like the hardware). Key: F2";
         tooltips.tips[&masterKnob] = "MASTER: output level (drag or mouse wheel)";
         tooltips.tips[&recKnob]    = "REC: recording input gain for sampling";
         for( int i = 0; i < 4; ++i )
@@ -254,6 +276,12 @@ namespace sim
 
     bool SimulatorBoard::SpaceBar::keyPressed( const juce::KeyPress& key, juce::Component* origin )
     {
+        // F2 also when the focus sits outside the board (e.g. on the window): switch the view.
+        if( key.getKeyCode() == juce::KeyPress::F2Key && !board.isParentOf( origin ) && board.onViewRequested )
+        {
+            board.onViewRequested( board.view == View::studio ? View::panel : View::studio );
+            return true;
+        }
         if( key != juce::KeyPress::spaceKey || dynamic_cast<juce::TextEditor*>( origin ) != nullptr )
             return false; // typing a name keeps its spaces
         board.togglePlayStop();
@@ -998,6 +1026,58 @@ namespace sim
         startTimer( 400 );
     }
 
+    /// Load a scratch copy of a project (projects folder, else bundled demo, else "Template 01") from a temp
+    /// folder, so tests and the showcase never touch the user's own. Returns its name, "(FAILED)" appended on error.
+    static juce::String loadScratchCopy( const juce::String& name, const juce::String& tempFolder )
+    {
+        auto source = getAppDirs( MTProjects ).getChildFile( name );
+        if( !source.isDirectory() )
+            source = getAppDirs( MTDemos ).getChildFile( name );
+        if( !source.isDirectory() )
+            source = getAppDirs( MTTemp ).getChildFile( "Template 01" );
+        // The engine opens <folder>/<folder name>.kickPrj, so keep the project's folder name.
+        auto root = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( tempFolder );
+        root.deleteRecursively();
+        auto scratch = root.getChildFile( source.getFileName() );
+        bool ok      = source.copyDirectoryTo( scratch );
+        if( auto prj = scratch.getChildFile( source.getFileName() + mt::__projectFileSuffix ); ok && prj.existsAsFile() )
+            prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", scratch.getFullPathName() ) ); // bundled demos
+        ok = ok && mt::getAudioInterface().loadProject( scratch );
+        return source.getFileName() + ( ok ? "" : " (FAILED)" );
+    }
+
+    void SimulatorBoard::startShowcase()
+    {
+        auto& s    = selfTestSteps;
+        auto  log  = []( juce::String text ) { SimulatorInterfaceImpl::log( "SHOWCASE " + text ); };
+        auto  wait = [&s]( int n ) { for( int i = 0; i < n; ++i ) s.push_back( [] {} ); };
+        auto  press = [&s, this]( int code ) {
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( true ); } );
+            s.push_back( [this, code] { if( auto* b = findButton( code ) ) b->press( false ); } );
+        };
+
+        wait( 4 );
+        s.push_back( [log] { log( "loaded " + loadScratchCopy( "AwesomeKick Groove", "kickem_showcase" ) ); } );
+        wait( 6 );
+        press( DCC::EN_MAINMODE );
+        wait( 2 );
+        press( DCC::EN_PLAY );
+        wait( 6 );
+        s.push_back( [this, log] {
+            const auto dir = juce::SystemStats::getEnvironmentVariable( "KICKEM_SHOT", {} );
+            if( dir.isEmpty() )
+                return; // keep playing
+            // Full board resolution, independent of the window size.
+            auto file = juce::File( dir ).getChildFile( juce::String( "awesomekick-" ) + ( view == View::studio ? "studio" : "panel" ) + ".png" );
+            file.deleteFile();
+            if( auto out = file.createOutputStream() )
+                juce::PNGImageFormat().writeImageToStream( createComponentSnapshot( getLocalBounds() ), *out );
+            log( "saved " + file.getFullPathName() );
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        } );
+        startTimer( 400 );
+    }
+
     void SimulatorBoard::startTourTest()
     {
         // KICKEM_SELFTEST=tour: load a scratch copy of a kit (KICKEM_TOUR_PROJECT=<project name>,
@@ -1066,22 +1146,10 @@ namespace sim
         wait( 4 );
         s.push_back( [log] {
             // KICKEM_TOUR_PROJECT: a project in the projects folder or a bundled demo (default "AwesomeKick Groove").
-            auto name    = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "AwesomeKick Groove" );
-            auto source  = getAppDirs( MTProjects ).getChildFile( name );
-            if( !source.isDirectory() )
-                source = getAppDirs( MTDemos ).getChildFile( name );
-            if( !source.isDirectory() )
-                source = getAppDirs( MTTemp ).getChildFile( "Template 01" );
-            // The engine opens <folder>/<folder name>.kickPrj, so keep the project's folder name.
-            auto root = juce::File::getSpecialLocation( juce::File::tempDirectory ).getChildFile( "kickem_tour" );
-            root.deleteRecursively();
-            auto scratch = root.getChildFile( source.getFileName() );
-            bool ok      = source.copyDirectoryTo( scratch );
-            if( auto prj = scratch.getChildFile( source.getFileName() + mt::__projectFileSuffix ); ok && prj.existsAsFile() )
-                prj.replaceWithText( prj.loadFileAsString().replace( "@PROJECT_DIR@", scratch.getFullPathName() ) ); // bundled demos
-            ok = ok && mt::getAudioInterface().loadProject( scratch );
-            auto&      ae      = mt::getAudioInterface();
-            log( "loaded scratch copy of " + source.getFileName() + ( ok ? "" : " (FAILED)" ) + ": " + juce::String( ae.getNumSequences() ) + " sequence(s), "
+            auto name   = juce::SystemStats::getEnvironmentVariable( "KICKEM_TOUR_PROJECT", "AwesomeKick Groove" );
+            auto source = loadScratchCopy( name, "kickem_tour" );
+            auto& ae    = mt::getAudioInterface();
+            log( "loaded scratch copy of " + source + ": " + juce::String( ae.getNumSequences() ) + " sequence(s), "
                  + juce::String( ae.getNumPrograms() ) + " program(s)" );
         } );
         wait( 8 );
@@ -1825,7 +1893,27 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
             it->second->setLed( on );
     }
 
+    juce::Rectangle<int> SimulatorBoard::screenArea() const { return view == View::studio ? studio::screenRect : screenRect; }
+    juce::Rectangle<int> SimulatorBoard::linkArea() const { return view == View::studio ? studio::linkRect : linkRect; }
+
     void SimulatorBoard::paint( juce::Graphics& g )
+    {
+        view == View::studio ? paintStudio( g ) : paintPanel( g );
+
+        // LINK section: recess with four status LEDs
+        const auto link = linkArea();
+        g.setColour( juce::Colour( 0xff151517 ) );
+        g.fillRoundedRectangle( link.toFloat(), 12.0f );
+        g.setColour( juce::Colour( 0xff3a3a3f ) );
+        g.drawRoundedRectangle( link.toFloat(), 12.0f, 1.5f );
+        for( int x : { 34, 75, 114, 155 } )
+        {
+            g.setColour( juce::Colour( 0xff050505 ) );
+            g.fillRect( juce::Rectangle<float>( 22.0f, 16.0f ).withCentre( { (float)( link.getX() + x ), (float)( link.getY() + 26 ) } ) );
+        }
+    }
+
+    void SimulatorBoard::paintPanel( juce::Graphics& g )
     {
         // Panel body
         auto body = getLocalBounds().toFloat().reduced( 2.0f );
@@ -1847,17 +1935,6 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
         g.setColour( juce::Colours::white.withAlpha( 0.5f ) );
         g.fillEllipse( juce::Rectangle<float>( 8.0f, 8.0f ).withCentre( { 167.0f, 85.0f } ) );
 
-        // LINK section: recess with four status LEDs
-        g.setColour( juce::Colour( 0xff151517 ) );
-        g.fillRoundedRectangle( linkRect.toFloat(), 12.0f );
-        g.setColour( juce::Colour( 0xff3a3a3f ) );
-        g.drawRoundedRectangle( linkRect.toFloat(), 12.0f, 1.5f );
-        for( int x : { 91, 132, 171, 212 } )
-        {
-            g.setColour( juce::Colour( 0xff050505 ) );
-            g.fillRect( juce::Rectangle<float>( 22.0f, 16.0f ).withCentre( { (float)x, 667.0f } ) );
-        }
-
         // Screen bezel
         g.setColour( juce::Colour( 0xff0a0a0b ) );
         g.fillRoundedRectangle( bezelRect.toFloat(), 14.0f );
@@ -1873,21 +1950,97 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
                     juce::Justification::centred );
     }
 
+    void SimulatorBoard::paintStudio( juce::Graphics& g )
+    {
+        g.fillAll( studio::background );
+        g.setColour( studio::area );
+        for( auto& a : studio::areas )
+            g.fillRoundedRectangle( a.toFloat(), 22.0f );
+
+        // Name in the top bar: "Awesome" light + "Kick" red (no manufacturer logo). The firmware's typeface has
+        // no bold / black cut, so the weight comes from stroking the glyph outlines.
+        const juce::Font font = juce::Font( 42.0f ).withPointHeight( 42.0f );
+        auto word = [&g, &font]( const juce::String& text, float x, juce::Colour colour, float weight ) {
+            juce::GlyphArrangement glyphs;
+            glyphs.addLineOfText( font, text, x, 86.0f + font.getAscent() * 0.36f ); // caps centred on y = 86
+            juce::Path outline;
+            glyphs.createPath( outline );
+            g.setColour( colour );
+            g.fillPath( outline );
+            g.strokePath( outline, juce::PathStrokeType( weight, juce::PathStrokeType::curved ) );
+            return glyphs.getBoundingBox( 0, -1, true ).getRight();
+        };
+        const float end = word( "Awesome", 40.0f, palette::legend, 1.6f );
+        word( "Kick", end + 2.0f, palette::ring, 3.4f );
+
+        // Display frame
+        g.setColour( juce::Colours::black );
+        g.fillRoundedRectangle( studio::frameRect.toFloat(), 22.0f );
+        g.setColour( juce::Colour( 0xff2c2c30 ) );
+        g.drawRoundedRectangle( studio::frameRect.toFloat(), 22.0f, 2.0f );
+    }
+
+    void SimulatorBoard::setView( View v )
+    {
+        view = v;
+        const bool st = v == View::studio;
+        viewSwitch.setStudio( st );
+        mainControl.setStudio( st );
+        // Studio: mainControl spans the whole board, clicks between its keys reach the controls below.
+        mainControl.setInterceptsMouseClicks( !st, true );
+        setSize( st ? studioWidth : boardWidth, st ? studioHeight : boardHeight );
+        resized(); // also when the size did not change (first call)
+        repaint();
+    }
+
     void SimulatorBoard::resized()
     {
-        // All positions in board units, measured from the hardware panel.
+        const auto scr = screenArea();
         screen.setBounds( 0, 0, 1024, 600 );
-        screen.setTransform( juce::AffineTransform::scale( (float)screenRect.getWidth() / 1024.0f )
-                                 .translated( (float)screenRect.getX(), (float)screenRect.getY() ) );
+        screen.setTransform( juce::AffineTransform::scale( (float)scr.getWidth() / 1024.0f ).translated( (float)scr.getX(), (float)scr.getY() ) );
 
-        // Upper left: MASTER and REC pots, LINK
+        auto key = []( SimButton& b, int cx, int cy ) { b.setBounds( cx - 62, cy - 36, 124, 118 ); };
+        const auto link = linkArea();
+        linkBtn.setBounds( link.getX() + 98 - 60, link.getY() + 91 - 33, 120, 68 );
+
+        if( view == View::studio )
+        {
+            // All positions in studio board units (2560 x 1440).
+            viewSwitch.setBounds( 2160, 50, 370, 72 );
+
+            // Left column: MASTER / REC, touch strip, FULL LEVEL / 16 LEVELS / ERASE
+            masterKnob.setBounds( 62, 192, 180, 196 );
+            recKnob.setBounds( 62, 402, 180, 196 );
+            slider.setBounds( 72, 629, 161, 383 );
+            key( fullLevelBtn, 152, 1080 );
+            key( levels16Btn, 152, 1205 );
+            key( eraseBtn, 152, 1330 );
+
+            // Right column: Q-links over the pad columns (banks below them, see SimulatorMainControl), pads 4 x 4
+            for( int i = 0; i < 4; ++i )
+                qlinks[(size_t)i]->setBounds( 1766 + 224 * i - 65, 180, 130, 147 );
+            pads.setBounds( 1672, 500, 860, 900 );
+
+            // Mode keys, banks, TAP / NOTE REPEAT / MENU / SHIFT and the jog group: placed by mainControl
+            mainControl.setBounds( getLocalBounds() );
+            mainControl.resized();
+
+            // Transport row under the display
+            int i = 0;
+            for( auto* b : { &recBtn, &overdubBtn, &stopBtn, &playBtn, &playStartBtn } )
+                b->setBounds( 400 + 152 * i++ - 60, 1018, 120, 125 );
+            return;
+        }
+
+        // Panel: all positions in board units, measured from the hardware panel.
+        viewSwitch.setBounds( 1600, 18, 180, 50 );
+
+        // Upper left: MASTER and REC pots (LINK see above)
         masterKnob.setBounds( 127 - 90, 279 - 94, 180, 196 );
         recKnob.setBounds( 127 - 90, 494 - 94, 180, 196 );
-        linkBtn.setBounds( 155 - 60, 732 - 33, 120, 68 );
 
         // Lower left: touch strip, FULL LEVEL / 16 LEVELS / ERASE
         slider.setBounds( 36, 905, 161, 383 );
-        auto key = []( SimButton& b, int cx, int cy ) { b.setBounds( cx - 62, cy - 36, 124, 118 ); };
         key( fullLevelBtn, 119, 1396 );
         key( levels16Btn, 119, 1549 );
         key( eraseBtn, 119, 1704 );
@@ -1897,6 +2050,7 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
 
         // Right of the pads: banks, mode keys, jog wheel
         mainControl.setBounds( 1140, 860, 650, 802 );
+        mainControl.resized();
 
         // Q-link encoders P1-P4 right of the screen
         const int qy[] = { 150, 331, 507, 680 };
@@ -1916,7 +2070,9 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
     Simulator::Simulator()
     {
         addAndMakeVisible( board );
-        setSize( SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
+        board.onViewRequested = [this]( SimulatorBoard::View v ) { setView( v ); };
+        setWantsKeyboardFocus( true ); // F2 from any focused child bubbles up to keyPressed()
+        setSize( board.getWidth(), board.getHeight() );
     }
 
     void Simulator::paint( juce::Graphics& g )
@@ -1924,13 +2080,37 @@ return dir.getNumberOfChildFiles( juce::File::findFiles, "*.wav" ) == (int)std::
         g.fillAll( juce::Colour( 0xff202020 ) );
     }
 
+    bool Simulator::keyPressed( const juce::KeyPress& key )
+    {
+        if( key.getKeyCode() != juce::KeyPress::F2Key )
+            return false;
+        toggleView();
+        return true;
+    }
+
+    void Simulator::toggleView()
+    {
+        setView( board.getView() == SimulatorBoard::View::studio ? SimulatorBoard::View::panel : SimulatorBoard::View::studio );
+    }
+
+    void Simulator::setView( SimulatorBoard::View v )
+    {
+        if( v == board.getView() )
+            return;
+        board.setView( v );
+        SimulatorInterfaceImpl::log( juce::String( "view: " ) + ( v == SimulatorBoard::View::studio ? "studio" : "panel" ) );
+        resized();
+        if( onViewChanged )
+            onViewChanged();
+    }
+
     void Simulator::resized()
     {
-        const float bw    = (float)SimulatorBoard::boardWidth;
-        const float bh    = (float)SimulatorBoard::boardHeight;
+        // The board's own size is the current view's (see SimulatorBoard::setView).
+        const float bw    = (float)board.getWidth();
+        const float bh    = (float)board.getHeight();
         const float scale = juce::jmax( 0.1f, juce::jmin( getWidth() / bw, getHeight() / bh ) );
 
-        board.setBounds( 0, 0, SimulatorBoard::boardWidth, SimulatorBoard::boardHeight );
         board.setTransform( juce::AffineTransform::scale( scale ).translated( ( getWidth() - bw * scale ) * 0.5f, ( getHeight() - bh * scale ) * 0.5f ) );
     }
 }

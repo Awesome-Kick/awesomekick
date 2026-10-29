@@ -235,4 +235,21 @@ namespace sim
         int  touchValue { -1 };
         int  ledLevel { 0 };
     };
+
+    ///
+    /// "Studio | Panel" chip: switches between the two board views. The active half is lit red.
+    ///
+    class SimViewSwitch : public juce::Component
+    {
+    public:
+        void setStudio( bool s ) { studio = s; repaint(); }
+        /// Clicked half: true = Studio, false = Panel.
+        std::function<void( bool studio )> onSelect;
+
+        void paint( juce::Graphics& g ) override;
+        void mouseDown( const juce::MouseEvent& e ) override;
+
+    private:
+        bool studio { false };
+    };
 }

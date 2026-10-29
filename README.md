@@ -144,6 +144,14 @@ unit; the 1024×600 screen sits where the display is.
 Keys show their main function on the backlit cap and the SHIFT function printed below, as on
 the panel. The look is our own – no manufacturer logo or branding; the bezel shows "AwesomeKick".
 
+### Studio view
+A second, wide layout in the style of an MPC Live: mode keys in a top bar, MASTER / REC and the touch
+strip on the left, transport, jog wheel and LINK under the display, P1–P4, BANK A–D and the pads on the
+right. Switch with the **Studio | Panel** chip (top right) or **F2**; `KICKEM_VIEW=studio` starts in it.
+It is the basis for later tablet and phone layouts.
+
+![AwesomeKick studio view](docs/images/awesomekick-studio.png)
+
 ### Headless / browser mode
 - `KICKEM_KIOSK=1` makes the window fill the whole display.
 - In headless mode `setup-linux.sh` runs the simulator on a virtual display (Xvfb, 1600×1600), shares it with
@@ -158,6 +166,8 @@ the panel. The look is our own – no manufacturer logo or branding; the bezel s
 | Variable | Effect |
 |---|---|
 | `KICKEM_KIOSK=1` | fill the whole display, no title bar |
+| `KICKEM_VIEW=studio` | start in the studio view (default: `panel`; F2 switches) |
+| `KICKEM_SHOWCASE=1` | load and play "AwesomeKick Groove"; with `KICKEM_SHOT=<dir>` save a full-size picture and quit |
 | `KICKEM_DATA_DIR=<dir>` | where `assets/`, `demos/`, `templates/` are |
 | `KICKEM_SANDBOX_QUIET=1` | don't log blocked system commands |
 | `KICKEM_SELFTEST=1` | drive every panel control once (more: `tour`, `record`, `modular`, …) |

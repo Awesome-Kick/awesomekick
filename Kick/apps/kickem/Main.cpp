@@ -116,30 +116,56 @@ public:
             : juce::DocumentWindow( name, juce::Colour( 0xff202020 ), juce::DocumentWindow::allButtons )
         {
             setUsingNativeTitleBar( true );
-            setContentOwned( new sim::Simulator(), false );
+            auto* content = new sim::Simulator();
+            setContentOwned( content, false );
             setResizable( true, false );
-
-            const int bw = sim::SimulatorBoard::boardWidth, bh = sim::SimulatorBoard::boardHeight;
-            setResizeLimits( bw / 4, bh / 4, bw * 2, bh * 2 );
             getConstrainer()->setFixedAspectRatio( 0.0 );
-
-            // Fit ~90% of the primary display, keeping the panel's aspect ratio.
-            juce::Rectangle<int> area( 0, 0, 1600, 900 );
-            if( auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() )
-                area = display->userArea;
             // KICKEM_KIOSK=1 (headless server / browser via noVNC): fill the whole display.
-            if( juce::SystemStats::getEnvironmentVariable( "KICKEM_KIOSK", {} ) == "1" )
+            kiosk = juce::SystemStats::getEnvironmentVariable( "KICKEM_KIOSK", {} ) == "1";
+            if( kiosk )
             {
                 setUsingNativeTitleBar( false );
                 setTitleBarHeight( 0 );
+            }
+            fitToBoard( true );
+            content->onViewChanged = [this] { fitToBoard( false ); };
+        }
+
+        /// Resize limits and window size for the current view's board (panel or studio). Desktop: fit ~90% of
+        /// the display with the board's aspect ratio, centred where the window was. Kiosk: fill the display.
+        void fitToBoard( bool initial )
+        {
+            auto* content = dynamic_cast<sim::Simulator*>( getContentComponent() );
+            if( content == nullptr )
+                return;
+            const auto board = content->getBoardSize();
+            const int  bw = board.x, bh = board.y;
+            setResizeLimits( bw / 4, bh / 4, bw * 2, bh * 2 );
+
+            juce::Rectangle<int> area( 0, 0, 1600, 900 );
+            if( auto* display = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() )
+                area = display->userArea;
+            if( kiosk )
+            {
                 setBounds( area );
+                content->resized(); // same size, new board: fit it again
                 return;
             }
             float scale = juce::jmin( 1.0f, area.getWidth() * 0.92f / bw, area.getHeight() * 0.88f / bh );
-            centreWithSize( juce::roundToInt( bw * scale ), juce::roundToInt( bh * scale ) );
+            const int w = juce::roundToInt( bw * scale ), h = juce::roundToInt( bh * scale );
+            if( initial )
+                centreWithSize( w, h );
+            else
+            {
+                const auto centre = getBounds().getCentre();
+                setContentComponentSize( w, h );
+                setTopLeftPosition( juce::Rectangle<int>( getWidth(), getHeight() ).withCentre( centre ).constrainedWithin( area ).getPosition() );
+            }
         }
 
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+
+        bool kiosk { false };
 
         void inputAttemptWhenModal() override
         {

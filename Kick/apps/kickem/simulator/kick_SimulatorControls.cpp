@@ -816,4 +816,32 @@ namespace sim
 
     void SimTouchSlider::mouseDown( const juce::MouseEvent& e ) { touch( e ); }
     void SimTouchSlider::mouseDrag( const juce::MouseEvent& e ) { touch( e ); }
+
+    //==============================================================================
+    void SimViewSwitch::paint( juce::Graphics& g )
+    {
+        auto       r      = getLocalBounds().toFloat().reduced( 2.0f );
+        const auto radius = r.getHeight() * 0.18f;
+        g.setColour( palette::cap );
+        g.fillRoundedRectangle( r, radius );
+
+        auto active = studio ? r.withWidth( r.getWidth() * 0.5f ) : r.withTrimmedLeft( r.getWidth() * 0.5f );
+        g.setColour( palette::ring );
+        g.fillRoundedRectangle( active.reduced( r.getHeight() * 0.08f ), radius * 0.8f );
+        g.drawRoundedRectangle( r, radius, juce::jmax( 1.5f, r.getHeight() * 0.04f ) );
+
+        g.setFont( juce::Font( r.getHeight() * 0.46f, juce::Font::bold ) );
+        auto left = r.withWidth( r.getWidth() * 0.5f ), right = r.withTrimmedLeft( r.getWidth() * 0.5f );
+        g.setColour( studio ? juce::Colours::white : palette::unlit );
+        g.drawText( "Studio", left, juce::Justification::centred );
+        g.setColour( studio ? palette::unlit : juce::Colours::white );
+        g.drawText( "Panel", right, juce::Justification::centred );
+    }
+
+    void SimViewSwitch::mouseDown( const juce::MouseEvent& e )
+    {
+        const bool wantStudio = e.x < getWidth() / 2;
+        if( onSelect )
+            onSelect( wantStudio );
+    }
 }

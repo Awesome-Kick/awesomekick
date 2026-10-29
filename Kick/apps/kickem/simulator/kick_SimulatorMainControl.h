@@ -21,10 +21,19 @@ namespace sim
         SimButton&                getShiftButton() { return shiftBtn; }
         SimKnob&                  getJog() { return jog; }
 
+        /// Studio view: the board gives this component its whole area (clicks between the keys pass through)
+        /// and the keys sit at the studio positions, see SimulatorBoard::setView().
+        void setStudio( bool studio );
+        bool isStudio() const { return studio; }
+
     private:
         /// Board coordinates -> local (the board places this component, see SimulatorBoard::resized).
         juce::Point<int> local( int boardX, int boardY ) const { return { boardX - getX(), boardY - getY() }; }
         juce::Rectangle<int> navHousing() const;
+        void                 layoutPanel();
+        void                 layoutStudio();
+
+        bool studio { false };
 
         // Row 2 (under the banks)
         SimButton mainBtn { "MAIN", DCC::EN_MAINMODE, "GRID", DCC::EN_GRID };
