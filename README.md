@@ -154,7 +154,7 @@ It is the basis for later tablet and phone layouts.
 
 ### Headless / browser mode
 - `KICKEM_KIOSK=1` makes the window fill the whole display.
-- In headless mode `setup-linux.sh` runs the simulator on a virtual display (Xvfb, 1600×1600), shares it with
+- In headless mode `setup-linux.sh` runs the simulator on a virtual display (Xvfb, 1920×1080, studio view; `KICKEM_VIEW=panel` for the square panel), shares it with
   x11vnc (localhost only) and serves it via noVNC on port 6080 – without a password unless you pass `--password`.
 - Sound in headless mode: the simulator plays into a JACK server without hardware; `scripts/awesomekick-audio.py`
   streams it to the browser page on port 6081.
@@ -166,6 +166,7 @@ It is the basis for later tablet and phone layouts.
 | Variable | Effect |
 |---|---|
 | `KICKEM_KIOSK=1` | fill the whole display, no title bar |
+| `KICKEM_OPEN_LAST=0` | start on the project list instead of reopening the last project |
 | `KICKEM_VIEW=studio` | start in the studio view (default: `panel`; F2 switches) |
 | `KICKEM_SHOWCASE=1` | load and play "AwesomeKick Groove"; with `KICKEM_SHOT=<dir>` save a full-size picture and quit |
 | `KICKEM_DATA_DIR=<dir>` | where `assets/`, `demos/`, `templates/` are |

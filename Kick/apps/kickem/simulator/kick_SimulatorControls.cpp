@@ -586,7 +586,7 @@ namespace sim
         g.fillRoundedRectangle( face, 12.0f );
         if( lit )
         {
-            g.setColour( colour.withAlpha( down ? 0.30f : 0.10f ) );
+            g.setColour( colour.withAlpha( down ? 0.45f : 0.22f ) );
             g.fillRoundedRectangle( face.reduced( 6.0f ), 8.0f );
         }
         g.setColour( lit ? colour : juce::Colour( 0xff2e2e33 ) );

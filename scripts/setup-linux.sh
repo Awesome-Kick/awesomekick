@@ -143,7 +143,7 @@ if old_running >/dev/null; then
   pkill -KILL -u "\$USER" -f "^Xvfb :$DISPLAY_NUM"; pkill -KILL -u "\$USER" -x KT_KickEM
   pkill -KILL -u "\$USER" -f "^jackd --no-realtime"; pkill -KILL -u "\$USER" -f "^ffmpeg .* awesomekick_stream"; sleep 0.5
 fi
-setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1600x1600x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
+setsid nohup Xvfb :$DISPLAY_NUM -screen 0 1920x1080x24 -nolisten tcp >"\$LOG/xvfb.log" 2>&1 < /dev/null &
 for i in \$(seq 1 40); do xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 && break; sleep 0.25; done
 xdpyinfo -display :$DISPLAY_NUM >/dev/null 2>&1 || { echo "ERROR: virtual display :$DISPLAY_NUM did not start – see \$LOG/xvfb.log"; exit 1; }
 # A normal arrow pointer (Xvfb's default is an "X" cross, which the simulator window inherits)
@@ -157,7 +157,7 @@ for i in \$(seq 1 40); do jack_lsp >/dev/null 2>&1 && break; sleep 0.25; done
 jack_lsp >/dev/null 2>&1 || echo "WARNING: JACK did not start – no sound in the browser (see \$LOG/jackd.log)"
 setsid nohup python3 -I "$REPO_DIR/scripts/awesomekick-audio.py" --port $AUDIO_PORT >"\$LOG/audio.log" 2>&1 < /dev/null &
 cd "$(dirname "$BIN")"
-DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 KICKEM_AUDIO_TYPE=JACK setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
+DISPLAY=:$DISPLAY_NUM KICKEM_KIOSK=1 KICKEM_VIEW="\${KICKEM_VIEW:-studio}" KICKEM_AUDIO_TYPE=JACK setsid nohup "$BIN" >"\$LOG/kickem.log" 2>&1 < /dev/null &
 setsid nohup x11vnc -display :$DISPLAY_NUM -rfbport $VNC_PORT -localhost -forever -shared -cursor arrow \\
       $VNC_AUTH -quiet >"\$LOG/x11vnc.log" 2>&1 < /dev/null &
 # Web root: noVNC plus our index.html (noVNC view + "Sound on" button), so http://<host>:$WEB_PORT/ is all you need

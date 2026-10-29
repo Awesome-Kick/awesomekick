@@ -332,6 +332,19 @@ namespace sim
                 openFirst = dest;
         }
         marker.replaceWithText( installed.joinIntoString( "\n" ) );
+
+        // Later starts: reopen the most recent project in the projects folder, so the pads are lit right away
+        // (with no project the firmware leaves them dark). Copies used by tests (temp folder) are skipped.
+        // KICKEM_OPEN_LAST=0 starts on the project list instead, as the hardware does.
+        if( openFirst == juce::File() && juce::SystemStats::getEnvironmentVariable( "KICKEM_OPEN_LAST", "1" ) != "0" )
+        {
+            auto& recent = mt::getSettings().projects;
+            for( int i = recent.getNumChildren() - 1; i >= 0 && openFirst == juce::File(); --i )
+                if( juce::File dir( recent.getProject( i ) ); dir.isDirectory() && dir.isAChildOf( getAppDirs( MTProjects ) ) )
+                    openFirst = dir;
+            if( openFirst != juce::File() )
+                SimulatorInterfaceImpl::log( "content: reopening " + openFirst.getFileName() );
+        }
         if( openFirst != juce::File() )
             juce::Timer::callAfterDelay( 2500, [openFirst] { ui::LoadProjectAndAnimation::getInstance().startLoading( openFirst ); } );
     }
