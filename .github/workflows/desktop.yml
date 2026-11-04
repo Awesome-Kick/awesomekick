@@ -51,7 +51,7 @@ jobs:
           kill $pid 2>/dev/null || true
           cat ../../../makedemo.log | grep -E "SELFTEST|sandbox|CRASH|audio" || true
           grep -q "saved: yes" ../../../makedemo.log
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: AwesomeKick-macOS
           path: dist/AwesomeKick-macOS.zip
@@ -72,7 +72,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: ./scripts/package-windows.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: AwesomeKick-Windows
           path: dist/AwesomeKick-Windows.zip
